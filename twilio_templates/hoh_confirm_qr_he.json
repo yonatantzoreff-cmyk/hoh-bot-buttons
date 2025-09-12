@@ -1,0 +1,23 @@
+{
+  "types": {
+    "twilio/quick-reply": {
+      "body": "לאשר את {{1}}?",
+      "actions": [
+        {
+          "title": "כן",
+          "id": "{\"action\":\"confirm_slot\",\"event_id\":\"{{2}}\",\"slot\":\"{{1}}\"}"
+        },
+        {
+          "title": "לא, חזור",
+          "id": "{\"action\":\"choose_time_range\",\"event_id\":\"{{2}}\",\"range\":\"noon\"}"
+        }
+      ]
+    }
+  },
+  "language": "Hebrew",
+  "friendly_name": "hoh_confirm_qr_he",
+  "variables": {
+    "1": "slot",
+    "2": "event_id"
+  }
+}

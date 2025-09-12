@@ -1,0 +1,29 @@
+{
+  "types": {
+    "twilio/quick-reply": {
+      "body": "היי {{1}}, תגיע בשעה כך וכך בתאריך {{2}} למופע {{3}}.\nבחר/י אחת מהאפשרויות:",
+      "actions": [
+        {
+          "title": "בחירת שעה",
+          "id": "{\"action\":\"choose_time_range\",\"event_id\":\"{{4}}\",\"range\":\"noon\"}"
+        },
+        {
+          "title": "אני עוד לא יודע",
+          "id": "{\"action\":\"not_sure\",\"event_id\":\"{{4}}\"}"
+        },
+        {
+          "title": "אני לא איש הקשר",
+          "id": "{\"action\":\"not_contact\",\"event_id\":\"{{4}}\"}"
+        }
+      ]
+    }
+  },
+  "language": "Hebrew",
+  "friendly_name": "hoh_init_qr_he",
+  "variables": {
+    "1": "שם",
+    "2": "תאריך",
+    "3": "שם המופע",
+    "4": "event_id"
+  }
+}

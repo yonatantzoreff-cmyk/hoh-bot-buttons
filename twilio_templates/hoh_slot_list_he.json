@@ -1,0 +1,75 @@
+{
+  "types": {
+    "twilio/list-picker": {
+      "body": "בחר/י משבצת של חצי שעה",
+      "button": "בחר/י",
+      "items": [
+        {
+          "item": "{{item1}}",
+          "description": "בחירת {{item1}}",
+          "id": "{\"action\":\"pick_slot\",\"event_id\":\"{{1}}\",\"slot\":\"{{item1}}\"}"
+        },
+        {
+          "item": "{{item2}}",
+          "description": "בחירת {{item2}}",
+          "id": "{\"action\":\"pick_slot\",\"event_id\":\"{{1}}\",\"slot\":\"{{item2}}\"}"
+        },
+        {
+          "item": "{{item3}}",
+          "description": "בחירת {{item3}}",
+          "id": "{\"action\":\"pick_slot\",\"event_id\":\"{{1}}\",\"slot\":\"{{item3}}\"}"
+        },
+        {
+          "item": "{{item4}}",
+          "description": "בחירת {{item4}}",
+          "id": "{\"action\":\"pick_slot\",\"event_id\":\"{{1}}\",\"slot\":\"{{item4}}\"}"
+        },
+        {
+          "item": "{{item5}}",
+          "description": "בחירת {{item5}}",
+          "id": "{\"action\":\"pick_slot\",\"event_id\":\"{{1}}\",\"slot\":\"{{item5}}\"}"
+        },
+        {
+          "item": "{{item6}}",
+          "description": "בחירת {{item6}}",
+          "id": "{\"action\":\"pick_slot\",\"event_id\":\"{{1}}\",\"slot\":\"{{item6}}\"}"
+        },
+        {
+          "item": "{{item7}}",
+          "description": "בחירת {{item7}}",
+          "id": "{\"action\":\"pick_slot\",\"event_id\":\"{{1}}\",\"slot\":\"{{item7}}\"}"
+        },
+        {
+          "item": "{{item8}}",
+          "description": "בחירת {{item8}}",
+          "id": "{\"action\":\"pick_slot\",\"event_id\":\"{{1}}\",\"slot\":\"{{item8}}\"}"
+        },
+        {
+          "item": "{{item9}}",
+          "description": "בחירת {{item9}}",
+          "id": "{\"action\":\"pick_slot\",\"event_id\":\"{{1}}\",\"slot\":\"{{item9}}\"}"
+        },
+        {
+          "item": "{{item10}}",
+          "description": "בחירת {{item10}}",
+          "id": "{\"action\":\"pick_slot\",\"event_id\":\"{{1}}\",\"slot\":\"{{item10}}\"}"
+        }
+      ]
+    }
+  },
+  "language": "Hebrew",
+  "friendly_name": "hoh_slot_list_he",
+  "variables": {
+    "1": "event_id",
+    "item1": "09:00",
+    "item2": "09:30",
+    "item3": "10:00",
+    "item4": "10:30",
+    "item5": "11:00",
+    "item6": "11:30",
+    "item7": "12:00",
+    "item8": "12:30",
+    "item9": "13:00",
+    "item10": "13:30"
+  }
+}
