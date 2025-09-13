@@ -1,0 +1,15 @@
+{
+  "types": {
+    "twilio/quick-reply": {
+      "body": "הכל טוב! אצור קשר שוב תוך 72 שעות.",
+      "actions": [
+        {
+          "title": "הבנתי",
+          "id": "ACK_NOT_SURE"
+        }
+      ]
+    }
+  },
+  "language": "Hebrew",
+  "friendly_name": "hoh_not_sure_qr_he_v2"
+}

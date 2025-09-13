@@ -1,0 +1,2 @@
+timestamp,direction,event_id,to,from,body,button_text,button_payload,raw
+2025-09-13T19:07:34.735584,out,EVT-10023,+972501234567,whatsapp:+1415XXXXXXX,היי דניאל, בחר/י שעה בבקשה,,,

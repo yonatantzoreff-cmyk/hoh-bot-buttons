@@ -1,0 +1,22 @@
+{
+  "types": {
+    "twilio/quick-reply": {
+      "body": "לאשר את {{1}}?",
+      "actions": [
+        {
+          "title": "מאשר/ת",
+          "id": "CONFIRM_SLOT"
+        },
+        {
+          "title": "שינוי שעה",
+          "id": "CHANGE_TIME"
+        }
+      ]
+    }
+  },
+  "language": "Hebrew",
+  "friendly_name": "hoh_confirm_qr_he_v3",
+  "sample": {
+    "1": "14:30"
+  }
+}
