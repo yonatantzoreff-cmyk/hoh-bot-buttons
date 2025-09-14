@@ -1,29 +1,7 @@
-{
-  "types": {
-    "twilio/quick-reply": {
-      "body": "היי {{1}}\nאני הבוט הטכני של היכל אומנויות הבמה הרצליה\nאני רוצה לתאם איתך שעות הגעה להיכל למופע {{2}}\nבתאריך {{3}} בשעה {{4}}\nבחר/י אחת מהאפשרויות:",
-      "actions": [
-        {
-          "title": "בחירת שעה",
-          "id": "CHOOSE_TIME"
-        },
-        {
-          "title": "אני עוד לא יודע",
-          "id": "NOT_SURE"
-        },
-        {
-          "title": "אני לא איש הקשר",
-          "id": "NOT_CONTACT"
-        }
-      ]
-    }
-  },
-  "language": "Hebrew",
-  "friendly_name": "hoh_init_qr_he_v3",
-  "sample": {
-    "1": "דניאל",
-    "2": "תזמורת המהפכה",
-    "3": "2025-09-28",
-    "4": "21:00"
-  }
+vars_map = {
+  "1": supplier_name,          # למשל "דניאל"
+  "2": event_name,             # "תזמורת המהפכה"
+  "3": event_date,             # "2025-09-28"
+  "4": event_time or ""        # "21:00" או ריק
 }
+send_content_message(to, CONTENT_SID_INIT_QR, vars_map)
