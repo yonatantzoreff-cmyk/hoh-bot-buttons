@@ -25,6 +25,19 @@ def send_content_message(to_number: str, content_sid: str, vars_map: dict):
         "messaging_service_sid": TWILIO_MESSAGING_SERVICE_SID,
         # לחלופין (לא שניים יחד):
         # "from_": f"whatsapp:{TWILIO_WHATSAPP_NUMBER}",
+
+def send_text(to_number: str, body: str):
+    """
+    Send a plain text WhatsApp message via Twilio.
+    """
+    payload = {
+        "to": to_number,
+        "from_": f"whatsapp:{TWILIO_WHATSAPP_NUMBER}",
+        "body": body,
+    }
+    print("Twilio text payload:", payload)
+    return client.messages.create(**payload)
+
     }
 
     print("Twilio payload:", payload)
