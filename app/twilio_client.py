@@ -1,11 +1,15 @@
 import json
 from twilio.rest import Client
-from credentials import (
-    TWILIO_ACCOUNT_SID,
-    TWILIO_AUTH_TOKEN,
-    TWILIO_MESSAGING_SERVICE_SID,
-    TWILIO_WHATSAPP_NUMBER,
-)
+import os
+
+# Pull Twilio credentials from environment variables.
+# This avoids relying on a separate `credentials` module, which may not
+# always be available in deployment environments like Render.
+TWILIO_ACCOUNT_SID: str | None = os.getenv("TWILIO_ACCOUNT_SID")
+TWILIO_AUTH_TOKEN: str | None = os.getenv("TWILIO_AUTH_TOKEN")
+TWILIO_MESSAGING_SERVICE_SID: str | None = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
+TWLIO_WHATSAPP_NUMBER: str | None = os.getenv("TWILIO_WHATSAPP_NUMBER"),
+
 
 client = Client(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN)
 
