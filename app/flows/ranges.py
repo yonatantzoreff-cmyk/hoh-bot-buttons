@@ -1,4 +1,12 @@
-from credentials import CONTENT_SID_RANGES, CONTENT_SID_HALVES
+import os
+
+CONTENT_SID_RANGES = os.getenv("CONTENT_SID_RANGES")
+CONTENT_SID_HALVES = os.getenv("CONTENT_SID_HALVES")
+
+if not CONTENT_SID_RANGES or not CONTENT_SID_HALVES:
+    # לא חוסם ריצה אם לא רוצים, אבל עדיף לפחות שיירשם בלוג
+    print("⚠️ Missing CONTENT_SID_RANGES or CONTENT_SID_HALVES env vars")
+
 from app.twilio_client import send_content_message
 
 # Mapping of range IDs to display labels (2-hour intervals)
