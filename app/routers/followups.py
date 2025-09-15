@@ -1,7 +1,7 @@
 import os, datetime, pytz
 from fastapi import APIRouter
 from app.utils import sheets
-from app.twilio_client import send_content_message, send_text
+from app.twilio_client import send_content_message
 
 router = APIRouter()
 TZ = os.getenv("TZ", "Asia/Jerusalem")
