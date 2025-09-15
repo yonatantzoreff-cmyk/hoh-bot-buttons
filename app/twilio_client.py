@@ -1,78 +1,80 @@
+# app/twilio_client.py
+from __future__ import annotations
 import os
 import json
-import logging
+from typing import Optional, Dict, Any
 from twilio.rest import Client
 
-# --- Env ---
+# ENV (Render/Dotenv)
 ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
-# ודא שהמשתנה הזה קיים ב-Render:
-MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
+DEFAULT_MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")  # MGxxxxxxxx
 
 if not ACCOUNT_SID or not AUTH_TOKEN:
-    raise RuntimeError("Missing TWILIO_ACCOUNT_SID / TWILIO_AUTH_TOKEN")
+    raise RuntimeError("Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN env vars")
 
 client = Client(ACCOUNT_SID, AUTH_TOKEN)
 
 
-def _normalize_to(to_value: str, channel: str = "whatsapp") -> str:
-    """
-    מחזיר יעד בפורמט שה-Twilio API מצפה לו, למשל: 'whatsapp:+9725...'
-    מקבל גם '+9725...' או כבר 'whatsapp:+9725...'
-    """
-    if not to_value:
-        raise ValueError("Destination number is empty")
-    to_value = to_value.strip()
+def _normalize_to(to_number: str, channel: str = "whatsapp") -> str:
+    """החזר כתובת מהפורמט הנכון, למשל whatsapp:+9725..."""
+    to_number = to_number.strip()
     prefix = f"{channel}:"
-    if to_value.startswith(prefix):
-        return to_value
-    if to_value.startswith("+"):
-        return prefix + to_value
-    # אם מגיע בלי '+' (לא מומלץ), נוסיף רק את הפרפיקס
-    return prefix + to_value
+    if not to_number.startswith(prefix):
+        return f"{prefix}{to_number}"
+    return to_number
 
 
-def _to_content_vars(variables):
-    """
-    Twilio דורש string JSON בשדה content_variables.
-    מקבל dict או str ומחזיר str.
-    """
-    if variables is None:
-        return None
-    if isinstance(variables, str):
-        return variables
-    return json.dumps(variables, ensure_ascii=False)
+def send_text(
+    to: str,
+    body: str,
+    messaging_service_sid: Optional[str] = None,
+    channel: str = "whatsapp",
+) -> Any:
+    """שליחת טקסט רגיל (לא Content Template)."""
+    to_addr = _normalize_to(to, channel=channel)
+    msid = messaging_service_sid or DEFAULT_MESSAGING_SERVICE_SID
+
+    if not msid:
+        raise RuntimeError("Missing Messaging Service SID (TWILIO_MESSAGING_SERVICE_SID).")
+
+    payload: Dict[str, Any] = {
+        "to": to_addr,
+        "messaging_service_sid": msid,
+        "body": body,
+    }
+    return client.messages.create(**payload)
 
 
 def send_content_message(
-    *,
-    to: str | None = None,
-    to_number: str | None = None,
+    to: str,
     content_sid: str,
-    variables=None,
-    messaging_service_sid: str | None = None,
+    variables: Dict[str, Any] | str | None = None,
+    messaging_service_sid: Optional[str] = None,
     channel: str = "whatsapp",
-):
+) -> Any:
     """
-    שולח הודעת WhatsApp באמצעות Messaging Service + Content Template.
-
-    פרמטרי יעד:
-      - אפשר לשלוח או with `to=` או with `to_number=`
+    שליחת הודעת WhatsApp דרך Content Template.
+    תואם גם קריאות פוזיציונליות (to, content_sid, variables) וגם מילות מפתח.
     """
-    dest = to or to_number
-    if not dest:
-        raise TypeError("send_content_message requires 'to' or 'to_number'")
+    to_addr = _normalize_to(to, channel=channel)
+    msid = messaging_service_sid or DEFAULT_MESSAGING_SERVICE_SID
 
-    ms_sid = messaging_service_sid or MESSAGING_SERVICE_SID
-    if not ms_sid:
-        raise RuntimeError("Missing TWILIO_MESSAGING_SERVICE_SID env var")
+    if not msid:
+        raise RuntimeError("Missing Messaging Service SID (TWILIO_MESSAGING_SERVICE_SID).")
 
-    payload = {
-        "to": _normalize_to(dest, channel=channel),
+    # Twilio מצפה למחרוזת JSON בשדה content_variables
+    if variables is None:
+        content_variables = "{}"
+    elif isinstance(variables, str):
+        content_variables = variables
+    else:
+        content_variables = json.dumps(variables, ensure_ascii=False)
+
+    payload: Dict[str, Any] = {
+        "to": to_addr,
+        "messaging_service_sid": msid,
         "content_sid": content_sid,
-        "content_variables": _to_content_vars(variables),
-        "messaging_service_sid": ms_sid,
+        "content_variables": content_variables,
     }
-
-    logging.info("Twilio content payload: %s", payload)
     return client.messages.create(**payload)
