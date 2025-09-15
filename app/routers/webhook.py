@@ -1,115 +1,60 @@
-import os, json, datetime, pytz, re
-from fastapi import APIRouter, Request, Response
-from app.utils import sheets
-from app.twilio_client import send_content_message, send_text
+from fastapi import APIRouter, Request
+from fastapi.responses import PlainTextResponse
 from app.flows.ranges import send_ranges, send_halves
+import logging
+import re
 
 router = APIRouter()
-TZ = os.getenv("TZ", "Asia/Jerusalem")
 
-def now_iso():
-    return datetime.datetime.now(pytz.timezone(TZ)).isoformat()
-
-def parse_twilio_list_response(form: dict):
-    """
-    Extract the ID and title of a selected list item from Twilio's interactive list response.
-    Tries multiple possible keys because Twilio's payloads vary.
-    Returns a tuple (item_id, item_title) or (None, None) if no response found.
-    """
-    raw = form.get("ListResponse") or form.get("InteractiveResponse")
-    if raw:
-        try:
-            data = json.loads(raw)
-            id_ = (
-                data.get("Id")
-                or data.get("id")
-                or (data.get("Reply") or {}).get("Id")
-                or (data.get("reply") or {}).get("id")
-                or (data.get("list") or {}).get("reply", {}).get("id")
-            )
-            title = (
-                data.get("Title")
-                or data.get("title")
-                or (data.get("Reply") or {}).get("Title")
-                or (data.get("reply") or {}).get("title")
-                or (data.get("list") or {}).get("reply", {}).get("title")
-                or ""
-            )
-            if id_:
-                return id_, title
-        except Exception:
-            pass
-    for key in ("ListResponse.Id", "InteractiveResponse.Id"):
-        if key in form:
-            return form[key], form.get("ListResponse.Title") or form.get("InteractiveResponse.Title") or ""
-    return None, None
+def _is_coordination_text(txt: str) -> bool:
+    if not txt:
+        return False
+    txt = txt.strip()
+    triggers = ["תיאום", "תיאום שעה", "תאם", "קבע שעה", "תאם שעה"]
+    return any(t in txt for t in triggers)
 
 @router.post("/whatsapp-webhook")
 async def whatsapp_webhook(request: Request):
     form = await request.form()
-    data = {k: (v if isinstance(v, str) else v.filename) for k, v in form.items()}
-    from_number = data.get("From", "")
-    to_number = data.get("To", "")
-    body = data.get("Body", "") or ""
-    button_text = data.get("ButtonText", "")
-    button_payload = data.get("ButtonPayload", "")
+    data = {k: form.get(k) for k in form.keys()}
 
-    # Log incoming message
-    try:
-        ss = sheets.open_sheet()
-        sheets.append_message_log(ss, {
-            "timestamp": now_iso(),
-            "direction": "in",
-            "event_id": "",
-            "to": to_number,
-            "from": from_number,
-            "body": body,
-            "button_text": button_text,
-            "button_payload": button_payload,
-            "raw": json.dumps(data, ensure_ascii=False),
-        })
-    except Exception:
-        pass
+    # לוג שימושי כדי לראות אילו שדות Twilio שולחת חזרה (בפרט ב-List Picker / Buttons)
+    logging.info("Incoming WhatsApp form: %s", {k: data[k] for k in sorted(data)})
 
-    text = (button_text or body).strip()
+    from_number = data.get("From")              # למשל: 'whatsapp:+9725...'
+    to_number   = data.get("To")                # מספר ה-Business (גם בפורמט whatsapp:)
+    body        = (data.get("Body") or "").strip()
 
-    # Trigger to start range selection
-    if text in ("תיאום", "תיאום שעה", "לתאם", "slot"):
-        send_ranges(from_number)
-        return Response(content="", media_type="text/plain")
+    # תשובות אינטראקטיביות של WhatsApp דרך Twilio (יכולות להגיע במספר שדות):
+    # כפתורים:
+    button_text    = (data.get("ButtonText") or "").strip()
+    button_payload = (data.get("ButtonPayload") or "").strip()
+    # List Picker:
+    list_title = (data.get("ListItemTitle") or "").strip()
+    list_value = (data.get("ListItemValue") or "").strip()
+    # לעיתים Content API מחזיר גם Parameters.* — נשאיר לוגים לראות אם יש.
 
-    # Parse interactive list response
-    item_id, item_title = parse_twilio_list_response(data)
+    # 1) אם המשתמש כתב "תיאום"/"תיאום שעה" -> שלח טווחים (שעתיים)
+    if _is_coordination_text(body) or button_payload == "open_ranges":
+        send_ranges(to_number=from_number)  # שולחים למי שפנה אלינו
+        return PlainTextResponse("OK")
 
-    if item_id:
-        # User selected a 2-hour range; send half-hour slots
-        if item_id.startswith("SLOT_"):
-            send_halves(from_number, item_id)
-            return Response(content="", media_type="text/plain")
+    # 2) אם המשתמש בחר טווח שעתיים מהרשימה (נזהה לפי value כמו 'range_6_8')
+    selection = list_value or button_payload or body
+    # דוגמאות צפויות: 'range_6_8', 'range_8_10', ...
+    m = re.match(r"^range_(\d{1,2})_(\d{1,2})$", selection)
+    if m:
+        start_h, end_h = int(m.group(1)), int(m.group(2))
+        send_halves(to_number=from_number, start_hour=start_h, end_hour=end_h)
+        return PlainTextResponse("OK")
 
-        # User selected a half-hour slot (IDs TIME_A..TIME_E in template)
-        if item_id in ("TIME_A", "TIME_B", "TIME_C", "TIME_D", "TIME_E"):
-            chosen_time = item_title or text
-            # Optionally update event or sheet here
-            # Log the chosen time
-            try:
-                ss = sheets.open_sheet()
-                sheets.append_message_log(ss, {
-                    "timestamp": now_iso(),
-                    "direction": "in",
-                    "event_id": "",
-                    "to": to_number,
-                    "from": from_number,
-                    "body": chosen_time,
-                    "button_text": "",
-                    "button_payload": "",
-                    "raw": json.dumps(data, ensure_ascii=False),
-                })
-            except Exception:
-                pass
-            # Send confirmation text
-            send_text(from_number, f"✅ מעולה! נועלתם על {chosen_time}. נתראה באירוע.")
-            return Response(content="", media_type="text/plain")
+    # 3) אם המשתמש בחר חצי שעה (למשל 'slot_06_30' או טקסט כמו '06:30')
+    # נגדיר פורמט מזהה שנשלח בפריטי חצי השעה: slot_HH_MM
+    m2 = re.match(r"^slot_(\d{2})_(\d{2})$", selection)
+    if m2:
+        # כאן תוכל לבצע המשך תהליך (שמירה ב-DB/שליחת אישור וכו')
+        # כרגע רק נחזיר אישור קצר, או תוכל לקרוא ל-send_confirmation(...)
+        return PlainTextResponse("OK")
 
-    # Fallback: no action taken
-    return Response(content="", media_type="text/plain")
+    # אם אנחנו לא מזהים — לא עושים כלום (Twilio דורשת 200 OK).
+    return PlainTextResponse("OK")
