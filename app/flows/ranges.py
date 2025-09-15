@@ -1,4 +1,5 @@
 import os
+from app.credentials import CONTENT_SID_RANGES, CONTENT_SID_HALVES
 
 CONTENT_SID_RANGES = os.getenv("CONTENT_SID_RANGES")
 CONTENT_SID_HALVES = os.getenv("CONTENT_SID_HALVES")
