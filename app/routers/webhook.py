@@ -1,39 +1,28 @@
 # app/routers/webhook.py
-# MVP: Buttons-only -> write time to Google Sheets by event_id
-
 from fastapi import APIRouter, Request
 from fastapi.responses import PlainTextResponse
 import logging, os, re, datetime, pytz
 
 from app.utils import sheets
-from app.twilio_client import send_content_message  # משתמש רק ב-Messaging Service (לפי env)
+from app.twilio_client import send_content_message
 
 router = APIRouter()
 TZ = os.getenv("TZ", "Asia/Jerusalem")
 
-# ========================
-# Helpers
-# ========================
-
+# ---------- Helpers ----------
 def now_iso() -> str:
     tz = pytz.timezone(TZ)
     return datetime.datetime.now(tz).isoformat()
 
-def _get(data: dict, key: str) -> str:
-    return (data.get(key) or "").strip()
+def _get(d: dict, k: str) -> str:
+    return (d.get(k) or "").strip()
 
-def _pick_interactive_value(data: dict) -> str:
-    """
-    נחזיר את ה-value המועיל ביותר מהאינטראקטיב:
-    ButtonPayload > ListItemValue > ButtonText > ListItemTitle > Body
-    """
-    return (
-        _get(data, "ButtonPayload")
-        or _get(data, "ListItemValue")
-        or _get(data, "ButtonText")
-        or _get(data, "ListItemTitle")
-        or _get(data, "Body")
-    )
+def _pick_interactive_value(d: dict) -> str:
+    return (_get(d, "ButtonPayload")
+            or _get(d, "ListItemValue")
+            or _get(d, "ButtonText")
+            or _get(d, "ListItemTitle")
+            or _get(d, "Body"))
 
 def _append_log(spreadsheet, direction: str, event_id: str, to: str, from_: str,
                 body: str, btn_text: str, btn_payload: str, raw: dict):
@@ -53,77 +42,70 @@ def _append_log(spreadsheet, direction: str, event_id: str, to: str, from_: str,
         logging.exception(f"[LOG] append_message_log failed: {e}")
 
 def _send_ranges(to_number: str, event_id: str, variables: dict | None = None):
-    """
-    שליחת תבנית 'טווחים' (שעתיים). דורש CONTENT_SID_RANGES.
-    """
     sid = os.getenv("CONTENT_SID_RANGES")
     if not sid:
         logging.warning("Missing CONTENT_SID_RANGES; skipping send_ranges.")
         return
     vars_out = dict(variables or {})
-    vars_out.setdefault("5", event_id)  # לדוגמה: פרמטר 5 = event_id בתבנית
+    vars_out["5"] = event_id
     send_content_message(to_number, sid, vars_out)
 
 def _send_halves(to_number: str, start_hour: int, end_hour: int, event_id: str,
                  variables: dict | None = None):
-    """
-    שליחת תבנית 'חצאי-שעה' עבור טווח שנבחר. דורש CONTENT_SID_HALVES.
-    """
     sid = os.getenv("CONTENT_SID_HALVES")
     if not sid:
         logging.warning("Missing CONTENT_SID_HALVES; skipping send_halves.")
         return
     vars_out = dict(variables or {})
-    # אפשר להעביר לתבנית את תיאור הטווח, למשל "14:00–16:00"
-    vars_out.setdefault("5", event_id)
-    vars_out.setdefault("6", f"{start_hour:02d}:00–{end_hour:02d}:00")
+    vars_out["5"] = event_id
+    vars_out["6"] = f"{start_hour:02d}:00–{end_hour:02d}:00"
     send_content_message(to_number, sid, vars_out)
 
 def _send_not_sure(to_number: str, event_id: str, variables: dict | None = None):
-    """
-    שולח תבנית 'לא בטוח' (אם קיימת). ENV: CONTENT_SID_NOT_SURE_QR (אופציונלי).
-    """
     sid = os.getenv("CONTENT_SID_NOT_SURE_QR")
     if not sid:
         logging.warning("Missing CONTENT_SID_NOT_SURE_QR; skipping send_not_sure.")
         return
     vars_out = dict(variables or {})
-    vars_out.setdefault("5", event_id)
+    vars_out["5"] = event_id
     send_content_message(to_number, sid, vars_out)
 
 def _send_contact(to_number: str, event_id: str, variables: dict | None = None):
-    """
-    שולח תבנית 'צור קשר' (אם קיימת). ENV: CONTENT_SID_CONTACT_QR (אופציונלי).
-    """
     sid = os.getenv("CONTENT_SID_CONTACT_QR")
     if not sid:
         logging.warning("Missing CONTENT_SID_CONTACT_QR; skipping send_contact.")
         return
     vars_out = dict(variables or {})
-    vars_out.setdefault("5", event_id)
+    vars_out["5"] = event_id
     send_content_message(to_number, sid, vars_out)
 
+def _clean_event_id(value: str) -> str:
+    """
+    מבטיח שנסיק בדיוק מזהה אחד בפורמט EVT-XXXX...
+    גם אם קיבלנו 'EVT-EVT-10023' או 'xxx EVT-123 yyy' — נוציא את ה-match התקין הראשון.
+    """
+    if not value:
+        return value
+    m = re.search(r"(EVT-[A-Za-z0-9\-]+)", value)
+    return m.group(1) if m else value
+
 def _update_time_by_event(event_id: str, hh: int, mm: int) -> bool:
-    """
-    כתיבת HH:MM לעמודת load_in_time של event_id, ועדכון סטטוס.
-    """
     ss = sheets.open_sheet()
+    event_id = _clean_event_id(event_id)
     time_str = f"{hh:02d}:{mm:02d}"
-    ok = False
     try:
         ok = sheets.update_event_time(ss, event_id, time_str, status="load_in_received")
+        if not ok:
+            logging.warning(f"[SHEETS] update_event_time returned False for {event_id}")
+        return ok
     except Exception as e:
         logging.exception(f"[SHEETS] update_event_time error: {e}")
-    return ok
+        return False
 
 def _update_status_by_event(event_id: str, status: str) -> bool:
-    """
-    מעדכן סטטוס בלבד לאירוע. מנסה דרך update_event_time אם תומך ב-time=None,
-    אחרת מבצע עדכון ידני לעמודת הסטטוס.
-    """
     ss = sheets.open_sheet()
+    event_id = _clean_event_id(event_id)
     try:
-        # אם הפונקציה תומכת ב-time=None:
         return sheets.update_event_time(ss, event_id, None, status=status)  # type: ignore[arg-type]
     except TypeError:
         try:
@@ -149,14 +131,9 @@ def _update_status_by_event(event_id: str, status: str) -> bool:
         return False
 
 def _normalize_phone(num: str) -> str:
-    return re.sub(r"\D", "", num or "")[-9:]  # 9 ספרות אחרונות מספיק בישראל
+    return re.sub(r"\D", "", num or "")[-9:]
 
 def _resolve_event_id_for_phone(wa_from: str) -> str | None:
-    """
-    מאתר event_id בגיליון לפי מספר הספק:
-    - עדיפות לשורות במצב ממתין (waiting_load_in/pending/needs_time/ריק)
-    - אם אין — ניקח את ההתאמה הראשונה.
-    """
     ss = sheets.open_sheet()
     ws = sheets.get_worksheet(ss, os.getenv("SHEET_EVENTS_NAME"))
     headers = sheets.get_headers(ws)
@@ -172,8 +149,7 @@ def _resolve_event_id_for_phone(wa_from: str) -> str | None:
     rows = ws.get_all_values()
     want = _normalize_phone(wa_from)
     candidates = []
-
-    for r_i in range(1, len(rows)):  # דלג על הכותרות
+    for r_i in range(1, len(rows)):
         row = rows[r_i]
         if len(row) <= max(phone_idx, event_idx):
             continue
@@ -188,24 +164,18 @@ def _resolve_event_id_for_phone(wa_from: str) -> str | None:
         logging.info(f"[SHEETS] no event found for phone {want}")
         return None
 
-    preferred_states = {"waiting_load_in","pending","needs_time","ממתין","ממתין לשעת כניסה",""}
+    preferred = {"waiting_load_in","pending","needs_time","ממתין","ממתין לשעת כניסה",""}
     for eid, st in candidates:
-        if st in preferred_states:
-            return eid
+        if st in preferred:
+            return _clean_event_id(eid)
+    return _clean_event_id(candidates[0][0])
 
-    return candidates[0][0]  # אם אין סטטוס מועדף, קח ראשון
-
-# ========================
-# Webhook
-# ========================
-
+# ---------- Webhook ----------
 @router.post("/whatsapp-webhook")
 async def whatsapp_webhook(request: Request):
-    # Twilio שולחת application/x-www-form-urlencoded
     form = await request.form()
     data = {k: form.get(k) for k in form.keys()}
 
-    # לוג כללי — עוזר לראות אילו שדות מגיעים (Buttons/List)
     try:
         logging.info("[WA IN] keys=%s sample=%s",
                      list(sorted(data.keys())),
@@ -213,90 +183,70 @@ async def whatsapp_webhook(request: Request):
     except Exception:
         pass
 
-    from_number = _get(data, "From")         # whatsapp:+972...
-    to_number   = _get(data, "To")           # whatsapp:+...
+    from_number = _get(data, "From")
+    to_number   = _get(data, "To")
     body        = _get(data, "Body")
     button_text = _get(data, "ButtonText")
     button_payload = _get(data, "ButtonPayload")
     list_title  = _get(data, "ListItemTitle")
     list_value  = _get(data, "ListItemValue")
 
-    # ערך הבחירה "הטוב ביותר"
     selection = _pick_interactive_value(data)
     logging.info(f"[WA IN] selection={selection!r}")
 
-    # נשמור לוג לכל הודעה נכנסת (לשונית הודעות)
+    # לוג לשונית ההודעות
     try:
         ss = sheets.open_sheet()
         _append_log(ss, "incoming", "", to_number, from_number, body, button_text, button_payload, data)
     except Exception as e:
         logging.exception(f"[LOG] failed (initial append): {e}")
 
-    # ----------------------------------------------------
-    # שכבת תאימות ל-Quick Reply קיימים (ללא event_id ב-payload)
-    # ----------------------------------------------------
-
-    # CHOOSE_TIME -> פותח טווחים עפ"י event_id לפי מספר הספק
-    if (data.get("MessageType") == "button" and
-        (data.get("ButtonPayload") or "").strip().upper() == "CHOOSE_TIME"):
+    # -------- תאימות ל-Quick Reply קיימים --------
+    # CHOOSE_TIME -> פותח טווחים על סמך event_id משוחזר
+    if (data.get("MessageType") == "button" and button_payload.upper() == "CHOOSE_TIME"):
         event_id = _resolve_event_id_for_phone(from_number)
         if not event_id:
-            logging.warning("[WA IN] CHOOSE_TIME received but event_id not found for phone.")
+            logging.warning("[WA IN] CHOOSE_TIME but event_id not found for phone.")
             return PlainTextResponse("OK", status_code=200)
-
         _send_ranges(to_number=from_number, event_id=event_id)
         try:
             ss = sheets.open_sheet()
-            _append_log(ss, "outgoing", event_id, from_number, to_number,
-                        "", "", "sent: ranges (from CHOOSE_TIME)", data)
+            _append_log(ss, "outgoing", event_id, from_number, to_number, "", "", "sent: ranges (from CHOOSE_TIME)", data)
         except Exception:
             pass
         return PlainTextResponse("OK", status_code=200)
 
-    # NOT_SURE -> שולח תבנית 'לא בטוח' (אם קיימת) ומעדכן סטטוס
-    if (data.get("MessageType") == "button" and
-        (data.get("ButtonPayload") or "").strip().upper() == "NOT_SURE"):
+    # NOT_SURE
+    if (data.get("MessageType") == "button" and button_payload.upper() == "NOT_SURE"):
         event_id = _resolve_event_id_for_phone(from_number)
-        if not event_id:
-            logging.warning("[WA IN] NOT_SURE received but event_id not found for phone.")
-            return PlainTextResponse("OK", status_code=200)
-
-        _send_not_sure(to_number=from_number, event_id=event_id)
-        _update_status_by_event(event_id, "supplier_not_sure")
-        try:
-            ss = sheets.open_sheet()
-            _append_log(ss, "outgoing", event_id, from_number, to_number,
-                        "", "", "sent: not_sure", data)
-        except Exception:
-            pass
+        if event_id:
+            _send_not_sure(to_number=from_number, event_id=event_id)
+            _update_status_by_event(event_id, "supplier_not_sure")
+            try:
+                ss = sheets.open_sheet()
+                _append_log(ss, "outgoing", event_id, from_number, to_number, "", "", "sent: not_sure", data)
+            except Exception:
+                pass
         return PlainTextResponse("OK", status_code=200)
 
-    # NOT_CONTACT -> שולח תבנית 'צור קשר' (אם קיימת) ומעדכן סטטוס
-    if (data.get("MessageType") == "button" and
-        (data.get("ButtonPayload") or "").strip().upper() == "NOT_CONTACT"):
+    # NOT_CONTACT
+    if (data.get("MessageType") == "button" and button_payload.upper() == "NOT_CONTACT"):
         event_id = _resolve_event_id_for_phone(from_number)
-        if not event_id:
-            logging.warning("[WA IN] NOT_CONTACT received but event_id not found for phone.")
-            return PlainTextResponse("OK", status_code=200)
-
-        _send_contact(to_number=from_number, event_id=event_id)
-        _update_status_by_event(event_id, "contact_required")
-        try:
-            ss = sheets.open_sheet()
-            _append_log(ss, "outgoing", event_id, from_number, to_number,
-                        "", "", "sent: contact", data)
-        except Exception:
-            pass
+        if event_id:
+            _send_contact(to_number=from_number, event_id=event_id)
+            _update_status_by_event(event_id, "contact_required")
+            try:
+                ss = sheets.open_sheet()
+                _append_log(ss, "outgoing", event_id, from_number, to_number, "", "", "sent: contact", data)
+            except Exception:
+                pass
         return PlainTextResponse("OK", status_code=200)
 
-    # ----------------------------------------------------
-    # הזרימה ה"סטנדרטית" עם event_id מובנה ב-payload
-    # ----------------------------------------------------
-
-    # 1) פתיחת טווחים: open_ranges_EVT-10023
+    # -------- הזרימה הסטנדרטית עם event_id בפיילוד --------
+    # open_ranges_EVT-XXXX
     m_open = re.match(r"^open_ranges_(?P<event>EVT-[A-Za-z0-9\-]+)$", selection)
     if m_open:
-        event_id = m_open.group("event")
+        event_id = _clean_event_id(m_open.group("event"))
         _send_ranges(to_number=from_number, event_id=event_id)
         try:
             ss = sheets.open_sheet()
@@ -305,12 +255,12 @@ async def whatsapp_webhook(request: Request):
             pass
         return PlainTextResponse("OK", status_code=200)
 
-    # 2) בחירת טווח שעתיים: range_14_16_EVT-10023
+    # range_14_16_EVT-XXXX
     m_range = re.match(r"^range_(?P<s>\d{1,2})_(?P<e>\d{1,2})_(?P<event>EVT-[A-Za-z0-9\-]+)$", selection)
     if m_range:
         start_h = int(m_range.group("s"))
         end_h   = int(m_range.group("e"))
-        event_id = m_range.group("event")
+        event_id = _clean_event_id(m_range.group("event"))
         _send_halves(to_number=from_number, start_hour=start_h, end_hour=end_h, event_id=event_id)
         try:
             ss = sheets.open_sheet()
@@ -319,40 +269,40 @@ async def whatsapp_webhook(request: Request):
             pass
         return PlainTextResponse("OK", status_code=200)
 
-    # 3) בחירת חצי שעה סופית: slot_EVT-10023_14_00 (מועדף)
+    # slot_EVT-XXXX_14_00  (המקרה המועדף)
     m_slot = re.match(r"^slot_(?P<event>EVT-[A-Za-z0-9\-]+)_(?P<h>\d{1,2})_(?P<m>\d{2})$", selection)
     if m_slot:
-        event_id = m_slot.group("event")
+        event_id = _clean_event_id(m_slot.group("event"))
         hh = int(m_slot.group("h"))
         mm = int(m_slot.group("m"))
-        ok = _update_time_by_event(event_id, hh, mm)
+        _update_time_by_event(event_id, hh, mm)
         try:
             ss = sheets.open_sheet()
             _append_log(ss, "incoming", event_id, to_number, from_number,
                         f"slot chosen {hh:02d}:{mm:02d}", button_text, button_payload, data)
         except Exception:
             pass
-        if not ok:
-            logging.warning(f"[SHEETS] update_event_time returned False for {event_id}")
         return PlainTextResponse("OK", status_code=200)
 
-    # אופציה: אם התבנית מחזירה רק שעה בטקסט, וה-event_id בשדה אחר
-    m_slot_split = re.match(r"^slot_(?P<event>EVT-[A-Za-z0-9\-]+)$", button_payload)
-    m_time_txt   = re.match(r"^(?P<h>\d{1,2}):(?P<m>\d{2})$", list_title or button_text or body)
-    if m_slot_split and m_time_txt:
-        event_id = m_slot_split.group("event")
-        hh = int(m_time_txt.group("h"))
-        mm = int(m_time_txt.group("m"))
-        ok = _update_time_by_event(event_id, hh, mm)
-        try:
-            ss = sheets.open_sheet()
-            _append_log(ss, "incoming", event_id, to_number, from_number,
-                        f"slot chosen {hh:02d}:{mm:02d}", button_text, button_payload, data)
-        except Exception:
-            pass
-        if not ok:
-            logging.warning(f"[SHEETS] update_event_time returned False for {event_id}")
-        return PlainTextResponse("OK", status_code=200)
+    # --- מקרים חלופיים/סתם מספרים כמו "6" או "06" או "6:30" ---
+    # אם הפיילוד הוא slot_EVT-XXXX והטייטל הוא שעה בלי נקודתיים וכו'
+    m_slot_evt_only = re.match(r"^slot_(?P<event>EVT-[A-Za-z0-9\-]+)$", button_payload)
+    if m_slot_evt_only:
+        event_id = _clean_event_id(m_slot_evt_only.group("event"))
+        title = list_title or button_text or body
+        # תומך ב"6" -> 06:00, "06" -> 06:00, "6:30" -> 06:30, "06:30" -> 06:30
+        m_hhmm = re.match(r"^\s*(?P<h>\d{1,2})(?::(?P<m>\d{2}))?\s*$", title or "")
+        if m_hhmm:
+            hh = int(m_hhmm.group("h"))
+            mm = int(m_hhmm.group("m") or 0)
+            _update_time_by_event(event_id, hh, mm)
+            try:
+                ss = sheets.open_sheet()
+                _append_log(ss, "incoming", event_id, to_number, from_number,
+                            f"slot chosen {hh:02d}:{mm:02d}", button_text, button_payload, data)
+            except Exception:
+                pass
+            return PlainTextResponse("OK", status_code=200)
 
-    # ברירת מחדל: לא זוהה שום זרם — נשארים ב-OK כדי שטוויליו לא יעשה ריטריי
+    # Default: לא זוהה זרם — נחזיר OK (HTTP), זה לא נשלח לוואטסאפ
     return PlainTextResponse("OK", status_code=200)
