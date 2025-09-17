@@ -81,13 +81,16 @@ def _send_contact(to_number: str, event_id: str, variables: dict | None = None):
 
 def _clean_event_id(value: str) -> str:
     """
-    מבטיח שנסיק בדיוק מזהה אחד בפורמט EVT-XXXX...
-    גם אם קיבלנו 'EVT-EVT-10023' או 'xxx EVT-123 yyy' — נוציא את ה-match התקין הראשון.
+    מחלץ מזהה אירוע תקין מהטקסט.
+    אם הגיעו כפילויות כמו 'EVT-EVT-10023' או טקסט ארוך שמכיל כמה מופעים,
+    ניקח את ההופעה האחרונה בפורמט EVT-XXXXX.
     """
     if not value:
         return value
-    m = re.search(r"(EVT-[A-Za-z0-9\-]+)", value)
-    return m.group(1) if m else value
+    matches = re.findall(r"EVT-[A-Za-z0-9\-]+", value)
+    if matches:
+        return matches[-1]  # ההופעה האחרונה היא המזהה הנכון (למשל 'EVT-10023')
+    return value.strip()
 
 def _update_time_by_event(event_id: str, hh: int, mm: int) -> bool:
     ss = sheets.open_sheet()
