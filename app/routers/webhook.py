@@ -2,7 +2,7 @@
 # Buttons-only MVP: WhatsApp Interactive -> Google Sheets (incl. Contacts Vault + contact handoff + back buttons)
 
 from fastapi import APIRouter, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import Response
 import logging, os, re, datetime, pytz, json
 
 from app.utils import sheets
@@ -326,7 +326,7 @@ async def whatsapp_webhook(request: Request):
                                 f"auto-init to contact ({first_name or 'no-name'})", "", "sent: INIT to contact", data)
                 except Exception:
                     pass
-            return PlainTextResponse("OK", status_code=200)
+            return Response(status_code=200)
 
     # ----------------------------------------------------
     # 1) שכבת תאימות ל-Quick Reply ללא event_id בפיילוד
@@ -335,14 +335,14 @@ async def whatsapp_webhook(request: Request):
         event_id = _resolve_event_id_for_phone(from_number)
         if not event_id:
             logging.warning("[WA IN] CHOOSE_TIME but event_id not found for phone.")
-            return PlainTextResponse("OK", status_code=200)
+            return Response(status_code=200)
         _send_ranges(to_number=from_number, event_id=event_id)
         try:
             ss = sheets.open_sheet()
             _append_log(ss, "outgoing", event_id, from_number, to_number, "", "", "sent: ranges (from CHOOSE_TIME)", data)
         except Exception:
             pass
-        return PlainTextResponse("OK", status_code=200)
+        return Response(status_code=200)
 
     if (data.get("MessageType") == "button" and (button_payload or "").upper() == "NOT_SURE"):
         event_id = _resolve_event_id_for_phone(from_number)
@@ -354,7 +354,7 @@ async def whatsapp_webhook(request: Request):
                 _append_log(ss, "outgoing", event_id, from_number, to_number, "", "", "sent: not_sure", data)
             except Exception:
                 pass
-        return PlainTextResponse("OK", status_code=200)
+        return Response(status_code=200)
 
     if (data.get("MessageType") == "button" and (button_payload or "").upper() == "NOT_CONTACT"):
         event_id = _resolve_event_id_for_phone(from_number)
@@ -366,7 +366,7 @@ async def whatsapp_webhook(request: Request):
                 _append_log(ss, "outgoing", event_id, from_number, to_number, "", "", "sent: contact_prompt", data)
             except Exception:
                 pass
-        return PlainTextResponse("OK", status_code=200)
+        return Response(status_code=200)
 
     # ----------------------------------------------------
     # 2) הזרימה הסטנדרטית עם event_id בפיילוד
@@ -382,7 +382,7 @@ async def whatsapp_webhook(request: Request):
             _append_log(ss, "outgoing", event_id, from_number, to_number, "", "", "sent: main_menu (back)", data)
         except Exception:
             pass
-        return PlainTextResponse("OK", status_code=200)
+        return Response(status_code=200)
 
     # חזרה לטווחים
     m_back_rng = re.match(r"^back_to_ranges_(?P<event>EVT-[\w\-]+)$", selection)
@@ -394,7 +394,7 @@ async def whatsapp_webhook(request: Request):
             _append_log(ss, "outgoing", event_id, from_number, to_number, "", "", "sent: ranges (back)", data)
         except Exception:
             pass
-        return PlainTextResponse("OK", status_code=200)
+        return Response(status_code=200)
 
     # פתיחת טווחים מפורש
     m_open = re.match(r"^open_ranges_(?P<event>EVT-[A-Za-z0-9\-]+)$", selection)
@@ -406,7 +406,7 @@ async def whatsapp_webhook(request: Request):
             _append_log(ss, "outgoing", event_id, from_number, to_number, "", "", "sent: ranges", data)
         except Exception:
             pass
-        return PlainTextResponse("OK", status_code=200)
+        return Response(status_code=200)
 
     # בחירת טווח שעתיים
     m_range = re.match(r"^range_(?P<s>\d{1,2})_(?P<e>\d{1,2})_(?P<event>EVT-[A-Za-z0-9\-]+)$", selection)
@@ -420,7 +420,7 @@ async def whatsapp_webhook(request: Request):
             _append_log(ss, "outgoing", event_id, from_number, to_number, "", "", f"sent: halves {start_h}-{end_h}", data)
         except Exception:
             pass
-        return PlainTextResponse("OK", status_code=200)
+        return Response(status_code=200)
 
     # בחירת חצי שעה (מועדף)
     m_slot = re.match(r"^slot_(?P<event>EVT-[A-Za-z0-9\-]+)_(?P<h>\d{1,2})_(?P<m>\d{2})$", selection)
@@ -441,7 +441,7 @@ async def whatsapp_webhook(request: Request):
                         f"slot chosen {hh:02d}:{mm:02d}", button_text, button_payload, data)
         except Exception:
             pass
-        return PlainTextResponse("OK", status_code=200)
+        return Response(status_code=200)
 
     # מקרה חלופי: Item ID = slot_EVT-xxxx אבל ה-Title/Body הוא שעה "6"/"06"/"6:30"
     m_slot_evt_only = re.match(r"^slot_(?P<event>EVT-[A-Za-z0-9\-]+)$", button_payload)
@@ -465,10 +465,10 @@ async def whatsapp_webhook(request: Request):
                             f"slot chosen {hh:02d}:{mm:02d}", button_text, button_payload, data)
             except Exception:
                 pass
-            return PlainTextResponse("OK", status_code=200)
+            return Response(status_code=200)
 
     # ברירת מחדל: החזר 200 כדי שטוויליו לא יעשה ריטריי
-    return PlainTextResponse("OK", status_code=200)
+    return Response(status_code=200)
 
 # ========================
 # Lookup by phone in Events
