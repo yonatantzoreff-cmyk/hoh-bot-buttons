@@ -8,6 +8,7 @@ from fastapi import APIRouter
 
 from app.utils import sheets
 from app.twilio_client import send_content_message  # שולח דרך Messaging Service בלבד
+from app.utils import vault  # ← מחסן אנשי קשר (ContactsVault)
 
 router = APIRouter()
 
@@ -17,32 +18,21 @@ LOCAL_TZ = pytz.timezone(TZ)
 # ---------- Helpers ----------
 
 def _to_local_aware(dt: datetime.datetime) -> datetime.datetime:
-    """
-    הופך datetime ל-aware ב-Timezone המקומי.
-    - אם naive: localize ל-Asia/Jerusalem
-    - אם עם tzinfo: המרה ל-Asia/Jerusalem
-    """
+    """הופך datetime ל-aware ב-Timezone המקומי."""
     if dt.tzinfo is None:
         return LOCAL_TZ.localize(dt)
     return dt.astimezone(LOCAL_TZ)
 
 def _parse_due_iso(due_iso: str) -> datetime.datetime | None:
-    """
-    מקבל מחרוזת due ("2025-09-16T14:30:00", או עם Z/אופסט), ומחזיר datetime aware בלוקאל.
-    תומך גם בערכים שהגיעו עם 'Z' (UTC) או בלי tzinfo.
-    """
+    """מקבל due כמחרוזת ומחזיר datetime aware בלוקאל."""
     s = (due_iso or "").strip()
     if not s:
         return None
-
     try:
-        # טיפול ב-"Z" כסימון UTC
         if s.endswith("Z"):
-            # fromisoformat לא תומך ב-Z; נחליף ל-+00:00
             s = s[:-1] + "+00:00"
         dt = datetime.datetime.fromisoformat(s)
     except Exception:
-        # ניסיון רך לפורמטים שכיחים אחרים
         for fmt in ("%Y-%m-%d %H:%M:%S", "%Y/%m/%d %H:%M", "%d/%m/%Y %H:%M"):
             try:
                 dt = datetime.datetime.strptime(s, fmt)
@@ -52,36 +42,25 @@ def _parse_due_iso(due_iso: str) -> datetime.datetime | None:
         if dt is None:
             logging.warning(f"[FOLLOWUPS] could not parse due string: {due_iso!r}")
             return None
-
-    # אם הגיע עם tzinfo—נמיר ללוקאל; אחרת נלוקלז
     return _to_local_aware(dt)
 
 def _normalize_phone(num: str) -> str:
-    """
-    משאיר ספרות וסימן + בלבד.
-    מחזיר מספר בפורמט בינלאומי אם אפשר (ללא רווחים/מפרידים).
-    """
+    """הופך 05x… ל-whatsapp:+9725…  (Fallback אם אין יעד מה-Vault)."""
     num = (num or "").strip()
-    # אם כבר בפורמט whatsapp:+..., נחזיר כמו שהוא
     if num.startswith("whatsapp:"):
         return num
-
-    # השארת + וספרות בלבד
-    if num.startswith("+"):
-        digits = "+" + re.sub(r"\D", "", num[1:])
+    digits = re.sub(r"\D", "", num)
+    if not digits:
+        return ""
+    if digits.startswith("972"):
+        e164 = "+" + digits
+    elif digits.startswith("0"):
+        e164 = "+972" + digits[1:]
+    elif digits.startswith("5"):
+        e164 = "+972" + digits
     else:
-        digits = re.sub(r"\D", "", num)
-
-    # אם מתחיל ב-0 ישראלי (למשל 050...), נהפוך ל-+97250...
-    if digits and digits[0] != "+":
-        # נניח ישראל כברירת מחדל
-        if digits.startswith("0"):
-            digits = "+972" + digits[1:]
-        else:
-            # אם אין + ולא מתחיל ב-0, ננסה להתייחס ככבר בינלאומי (נדיר)
-            digits = "+" + digits
-
-    return f"whatsapp:{digits}"
+        e164 = "+" + digits
+    return f"whatsapp:{e164}"
 
 # ---------- Route ----------
 
@@ -113,41 +92,36 @@ def run_followups():
 
     for r_i in range(1, len(rows)):
         row = rows[r_i]
-
-        # הגנות על אורך שורה
         if max(id_idx, phone_idx, name_idx, date_idx, show_idx, due_idx) >= len(row):
             continue
 
         due_iso = (row[due_idx] or "").strip()
         if not due_iso:
             continue
-
         due_local = _parse_due_iso(due_iso)
-        if not due_local:
+        if not due_local or due_local > now_local:
             continue
 
-        # השוואה Aware מול Aware
-        if due_local > now_local:
-            continue
-
-        # בניית יעד
-        to_raw = row[phone_idx] or ""
-        to = _normalize_phone(to_raw)
-
-        # משתני התבנית: 1=שם, 2=מופע, 3=תאריך, 4=שעת מופע (אם קיימת)
+        # Build variables from row
+        event_id = (row[id_idx] or "").strip()
         supplier_name = (row[name_idx] or "שלום").strip()
         show_name = (row[show_idx] or "").strip()
         event_date = (row[date_idx] or "").strip()
         event_time = (row[time_idx] or "").strip() if time_idx is not None and time_idx < len(row) else ""
 
-        variables = {
-            "1": supplier_name,
-            "2": show_name,
-            "3": event_date,
-            "4": event_time
-        }
+        variables = {"1": supplier_name, "2": show_name, "3": event_date, "4": event_time}
 
-        # שליחה בתבנית (Messaging Service דרך send_content_message)
+        # יעד: קודם כל מה-Vault (מועדף להרכב), אם אין – fallback לספק
+        to_wa, display_name = vault.choose_target_for_event(event_id)
+        if to_wa:
+            if display_name:
+                variables["1"] = display_name
+            to = to_wa
+        else:
+            to = _normalize_phone(row[phone_idx] or "")
+            if not to:
+                continue  # אין למי לשלוח
+
         if content_sid:
             try:
                 send_content_message(to, content_sid, variables)
@@ -155,10 +129,9 @@ def run_followups():
             except Exception as e:
                 logging.exception(f"[FOLLOWUPS] send_content_message failed for {to}: {e}")
         else:
-            # בלי SID מאושר אין מה לשלוח (24h rule), נמשיך הלאה
             logging.info(f"[FOLLOWUPS] skipping send to {to}: no CONTENT_SID_INIT_QR")
 
-        # ניקוי due כדי שלא נשלח שוב
+        # נקה due כדי שלא יופעל שוב
         try:
             ws.update_cell(r_i + 1, due_idx + 1, "")
         except Exception as e:
