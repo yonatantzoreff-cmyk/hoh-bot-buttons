@@ -99,8 +99,18 @@ def _extract_contacts_from_contacts_field(contacts_raw: str) -> list[dict]:
         obj = json.loads(contacts_raw)
         items = obj if isinstance(obj, list) else [obj]
         for it in items:
-            name = (it.get("name") or it.get("display_name") or
-                    (it.get("first_name","") + " " + it.get("last_name","")).strip() or None)
+            name_field = it.get("name")
+            name = None
+            if isinstance(name_field, dict):
+                name = ((name_field.get("formatted_name") or "").strip()
+                        or (f"{(name_field.get('first_name') or '').strip()} "
+                            f"{(name_field.get('last_name') or '').strip()}").strip()
+                        or None)
+            else:
+                name = (name_field or "").strip() or None
+            if not name:
+                name = (it.get("display_name") or
+                        (it.get("first_name", "") + " " + it.get("last_name", "")).strip() or None)
             wa_id = it.get("wa_id")
             if wa_id:
                 out.append({"wa": f"whatsapp:+{_digits_only(str(wa_id))}", "name": name})
