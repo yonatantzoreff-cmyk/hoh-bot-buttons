@@ -1,4 +1,6 @@
+import os, json, base64, logging, re
 import os, json, base64, logging
+
 from typing import Dict, Any, List, Optional
 import gspread
 from google.oauth2.service_account import Credentials
@@ -51,6 +53,10 @@ def find_col_index(headers: List[str], wanted: List[str]) -> Optional[int]:
             return i
     return None
 
+def _header_key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower())
+
+
 def append_message_log(spreadsheet, row: Dict[str, Any]):
     name = os.getenv("SHEET_MESSAGES_NAME")
     ws = get_worksheet(spreadsheet, name)
@@ -59,7 +65,11 @@ def append_message_log(spreadsheet, row: Dict[str, Any]):
     if not headers:
         ws.append_row([c for c in default_cols])
         headers = default_cols
-    values = [row.get(c, "") for c in headers]
+    normalized = {_header_key(k): v for k, v in row.items()}
+    values = [
+        row.get(c, normalized.get(_header_key(c), ""))
+        for c in headers
+    ]
     ws.append_row(values)
 
 def update_event_time(spreadsheet, event_id: str, time_str: str, status: str = "confirmed") -> bool:
