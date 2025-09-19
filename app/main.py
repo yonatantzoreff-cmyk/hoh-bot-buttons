@@ -1,6 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import webhook, followups
+from app.routers import ui
 
 app = FastAPI(title="HOH Buttons MVP v2")
 
@@ -14,6 +15,7 @@ app.add_middleware(
 
 app.include_router(webhook.router)
 app.include_router(followups.router)
+app.include_router(ui.router)
 
 @app.get("/health")
 def health():

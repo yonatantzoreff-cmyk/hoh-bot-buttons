@@ -14,3 +14,7 @@ Endpoints:
 - POST /whatsapp-webhook
 - POST /run_followups
 - GET  /health
+
+UI (MVP)
+- /ui → Add a new event
+- /ui/events → Manage events & send INIT manually
