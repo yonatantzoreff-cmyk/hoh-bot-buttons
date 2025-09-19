@@ -3,7 +3,14 @@
 
 from fastapi import APIRouter, Request
 from fastapi.responses import Response
-import logging, os, re, datetime, pytz, json
+import datetime
+import json
+import logging
+import os
+import re
+
+import pytz
+import requests
 
 from app.utils import sheets
 from app.utils import vault  # מחסן אנשי קשר
@@ -11,6 +18,8 @@ from app.twilio_client import send_content_message  # שולח דרך Messaging 
 
 router = APIRouter()
 TZ = os.getenv("TZ", "Asia/Jerusalem")
+TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
 
 # ========================
 # Utils & Helpers
@@ -133,6 +142,100 @@ def _extract_contacts_from_contacts_field(contacts_raw: str) -> list[dict]:
     uniq = []
     for c in out:
         if all(u["wa"] != c["wa"] for u in uniq):
+            uniq.append(c)
+    return uniq
+
+# ========================
+# vCard support (media)
+# ========================
+
+_VCARD_TEL_RE = re.compile(r"^TEL[^:]*:(?P<num>.+)$", re.IGNORECASE)
+_VCARD_FN_RE = re.compile(r"^FN:(?P<name>.+)$", re.IGNORECASE)
+_VCARD_N_RE = re.compile(r"^N:(?P<n>.+)$", re.IGNORECASE)
+
+
+def _vcard_only_first_name(name: str | None) -> str | None:
+    if not name:
+        return None
+    name = re.sub(r"[\u0591-\u05C7]", "", name).strip()
+    parts = re.split(r"[\s,|/]+", name)
+    return parts[0] if parts and parts[0] else None
+
+
+def _vcard_bytes_to_contacts(b: bytes) -> list[dict]:
+    """
+    Parse .vcf content and return [{"wa":"whatsapp:+9725...","name":"ארז"}].
+    Supports FN/N for name and TEL for numbers. Multiple TEL entries allowed.
+    """
+    try:
+        text = b.decode("utf-8", errors="ignore")
+    except Exception:
+        text = b.decode("latin-1", errors="ignore")
+    lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+    name_found: str | None = None
+    phones: list[str] = []
+    for ln in lines:
+        mfn = _VCARD_FN_RE.match(ln)
+        if mfn and not name_found:
+            name_found = mfn.group("name").strip()
+            continue
+        mn = _VCARD_N_RE.match(ln)
+        if mn and not name_found:
+            parts = (mn.group("n") or "").split(";")
+            first = (parts[1] if len(parts) > 1 else "") or (parts[0] if parts else "")
+            name_found = first.strip()
+            continue
+        mtel = _VCARD_TEL_RE.match(ln)
+        if mtel:
+            raw = mtel.group("num").strip()
+            digits = re.sub(r"\D", "", raw)
+            if not digits:
+                continue
+            if digits.startswith("972"):
+                e164 = f"+{digits}"
+            elif digits.startswith("0"):
+                e164 = f"+972{digits[1:]}"
+            elif digits.startswith("5"):
+                e164 = f"+972{digits}"
+            else:
+                continue
+            phones.append(e164)
+    fn = _vcard_only_first_name(name_found) if name_found else None
+    out = [{"wa": f"whatsapp:{p}", "name": fn} for p in dict.fromkeys(phones)]
+    return out
+
+
+_VCARD_CTYPES = {"text/vcard", "text/x-vcard", "application/vcard"}
+
+
+def _extract_contacts_from_vcard_media(form_data: dict) -> list[dict]:
+    """
+    If Twilio sent media (NumMedia>0) and content-type is a vCard,
+    download via MediaUrl{i} using basic auth and parse.
+    """
+    try:
+        num_media = int((form_data.get("NumMedia") or "0").strip() or 0)
+    except Exception:
+        num_media = 0
+    if num_media <= 0:
+        return []
+    results: list[dict] = []
+    for i in range(num_media):
+        ctype = (form_data.get(f"MediaContentType{i}") or "").lower()
+        if ctype not in _VCARD_CTYPES:
+            continue
+        url = form_data.get(f"MediaUrl{i}") or ""
+        if not url:
+            continue
+        try:
+            resp = requests.get(url, auth=(TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN), timeout=10)
+            resp.raise_for_status()
+            results.extend(_vcard_bytes_to_contacts(resp.content))
+        except Exception as e:
+            logging.exception(f"[VCARD] failed to fetch/parse vCard media {url}: {e}")
+    uniq = []
+    for c in results:
+        if all(u.get("wa") != c.get("wa") for u in uniq):
             uniq.append(c)
     return uniq
 
@@ -308,8 +411,9 @@ async def whatsapp_webhook(request: Request):
     # 0) “לכידה אוניברסלית”: הגיע מספר/כרטיס איש קשר → שלח INIT אליו, עדכן Vault, רשום referral
     # ----------------------------------------------------
     contacts_from_field = _extract_contacts_from_contacts_field(contacts_raw) if contacts_raw else []
-    contacts_from_text  = _extract_contacts_from_text(list_title or button_text or body)
-    all_contacts = contacts_from_field or contacts_from_text
+    contacts_from_text = _extract_contacts_from_text(list_title or button_text or body)
+    contacts_from_vcard = _extract_contacts_from_vcard_media(data)
+    all_contacts = contacts_from_field or contacts_from_text or contacts_from_vcard
 
     if all_contacts:
         event_id = _resolve_event_id_for_phone(from_number)
@@ -321,7 +425,7 @@ async def whatsapp_webhook(request: Request):
                 if not wa:
                     continue
                 phone_e164 = wa.replace("whatsapp:", "")
-                first_name = vault.only_first_name(nm)  # אם אין שם – לא נוסיף
+                first_name = vault.only_first_name(nm) if nm else None  # אם אין שם – לא נוסיף
                 # Vault: רשימת היסטוריה + הפוך למועדף (כלל 5b + 7b)
                 vault.upsert_contact(org_name, event_id, phone_e164, first_name, source="not_contact", make_preferred=True)
                 # רשום דניאל→ארז וכו׳
