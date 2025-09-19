@@ -1,4 +1,4 @@
-import os, json, base64
+import os, json, base64, logging
 from typing import Dict, Any, List, Optional
 import gspread
 from google.oauth2.service_account import Credentials
@@ -79,6 +79,24 @@ def update_event_time(spreadsheet, event_id: str, time_str: str, status: str = "
             if status_idx is not None:
                 ws.update_cell(r_idx+1, status_idx+1, status)
             return True
+    return False
+
+def update_event_supplier_phone(spreadsheet, event_id: str, phone_e164: str) -> bool:
+    name = os.getenv("SHEET_EVENTS_NAME")
+    ws = get_worksheet(spreadsheet, name)
+    headers = get_headers(ws)
+    id_idx = find_col_index(headers, ["event_id", "id", "Event ID"])
+    phone_idx = find_col_index(headers, ["supplier_phone", "suplier_phone", "phone", "טלפון"])
+    if id_idx is None or phone_idx is None:
+        logging.warning("[SHEETS] missing event_id/supplier_phone columns when updating phone")
+        return False
+    rows = ws.get_all_values()
+    for r_idx in range(1, len(rows)):
+        row = rows[r_idx]
+        if id_idx < len(row) and (row[id_idx] or "").strip() == event_id:
+            ws.update_cell(r_idx + 1, phone_idx + 1, phone_e164)
+            return True
+    logging.info("[SHEETS] event_id %s not found when updating supplier phone", event_id)
     return False
 
 def set_followup_due(spreadsheet, event_id: str, due_iso: str):
