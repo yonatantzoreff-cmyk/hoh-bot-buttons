@@ -370,6 +370,16 @@ def _update_status_by_event(event_id: str, status: str) -> bool:
         logging.exception(f"[SHEETS] update_status_by_event error: {e}")
         return False
 
+def _update_supplier_phone_by_event(event_id: str, phone_e164: str) -> bool:
+    """עדכון טלפון הספק בשורת האירוע."""
+    ss = sheets.open_sheet()
+    eid = _clean_event_id(event_id)
+    try:
+        return sheets.update_event_supplier_phone(ss, eid, phone_e164)
+    except Exception as e:
+        logging.exception(f"[SHEETS] update_supplier_phone error: {e}")
+        return False
+
 # ========================
 # Webhook
 # ========================
@@ -426,6 +436,7 @@ async def whatsapp_webhook(request: Request):
                     continue
                 phone_e164 = wa.replace("whatsapp:", "")
                 first_name = vault.only_first_name(nm) if nm else None  # אם אין שם – לא נוסיף
+                _update_supplier_phone_by_event(event_id, phone_e164)
                 # Vault: רשימת היסטוריה + הפוך למועדף (כלל 5b + 7b)
                 vault.upsert_contact(org_name, event_id, phone_e164, first_name, source="not_contact", make_preferred=True)
                 # רשום דניאל→ארז וכו׳

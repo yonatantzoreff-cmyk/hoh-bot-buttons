@@ -1,4 +1,4 @@
-import os, json, base64
+import os, json, base64, logging, re
 from typing import Dict, Any, List, Optional
 import gspread
 from google.oauth2.service_account import Credentials
@@ -51,6 +51,10 @@ def find_col_index(headers: List[str], wanted: List[str]) -> Optional[int]:
             return i
     return None
 
+def _header_key(name: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", name.strip().lower())
+
+
 def append_message_log(spreadsheet, row: Dict[str, Any]):
     name = os.getenv("SHEET_MESSAGES_NAME")
     ws = get_worksheet(spreadsheet, name)
@@ -59,7 +63,11 @@ def append_message_log(spreadsheet, row: Dict[str, Any]):
     if not headers:
         ws.append_row([c for c in default_cols])
         headers = default_cols
-    values = [row.get(c, "") for c in headers]
+    normalized = {_header_key(k): v for k, v in row.items()}
+    values = [
+        row.get(c, normalized.get(_header_key(c), ""))
+        for c in headers
+    ]
     ws.append_row(values)
 
 def update_event_time(spreadsheet, event_id: str, time_str: str, status: str = "confirmed") -> bool:
@@ -79,6 +87,24 @@ def update_event_time(spreadsheet, event_id: str, time_str: str, status: str = "
             if status_idx is not None:
                 ws.update_cell(r_idx+1, status_idx+1, status)
             return True
+    return False
+
+def update_event_supplier_phone(spreadsheet, event_id: str, phone_e164: str) -> bool:
+    name = os.getenv("SHEET_EVENTS_NAME")
+    ws = get_worksheet(spreadsheet, name)
+    headers = get_headers(ws)
+    id_idx = find_col_index(headers, ["event_id", "id", "Event ID"])
+    phone_idx = find_col_index(headers, ["supplier_phone", "suplier_phone", "phone", "טלפון"])
+    if id_idx is None or phone_idx is None:
+        logging.warning("[SHEETS] missing event_id/supplier_phone columns when updating phone")
+        return False
+    rows = ws.get_all_values()
+    for r_idx in range(1, len(rows)):
+        row = rows[r_idx]
+        if id_idx < len(row) and (row[id_idx] or "").strip() == event_id:
+            ws.update_cell(r_idx + 1, phone_idx + 1, phone_e164)
+            return True
+    logging.info("[SHEETS] event_id %s not found when updating supplier phone", event_id)
     return False
 
 def set_followup_due(spreadsheet, event_id: str, due_iso: str):
