@@ -319,17 +319,20 @@ async def run_event(event_id: str):
     id_idx = header_map.get("event_id")
     phone_idx = header_map.get("supplier_phone")
     name_idx = header_map.get("supplier_name")
+    event_name_idx = header_map.get("event_name")
 
-    if id_idx is None or phone_idx is None or name_idx is None:
+    if id_idx is None or phone_idx is None or name_idx is None or event_name_idx is None:
         raise HTTPException(status_code=500, detail="Missing columns in Events sheet")
 
     rows = ws.get_all_values()
     supplier_phone = ""
     supplier_name = ""
+    event_name = ""
     for row in rows[1:]:
         if id_idx < len(row) and (row[id_idx] or "").strip() == event_id:
             supplier_phone = row[phone_idx] if phone_idx < len(row) else ""
             supplier_name = row[name_idx] if name_idx < len(row) else ""
+            event_name = row[event_name_idx] if event_name_idx < len(row) else ""
             break
 
     if not supplier_phone:
@@ -345,6 +348,7 @@ async def run_event(event_id: str):
 
     variables = {
         "1": supplier_name or "",
+        "2": event_name or "",
         "5": _clean_event_id(event_id),
     }
 
