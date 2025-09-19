@@ -349,10 +349,6 @@ async def run_event(event_id: str):
     variables = {
         "1": supplier_name or "",
         "2": event_name or "",
-
-        "1": event_name or "",
-        "2": supplier_name or "",
-
         "5": _clean_event_id(event_id),
     }
 
