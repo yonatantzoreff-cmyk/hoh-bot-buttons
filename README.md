@@ -18,3 +18,14 @@ Endpoints:
 UI (MVP)
 - /ui → Add a new event
 - /ui/events → Manage events & send INIT manually
+
+## UI (MVP) — Manage Events
+- `/ui` — Add a new event
+- `/ui/events` — View & manage all events
+  - **Send INIT** — Manually trigger INIT to the contact of that event
+  - **Edit** — Update event name/date/time/contact/phone in the Events sheet
+  - **Delete** — Cascade delete this event from:
+    - Events
+    - ContactsReferrals
+    - ContactsVault: remove the event_id from `event_ids_json` arrays
+  - Deletion does not recall messages already sent.
