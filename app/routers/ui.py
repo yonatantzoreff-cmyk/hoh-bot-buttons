@@ -247,6 +247,13 @@ async def list_events() -> HTMLResponse:
         time = row.get("event_time") or ""
         supplier = row.get("supplier_name") or ""
         phone = row.get("supplier_phone") or ""
+        load_in_time = (
+            row.get("load_in_time")
+            or row.get("Load In Time")
+            or row.get("load_in")
+            or row.get("Load In")
+            or ""
+        )
         status = (row.get("status") or "").strip()
 
         status_badge = "<span class=\"text-muted\">—</span>"
@@ -290,6 +297,7 @@ async def list_events() -> HTMLResponse:
               <td>{time}</td>
               <td>{supplier}</td>
               <td>{phone}</td>
+              <td>{load_in_time}</td>
               <td>{status}</td>
               <td class=\"text-end\"><div class=\"d-flex flex-wrap gap-2 justify-content-end\">{actions}</div></td>
             </tr>
@@ -307,7 +315,7 @@ async def list_events() -> HTMLResponse:
 
     table_body = "".join(table_rows) or """
         <tr>
-          <td colspan=\"8\" class=\"text-center text-muted\">No events yet.</td>
+          <td colspan=\"9\" class=\"text-center text-muted\">No events yet.</td>
         </tr>
     """
 
@@ -325,6 +333,7 @@ async def list_events() -> HTMLResponse:
                 <th scope=\"col\">Time</th>
                 <th scope=\"col\">Supplier</th>
                 <th scope=\"col\">Phone</th>
+                <th scope=\"col\">Load In</th>
                 <th scope=\"col\">Status</th>
                 <th scope=\"col\" class=\"text-end\">Actions</th>
               </tr>
