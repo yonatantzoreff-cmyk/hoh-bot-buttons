@@ -308,7 +308,6 @@ async def list_events() -> HTMLResponse:
                 time=escape(time),
                 supplier=escape(supplier),
                 phone=escape(phone),
-                load_in_time=escape(load_in_time),
                 status=status_badge,
                 actions="".join(actions),
             )
