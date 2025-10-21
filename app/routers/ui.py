@@ -330,6 +330,7 @@ async def list_events() -> HTMLResponse:
                 time=escape(time),
                 supplier=escape(supplier),
                 phone=escape(phone),
+                load_in_time=escape(str(load_in_time) if load_in_time is not None else ""),
                 status=status_badge,
                 actions="".join(actions),
             )
