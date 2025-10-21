@@ -218,6 +218,28 @@ async def add_event(
 
 @router.get("/ui/events", response_class=HTMLResponse)
 async def list_events() -> HTMLResponse:
+    if not sheets.has_google_credentials():
+        body = (
+            "<div class=\"alert alert-warning\" role=\"alert\">"
+            "  <h4 class=\"alert-heading\">Google Sheets credentials missing</h4>"
+            "  <p>Configure <code>GOOGLE_CREDENTIALS_B64</code> or <code>GOOGLE_CREDENTIALS_FILE</code> "
+            "so the server can read the Events sheet.</p>"
+            "</div>"
+        )
+        html = _render_page("Events", body)
+        return HTMLResponse(content=html)
+
+    if not os.getenv("SHEET_EVENTS_NAME"):
+        body = (
+            "<div class=\"alert alert-warning\" role=\"alert\">"
+            "  <h4 class=\"alert-heading\">Missing configuration</h4>"
+            "  <p>Set the <code>SHEET_EVENTS_NAME</code> environment variable to the name of "
+            "your Events worksheet.</p>"
+            "</div>"
+        )
+        html = _render_page("Events", body)
+        return HTMLResponse(content=html)
+
     try:
         events = sheets.list_events()
     except Exception as exc:

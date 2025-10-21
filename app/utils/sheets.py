@@ -15,6 +15,18 @@ SCOPE = [
 
 logger = logging.getLogger(__name__)
 
+def has_google_credentials() -> bool:
+    """Return True if Google credentials are configured for Sheets access."""
+
+    b64 = os.getenv("GOOGLE_CREDENTIALS_B64")
+    if b64:
+        return True
+    path = os.getenv("GOOGLE_CREDENTIALS_FILE")
+    if path and os.path.exists(path):
+        return True
+    return False
+
+
 def _load_creds():
     b64 = os.getenv("GOOGLE_CREDENTIALS_B64")
     path = os.getenv("GOOGLE_CREDENTIALS_FILE")
