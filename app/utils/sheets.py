@@ -69,15 +69,9 @@ def _normalize_lookup(value: str) -> str:
     key = (value or "").strip().lower()
     # unify whitespace and hyphen-like separators to a single underscore
     key = re.sub(r"[\s\u2010\u2011\u2012\u2013\u2014\-]+", "_", key)
-    # collapse multiple underscores and trim
-    key = re.sub(r"_+", "_", key).strip("_")
+    # collapse multiple underscores
+    key = re.sub(r"_+", "_", key)
     return key
-
-
-def _split_lookup_tokens(value: str) -> List[str]:
-    """Split a normalized lookup value into tokens for fuzzy comparisons."""
-
-    return [token for token in value.split("_") if token]
 
 
 def find_col_index(headers: List[str], wanted: List[str]) -> Optional[int]:
@@ -88,7 +82,6 @@ def find_col_index(headers: List[str], wanted: List[str]) -> Optional[int]:
 
     wanted_lower = {w.lower() for w in wanted}
     wanted_normalized = {_normalize_lookup(w) for w in wanted}
-    wanted_tokens = {norm: _split_lookup_tokens(norm) for norm in wanted_normalized}
 
     for i, h in enumerate(headers):
         key = (h or "").strip()
