@@ -63,10 +63,35 @@ def get_headers(ws) -> List[str]:
     values = ws.row_values(1)
     return [h.strip() for h in values]
 
+def _normalize_lookup(value: str) -> str:
+    """Normalize header/alias values for lookup while keeping non-Latin chars."""
+
+    key = (value or "").strip().lower()
+    # unify whitespace and hyphen-like separators to a single underscore
+    key = re.sub(r"[\s\u2010\u2011\u2012\u2013\u2014\-]+", "_", key)
+    # collapse multiple underscores
+    key = re.sub(r"_+", "_", key)
+    return key
+
+
 def find_col_index(headers: List[str], wanted: List[str]) -> Optional[int]:
+    """Locate a column index by matching headers against a list of aliases."""
+
+    if not headers or not wanted:
+        return None
+
+    wanted_lower = {w.lower() for w in wanted}
+    wanted_normalized = {_normalize_lookup(w) for w in wanted}
+
     for i, h in enumerate(headers):
-        key = h.strip().lower()
-        if key in [w.lower() for w in wanted]:
+        key = (h or "").strip()
+        if not key:
+            continue
+        lower = key.lower()
+        if lower in wanted_lower:
+            return i
+        normalized = _normalize_lookup(key)
+        if normalized in wanted_normalized:
             return i
     return None
 
