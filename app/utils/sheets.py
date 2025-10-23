@@ -63,11 +63,55 @@ def get_headers(ws) -> List[str]:
     values = ws.row_values(1)
     return [h.strip() for h in values]
 
+def _normalize_lookup(value: str) -> str:
+    """Normalize header/alias values for lookup while keeping non-Latin chars."""
+
+    key = (value or "").strip().lower()
+    # unify whitespace and hyphen-like separators to a single underscore
+    key = re.sub(r"[\s\u2010\u2011\u2012\u2013\u2014\-]+", "_", key)
+    # collapse multiple underscores and trim
+    key = re.sub(r"_+", "_", key).strip("_")
+    return key
+
+
+def _split_lookup_tokens(value: str) -> List[str]:
+    """Split a normalized lookup value into tokens for fuzzy comparisons."""
+
+    return [token for token in value.split("_") if token]
+
+
 def find_col_index(headers: List[str], wanted: List[str]) -> Optional[int]:
+    """Locate a column index by matching headers against a list of aliases."""
+
+    if not headers or not wanted:
+        return None
+
+    wanted_lower = {w.lower() for w in wanted}
+    wanted_normalized = {_normalize_lookup(w) for w in wanted}
+    wanted_tokens = {norm: _split_lookup_tokens(norm) for norm in wanted_normalized}
+
     for i, h in enumerate(headers):
-        key = h.strip().lower()
-        if key in [w.lower() for w in wanted]:
+        key = (h or "").strip()
+        if not key:
+            continue
+        lower = key.lower()
+        if lower in wanted_lower:
             return i
+        normalized = _normalize_lookup(key)
+        if normalized in wanted_normalized:
+            return i
+        for alias_norm in wanted_normalized:
+            if not alias_norm:
+                continue
+            if alias_norm in normalized or normalized in alias_norm:
+                return i
+        header_tokens = _split_lookup_tokens(normalized)
+        if not header_tokens:
+            continue
+        header_token_set = set(header_tokens)
+        for alias_tokens in wanted_tokens.values():
+            if alias_tokens and set(alias_tokens).issubset(header_token_set):
+                return i
     return None
 
 def _header_key(name: str) -> str:
