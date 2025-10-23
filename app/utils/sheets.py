@@ -93,6 +93,18 @@ def find_col_index(headers: List[str], wanted: List[str]) -> Optional[int]:
         normalized = _normalize_lookup(key)
         if normalized in wanted_normalized:
             return i
+        for alias_norm in wanted_normalized:
+            if not alias_norm:
+                continue
+            if alias_norm in normalized or normalized in alias_norm:
+                return i
+        header_tokens = _split_lookup_tokens(normalized)
+        if not header_tokens:
+            continue
+        header_token_set = set(header_tokens)
+        for alias_tokens in wanted_tokens.values():
+            if alias_tokens and set(alias_tokens).issubset(header_token_set):
+                return i
     return None
 
 def _header_key(name: str) -> str:
