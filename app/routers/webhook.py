@@ -14,12 +14,16 @@ import requests
 
 from app.utils import sheets
 from app.utils import vault  # מחסן אנשי קשר
-from app.twilio_client import send_content_message  # שולח דרך Messaging Service בלבד
+from app.twilio_client import (
+    send_content_message,  # שולח דרך Messaging Service בלבד
+    send_confirmation_message,
+)
 
 router = APIRouter()
 TZ = os.getenv("TZ", "Asia/Jerusalem")
 TWILIO_ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID", "")
 TWILIO_AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN", "")
+logger = logging.getLogger(__name__)
 
 # ========================
 # Utils & Helpers
@@ -65,6 +69,118 @@ def _clean_event_id(value: str) -> str:
     if matches:
         return matches[-1]
     return value.strip()
+
+
+def _send_confirmation_after_sheet_update(user_from: str, event_id: str, load_in_time: str) -> None:
+    """שולח הודעת אישור לאחר עדכון שעת ההקמה בגיליון."""
+    user_whatsapp = (user_from or "").strip()
+    if user_whatsapp and not user_whatsapp.startswith("whatsapp:"):
+        user_whatsapp = f"whatsapp:{user_whatsapp}"
+    if not user_whatsapp:
+        logger.warning("[WA OUT] Skipping confirmation message because sender number is missing.")
+        return
+
+    cleaned_event_id = _clean_event_id(event_id)
+    event = vault.get_event_row_by_id(cleaned_event_id) or {}
+    raw_event_date = event.get("event_date") if isinstance(event, dict) else None
+    event_name = (event.get("event_name") or "").strip() if isinstance(event, dict) else ""
+    event_name = event_name or "לא זמין"
+
+    event_date_str, setup_time_str = format_hebrew_dt(raw_event_date, load_in_time, tz_name=TZ or "Asia/Jerusalem")
+
+    try:
+        send_confirmation_message(
+            to_number=user_whatsapp,
+            event_date=event_date_str,
+            setup_time=setup_time_str,
+            event_name=event_name,
+        )
+        logger.info(
+            "Confirmation sent to %s for event '%s' on %s %s",
+            user_whatsapp,
+            event_name,
+            event_date_str,
+            setup_time_str,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to send confirmation message to %s for event %s",
+            user_whatsapp,
+            cleaned_event_id,
+        )
+
+
+def format_hebrew_dt(date_obj_or_str, time_obj_or_str, tz_name: str = "Asia/Jerusalem") -> tuple[str, str]:
+    """פורמט תאריך ושעה לפורמט ידידותי (DD.MM.YYYY / HH:MM) באזור הזמן הנתון."""
+    tz = pytz.timezone(tz_name)
+
+    def _parse_date(value):
+        if isinstance(value, datetime.datetime):
+            dt = value
+        elif isinstance(value, datetime.date):
+            dt = datetime.datetime.combine(value, datetime.time.min)
+        elif isinstance(value, str) and value.strip():
+            text = value.strip()
+            try:
+                dt = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+            except ValueError:
+                dt = None
+                for fmt in ("%Y-%m-%d", "%d.%m.%Y", "%d/%m/%Y", "%m/%d/%Y"):
+                    try:
+                        dt = datetime.datetime.strptime(text, fmt)
+                        break
+                    except ValueError:
+                        continue
+                if dt is None:
+                    return None
+        else:
+            return None
+
+        if dt.tzinfo is None:
+            return tz.localize(dt)
+        return dt.astimezone(tz)
+
+    def _parse_time(value):
+        if isinstance(value, datetime.datetime):
+            dt = value
+        elif isinstance(value, datetime.time):
+            today = datetime.datetime.now(tz).date()
+            base = datetime.datetime.combine(today, value)
+            if value.tzinfo is None:
+                dt = tz.localize(base)
+            else:
+                dt = base.astimezone(tz)
+        elif isinstance(value, str) and value.strip():
+            text = value.strip()
+            try:
+                dt = datetime.datetime.fromisoformat(text.replace("Z", "+00:00"))
+            except ValueError:
+                parsed = None
+                for fmt in ("%H:%M", "%H:%M:%S", "%I:%M %p", "%H%M"):
+                    try:
+                        parsed_time = datetime.datetime.strptime(text, fmt).time()
+                        parsed = parsed_time
+                        break
+                    except ValueError:
+                        continue
+                if parsed is None:
+                    return None
+                today = datetime.datetime.now(tz).date()
+                base = datetime.datetime.combine(today, parsed)
+                dt = tz.localize(base)
+        else:
+            return None
+
+        if dt.tzinfo is None:
+            return tz.localize(dt)
+        return dt.astimezone(tz)
+
+    date_dt = _parse_date(date_obj_or_str)
+    time_dt = _parse_time(time_obj_or_str)
+
+    date_str = date_dt.strftime("%d.%m.%Y") if date_dt else "לא זמין"
+    time_str = time_dt.strftime("%H:%M") if time_dt else "לא זמין"
+    return date_str, time_str
 
 # פירוק מספרים
 def _digits_only(s: str) -> str:
@@ -553,7 +669,9 @@ async def whatsapp_webhook(request: Request):
         event_id = _clean_event_id(m_slot.group("event"))
         hh = int(m_slot.group("h"))
         mm = int(m_slot.group("m"))
-        _update_time_by_event(event_id, hh, mm)
+        load_in_time = f"{hh:02d}:{mm:02d}"
+        if _update_time_by_event(event_id, hh, mm):
+            _send_confirmation_after_sheet_update(from_number, event_id, load_in_time)
         # סימון הצלחה ב-Vault: מי שבחר (השולח) → preferred
         evt = vault.get_event_row_by_id(event_id)
         if evt:
@@ -577,7 +695,9 @@ async def whatsapp_webhook(request: Request):
             event_id = _clean_event_id(m_slot_evt_only.group("event"))
             hh = int(m_hhmm.group("h"))
             mm = int(m_hhmm.group("m") or 0)
-            _update_time_by_event(event_id, hh, mm)
+            load_in_time = f"{hh:02d}:{mm:02d}"
+            if _update_time_by_event(event_id, hh, mm):
+                _send_confirmation_after_sheet_update(from_number, event_id, load_in_time)
             # סימון הצלחה ב-Vault
             evt = vault.get_event_row_by_id(event_id)
             if evt:
