@@ -46,6 +46,36 @@ def send_text(
     return client.messages.create(**payload)
 
 
+def send_confirmation_message(to_number: str, event_date: str, setup_time: str, event_name: str):
+    """
+    שולח הודעת WhatsApp חופשית (session message) בעברית עם שורות חדשות.
+    אם מוגדר TWILIO_MESSAGING_SERVICE_SID – שלח דרכו; אחרת שלח מ-TWILIO_WHATSAPP_FROM.
+    """
+    messaging_service_sid = os.getenv("TWILIO_MESSAGING_SERVICE_SID")
+    from_number = os.getenv("TWILIO_WHATSAPP_FROM")
+
+    body = (
+        "—הודעת אישור—\n"
+        "תודה, השעה התקבלה!\n"
+        f"ניפגש בתאריך {event_date}, בשעה {setup_time}, לאירוע {event_name}\n"
+        "אשלח לך איש קשר בסמוך למועד האירוע"
+    )
+
+    params: Dict[str, Any] = {
+        "to": _normalize_to(to_number, channel="whatsapp"),
+        "body": body,
+    }
+
+    if messaging_service_sid:
+        params["messaging_service_sid"] = messaging_service_sid
+    else:
+        if not from_number:
+            raise RuntimeError("Missing TWILIO_WHATSAPP_FROM env var for WhatsApp session message")
+        params["from_"] = from_number
+
+    client.messages.create(**params)
+
+
 def send_content_message(
     to: str,
     content_sid: str,
