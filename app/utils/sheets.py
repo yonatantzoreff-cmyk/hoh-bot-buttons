@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import gspread
 from google.oauth2.service_account import Credentials
 
@@ -73,6 +73,12 @@ def _normalize_lookup(value: str) -> str:
     key = re.sub(r"_+", "_", key)
     return key
 
+def _split_lookup_tokens(value: str) -> List[str]:
+    """Split a normalized lookup string into constituent tokens."""
+
+    if not value:
+        return []
+    return [token for token in value.split("_") if token]
 
 def find_col_index(headers: List[str], wanted: List[str]) -> Optional[int]:
     """Locate a column index by matching headers against a list of aliases."""
@@ -82,30 +88,52 @@ def find_col_index(headers: List[str], wanted: List[str]) -> Optional[int]:
 
     wanted_lower = {w.lower() for w in wanted}
     wanted_normalized = {_normalize_lookup(w) for w in wanted}
+    wanted_tokens = {
+        alias_norm: _split_lookup_tokens(alias_norm)
+        for alias_norm in wanted_normalized
+        if alias_norm
+    }
 
-    for i, h in enumerate(headers):
-        key = (h or "").strip()
+    header_infos = []
+    for idx, raw_header in enumerate(headers):
+        key = (raw_header or "").strip()
         if not key:
             continue
         lower = key.lower()
-        if lower in wanted_lower:
-            return i
         normalized = _normalize_lookup(key)
-        if normalized in wanted_normalized:
-            return i
+        tokens = _split_lookup_tokens(normalized)
+        header_infos.append((idx, lower, normalized, tokens))
+
+    # First pass: prefer exact matches to avoid regressing existing lookups.
+    for idx, lower, normalized, _tokens in header_infos:
+        if lower in wanted_lower or normalized in wanted_normalized:
+            return idx
+
+    # Second pass: allow partial substring matches as a fallback only.
+    best_partial: Optional[Tuple[int, int]] = None
+    for idx, _lower, normalized, _tokens in header_infos:
         for alias_norm in wanted_normalized:
             if not alias_norm:
                 continue
             if alias_norm in normalized or normalized in alias_norm:
-                return i
-        header_tokens = _split_lookup_tokens(normalized)
+                score = (-len(alias_norm), idx)
+                if best_partial is None or score < best_partial:
+                    best_partial = score
+                break
+    if best_partial is not None:
+        return best_partial[1]
+
+    # Final pass: token-based matching for languages without word separators.
+    for idx, _lower, _normalized, header_tokens in header_infos:
         if not header_tokens:
             continue
         header_token_set = set(header_tokens)
         for alias_tokens in wanted_tokens.values():
             if alias_tokens and set(alias_tokens).issubset(header_token_set):
-                return i
+                return idx
+
     return None
+
 
 def _header_key(name: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", name.strip().lower())
