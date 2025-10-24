@@ -68,27 +68,45 @@ def _col(headers, aliases: List[str]) -> Optional[int]:
 
 def get_event_row_by_id(event_id: str) -> Optional[Dict[str, Any]]:
     """מחזיר dict של שדות מה-Events לפי event_id, או None אם לא נמצא."""
-    if not SHEET_EVENTS_NAME:
-        logging.warning("[VAULT] SHEET_EVENTS_NAME missing")
+
+    cleaned_event_id = (event_id or "").strip()
+    if not cleaned_event_id:
         return None
-    ws = _open_ws(SHEET_EVENTS_NAME)
-    headers = _headers(ws)
-    e_col = _col(headers, ["event_id","Event ID","eventId"])
-    name_col = _col(headers, ["event_name","show","מופע"])
-    date_col = _col(headers, ["event_date","date","תאריך"])
-    time_col = _col(headers, ["event_time","show_time","שעת מופע","שעה"])
-    if e_col is None or name_col is None:
+
+    row = sheets.get_event_by_id(cleaned_event_id)
+    if not isinstance(row, dict):
         return None
-    rows = ws.get_all_values()
-    for r in rows[1:]:
-        if e_col < len(r) and (r[e_col] or "").strip() == event_id:
-            return {
-                "event_id": (r[e_col] or "").strip(),
-                "event_name": (r[name_col] or "").strip(),
-                "event_date": (r[date_col] or "").strip() if date_col is not None and date_col < len(r) else "",
-                "event_time": (r[time_col] or "").strip() if time_col is not None and time_col < len(r) else "",
-            }
-    return None
+
+    def _pick(keys: List[str], default: str = "") -> str:
+        for key in keys:
+            if key not in row:
+                continue
+            value = row.get(key)
+            if value is None:
+                continue
+            text = str(value).strip()
+            if text:
+                return text
+        return default
+
+    result: Dict[str, Any] = {
+        "event_id": _pick(["event_id", "Event ID", "eventId"], default=cleaned_event_id),
+        "event_name": _pick(["event_name", "show", "מופע", "event"], default=""),
+        "event_date": _pick(["event_date", "date", "תאריך", "תאריך מופע"], default=""),
+        "event_time": _pick(["event_time", "show_time", "שעת מופע", "שעה"], default=""),
+    }
+
+    load_in_value = _pick([
+        "load_in_time",
+        "load-in time",
+        "load_in",
+        "כניסה",
+        "שעת כניסה",
+    ])
+    if load_in_value:
+        result["load_in_time"] = load_in_value
+
+    return result if any(result.values()) else None
 
 # ---------- Vault core ----------
 
