@@ -732,6 +732,12 @@ def _resolve_event_id_for_phone(wa_from: str) -> str | None:
     מאתר event_id בגיליון לפי מספר הספק (מהשורה של האירוע).
     עדיפות לסטטוסים 'ממתין' וכו׳ אם קיימים.
     """
+
+    # אם יש הפניה אחרונה מאיש קשר קודם – זו העדיפות הראשונה כדי לשמור על אותו event_id
+    from_referral = vault.latest_referral_event_for_phone(wa_from)
+    if from_referral:
+        return _clean_event_id(from_referral)
+
     ss = sheets.open_sheet()
     ws = sheets.get_worksheet(ss, os.getenv("SHEET_EVENTS_NAME"))
     headers = sheets.get_headers(ws)
@@ -747,7 +753,25 @@ def _resolve_event_id_for_phone(wa_from: str) -> str | None:
     rows = ws.get_all_values()
     want = _normalize_phone_last9(wa_from)
     candidates = []
-    for r in rows[1:]:
+
+    def _priority(status: str) -> int:
+        normalized = (status or "").strip().lower()
+        priority_list = [
+            "contact_required",
+            "handoff_to_contact",
+            "waiting_load_in",
+            "pending",
+            "needs_time",
+            "ממתין",
+            "ממתין לשעת כניסה",
+            "",
+        ]
+        try:
+            return priority_list.index(normalized)
+        except ValueError:
+            return len(priority_list)
+
+    for idx, r in enumerate(rows[1:]):
         if max(phone_idx, event_idx) >= len(r):
             continue
         phone_cell = _normalize_phone_last9(r[phone_idx])
@@ -755,14 +779,11 @@ def _resolve_event_id_for_phone(wa_from: str) -> str | None:
             eid = (r[event_idx] or "").strip()
             st  = (r[status_idx] or "").strip().lower() if status_idx is not None and status_idx < len(r) else ""
             if eid:
-                candidates.append((_clean_event_id(eid), st))
+                candidates.append((_clean_event_id(eid), st, idx))
 
     if not candidates:
         logging.info(f"[SHEETS] no event found for phone {want}")
         return None
 
-    preferred = {"waiting_load_in","pending","needs_time","ממתין","ממתין לשעת כניסה",""}
-    for eid, st in candidates:
-        if st in preferred:
-            return eid
-    return candidates[0][0]
+    best = min(candidates, key=lambda pair: (_priority(pair[1]), -pair[2]))
+    return best[0]

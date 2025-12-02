@@ -237,6 +237,35 @@ def record_referral(org_display_name: str, from_phone: str, to_phone: str, event
     ws = _open_ws(SHEET_EDGES_NAME)
     ws.append_row([canon_org_key(org_display_name), from_phone, to_phone, event_id or "", now_iso()])
 
+
+def latest_referral_event_for_phone(phone: str) -> Optional[str]:
+    """החזרת event_id העדכני ביותר עבור מספר שקיבל handoff (to_phone)."""
+
+    ws = _open_ws(SHEET_EDGES_NAME)
+    rows = ws.get_all_values()
+    if not rows or len(rows) < 2:
+        return None
+
+    headers = rows[0]
+    try:
+        idx_to = headers.index("to_phone")
+        idx_evt = headers.index("event_id")
+    except ValueError:
+        return None
+
+    want = norm_phone_e164_il(phone)
+    if not want:
+        return None
+
+    for row in reversed(rows[1:]):
+        if max(idx_to, idx_evt) >= len(row):
+            continue
+        row_phone = norm_phone_e164_il(row[idx_to])
+        if row_phone == want:
+            event_id = (row[idx_evt] or "").strip()
+            return event_id or None
+    return None
+
 def choose_target_for_event(event_id: str) -> Tuple[Optional[str], Optional[str]]:
     """
     מחזיר יעד לשליחה (whatsapp:+972...) ושם תצוגה מועדף לפי ה-Vault.
