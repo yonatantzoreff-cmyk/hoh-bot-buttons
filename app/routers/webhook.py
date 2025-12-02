@@ -597,17 +597,25 @@ async def whatsapp_webhook(request: Request):
                 pass
         return Response(status_code=200)
 
-    if (data.get("MessageType") == "button" and (button_payload or "").upper() == "NOT_CONTACT"):
-        event_id = _resolve_event_id_for_phone(from_number)
-        if event_id:
-            _send_contact(to_number=from_number, event_id=event_id)  # בקשה לשליחת איש קשר
-            _update_status_by_event(event_id, "contact_required")
-            try:
-                ss = sheets.open_sheet()
-                _append_log(ss, "outgoing", event_id, from_number, to_number, "", "", "sent: contact_prompt", data)
-            except Exception:
-                pass
-        return Response(status_code=200)
+    if data.get("MessageType") == "button":
+        m_not_contact = re.match(r"^NOT_CONTACT(?:_(?P<event>EVT-[A-Za-z0-9\-]+))?$", selection, re.IGNORECASE)
+        if m_not_contact:
+            event_id = _clean_event_id(m_not_contact.group("event"))
+            if not event_id:
+                event_id = _clean_event_id(selection)
+            if event_id and not event_id.upper().startswith("EVT-"):
+                event_id = None
+            if not event_id:
+                event_id = _resolve_event_id_for_phone(from_number)
+            if event_id:
+                _send_contact(to_number=from_number, event_id=event_id)  # בקשה לשליחת איש קשר
+                _update_status_by_event(event_id, "contact_required")
+                try:
+                    ss = sheets.open_sheet()
+                    _append_log(ss, "outgoing", event_id, from_number, to_number, "", "", "sent: contact_prompt", data)
+                except Exception:
+                    pass
+            return Response(status_code=200)
 
     # ----------------------------------------------------
     # 2) הזרימה הסטנדרטית עם event_id בפיילוד
