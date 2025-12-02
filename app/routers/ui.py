@@ -383,6 +383,8 @@ async def run_event(event_id: str):
     supplier_phone = row.get("supplier_phone") or ""
     supplier_name = row.get("supplier_name") or ""
     event_name = row.get("event_name") or ""
+    event_date = row.get("event_date") or ""
+    event_time = row.get("event_time") or ""
 
     if not supplier_phone:
         raise HTTPException(status_code=404, detail="Event not found or missing phone")
@@ -398,6 +400,8 @@ async def run_event(event_id: str):
     variables = {
         "1": supplier_name or "",
         "2": event_name or "",
+        "3": event_date or "",
+        "4": event_time or "",
         "5": _clean_event_id(event_id),
     }
 
