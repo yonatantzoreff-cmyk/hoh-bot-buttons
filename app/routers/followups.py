@@ -109,7 +109,13 @@ def run_followups():
         event_date = (row[date_idx] or "").strip()
         event_time = (row[time_idx] or "").strip() if time_idx is not None and time_idx < len(row) else ""
 
-        variables = {"1": supplier_name, "2": show_name, "3": event_date, "4": event_time}
+        variables = {
+            "1": supplier_name,
+            "2": show_name,
+            "3": event_date,
+            "4": event_time,
+            "5": event_id,
+        }
 
         # יעד: קודם כל מה-Vault (מועדף להרכב), אם אין – fallback לספק
         to_wa, display_name = vault.choose_target_for_event(event_id)
