@@ -732,6 +732,12 @@ def _resolve_event_id_for_phone(wa_from: str) -> str | None:
     מאתר event_id בגיליון לפי מספר הספק (מהשורה של האירוע).
     עדיפות לסטטוסים 'ממתין' וכו׳ אם קיימים.
     """
+
+    # אם יש הפניה אחרונה מאיש קשר קודם – זו העדיפות הראשונה כדי לשמור על אותו event_id
+    from_referral = vault.latest_referral_event_for_phone(wa_from)
+    if from_referral:
+        return _clean_event_id(from_referral)
+
     ss = sheets.open_sheet()
     ws = sheets.get_worksheet(ss, os.getenv("SHEET_EVENTS_NAME"))
     headers = sheets.get_headers(ws)
