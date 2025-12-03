@@ -730,15 +730,112 @@ async def whatsapp_webhook(request: Request):
 def _resolve_event_id_for_phone(wa_from: str) -> str | None:
     """
     מאתר event_id בגיליון לפי מספר הספק (מהשורה של האירוע).
-    עדיפות לסטטוסים 'ממתין' וכו׳ אם קיימים.
+    עדיפות לסטטוסים 'ממתין' וכו׳ אם קיימים, אך עם מנגנון אי-עמימות:
+    - קודם כל משתמש במיפוי קיים (handoff/referral או ContactsVault event_ids_json)
+    - אם יש כמה מועמדים – לא בוחר שרירותית, אלא מתעדף בעזרת סטטוס/עדכניות, או מחזיר None ומתריע
     """
+
+    remembered_event_ids: set[str] = set()
 
     # אם יש הפניה אחרונה מאיש קשר קודם – זו העדיפות הראשונה כדי לשמור על אותו event_id
     from_referral = vault.latest_referral_event_for_phone(wa_from)
     if from_referral:
-        return _clean_event_id(from_referral)
+        cleaned = _clean_event_id(from_referral)
+        if cleaned:
+            return cleaned
 
     ss = sheets.open_sheet()
+
+    # נסה למצוא מיפוי Event מה-Vault (event_ids_json / preferred / last_success)
+    def _parse_iso(ts: str) -> datetime.datetime | None:
+        try:
+            text = (ts or "").strip()
+            if not text:
+                return None
+            if text.endswith("Z"):
+                text = text[:-1] + "+00:00"
+            return datetime.datetime.fromisoformat(text)
+        except Exception:
+            return None
+
+    vault_ws = None
+    try:
+        vault_ws = sheets.get_worksheet(ss, os.getenv("SHEET_CONTACTS_VAULT_NAME", "ContactsVault"))
+    except Exception:
+        logging.exception("[VAULT] failed to open ContactsVault worksheet")
+
+    if vault_ws is not None:
+        try:
+            v_headers = sheets.get_headers(vault_ws)
+            v_phone_idx = sheets.find_col_index(v_headers, ["phone_e164", "phone", "טלפון"])
+            v_events_idx = sheets.find_col_index(v_headers, ["event_ids_json", "event_ids", "event_id"])
+            v_pref_idx = sheets.find_col_index(v_headers, ["preferred"])
+            v_last_success_idx = sheets.find_col_index(v_headers, ["last_success_at"])
+            v_last_seen_idx = sheets.find_col_index(v_headers, ["last_seen_at"])
+
+            if v_phone_idx is None or v_events_idx is None:
+                logging.warning("[VAULT] missing phone/event_ids_json columns; skipping vault lookup")
+            else:
+                vault_rows = vault_ws.get_all_values()
+                want_e164 = vault.norm_phone_e164_il(wa_from)
+                vault_candidates = []
+                for r_idx, row in enumerate(vault_rows[1:]):
+                    if max(v_phone_idx, v_events_idx) >= len(row):
+                        continue
+                    row_phone = vault.norm_phone_e164_il(row[v_phone_idx])
+                    if not want_e164 or row_phone != want_e164:
+                        continue
+
+                    raw_events = (row[v_events_idx] or "").strip()
+                    try:
+                        parsed = json.loads(raw_events) if raw_events else []
+                        event_list = parsed if isinstance(parsed, list) else []
+                    except Exception:
+                        logging.warning("[VAULT] invalid event_ids_json for phone %s", want_e164)
+                        event_list = []
+
+                    preferred = False
+                    if v_pref_idx is not None and v_pref_idx < len(row):
+                        preferred = (row[v_pref_idx] or "").strip().upper() == "TRUE"
+
+                    last_success_dt = _parse_iso(row[v_last_success_idx]) if v_last_success_idx is not None and v_last_success_idx < len(row) else None
+                    last_seen_dt = _parse_iso(row[v_last_seen_idx]) if v_last_seen_idx is not None and v_last_seen_idx < len(row) else None
+
+                    for eid in event_list:
+                        cleaned_eid = _clean_event_id(str(eid))
+                        if not cleaned_eid:
+                            continue
+                        vault_candidates.append({
+                            "event_id": cleaned_eid,
+                            "preferred": preferred,
+                            "last_success": last_success_dt,
+                            "last_seen": last_seen_dt,
+                            "row_idx": r_idx,
+                        })
+
+                if vault_candidates:
+                    remembered_event_ids.update(c["event_id"] for c in vault_candidates)
+
+                    def _score(c):
+                        return (
+                            0 if c["preferred"] else 1,
+                            -(c["last_success"].timestamp()) if c["last_success"] else float("inf"),
+                            -(c["last_seen"].timestamp()) if c["last_seen"] else float("inf"),
+                            c["row_idx"],
+                        )
+
+                    sorted_cands = sorted(vault_candidates, key=_score)
+                    top = sorted_cands[0]
+                    top_score = _score(top)
+                    competing = [c for c in sorted_cands if _score(c) == top_score]
+                    unique_ids = {c["event_id"] for c in competing}
+                    if len(unique_ids) == 1:
+                        return top["event_id"]
+                    logging.warning("[VAULT] multiple event candidates for phone %s: %s", want_e164, sorted(unique_ids))
+        except Exception:
+            logging.exception("[VAULT] failed during vault lookup")
+
+    # --- Sheet lookup fallback ---
     ws = sheets.get_worksheet(ss, os.getenv("SHEET_EVENTS_NAME"))
     headers = sheets.get_headers(ws)
 
@@ -751,8 +848,8 @@ def _resolve_event_id_for_phone(wa_from: str) -> str | None:
         return None
 
     rows = ws.get_all_values()
-    want = _normalize_phone_last9(wa_from)
-    candidates = []
+    want_last9 = _normalize_phone_last9(wa_from)
+    candidates: list[tuple[str, str, int]] = []
 
     def _priority(status: str) -> int:
         normalized = (status or "").strip().lower()
@@ -775,15 +872,26 @@ def _resolve_event_id_for_phone(wa_from: str) -> str | None:
         if max(phone_idx, event_idx) >= len(r):
             continue
         phone_cell = _normalize_phone_last9(r[phone_idx])
-        if phone_cell == want:
+        if phone_cell == want_last9:
             eid = (r[event_idx] or "").strip()
             st  = (r[status_idx] or "").strip().lower() if status_idx is not None and status_idx < len(r) else ""
             if eid:
                 candidates.append((_clean_event_id(eid), st, idx))
 
     if not candidates:
-        logging.info(f"[SHEETS] no event found for phone {want}")
+        logging.info(f"[SHEETS] no event found for phone {want_last9}")
         return None
 
-    best = min(candidates, key=lambda pair: (_priority(pair[1]), -pair[2]))
-    return best[0]
+    # אם יש Eventים שזוהו קודם (מה-Vault) – נעדיף אותם
+    if remembered_event_ids:
+        candidates = [c for c in candidates if c[0] in remembered_event_ids] or candidates
+
+    best_priority = min(_priority(c[1]) for c in candidates)
+    best_candidates = [c for c in candidates if _priority(c[1]) == best_priority]
+
+    unique_best_ids = {c[0] for c in best_candidates}
+    if len(unique_best_ids) == 1:
+        return next(iter(unique_best_ids))
+
+    logging.warning("[SHEETS] multiple event candidates for phone %s with priority %s: %s", want_last9, best_priority, sorted(unique_best_ids))
+    return None
