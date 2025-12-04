@@ -10,3 +10,4 @@ pydantic==2.9.2
 python-multipart==0.0.9
 requests==2.32.3
 SQLAlchemy>=2.0.26
+psycopg2-binary
