@@ -63,13 +63,41 @@ class EventRepository:
             event_id = result.scalar_one()
             return event_id
 
-    def get_event_by_id(self, event_id: int):
-        query = text("SELECT * FROM events WHERE event_id = :event_id")
+    def get_event_by_id(self, org_id: int, event_id: int):
+        query = text(
+            """
+            SELECT *
+            FROM events
+            WHERE org_id = :org_id AND event_id = :event_id
+            """
+        )
         with get_session() as session:
-            result = session.execute(query, {"event_id": event_id})
+            result = session.execute(query, {"org_id": org_id, "event_id": event_id})
             # מחזיר dict במקום tuple
             row = result.mappings().first()
             return row
+
+    def list_events_for_org(self, org_id: int):
+        query = text(
+            """
+            SELECT
+                e.event_id,
+                e.name,
+                e.event_date,
+                e.show_time,
+                e.hall_id,
+                h.name AS hall_name,
+                e.status
+            FROM events e
+            LEFT JOIN halls h ON e.hall_id = h.hall_id
+            WHERE e.org_id = :org_id
+            ORDER BY e.event_date DESC, e.event_id DESC
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id})
+            return result.mappings().all()
 
 
 class ContactRepository:
@@ -247,13 +275,14 @@ class MessageRepository:
                 UPDATE conversations
                 SET last_message_id = :message_id,
                     updated_at = :now
-                WHERE conversation_id = :conversation_id
+                WHERE conversation_id = :conversation_id AND org_id = :org_id
             """)
             session.execute(
                 update_conv_q,
                 {
                     "message_id": message_id,
                     "conversation_id": conversation_id,
+                    "org_id": org_id,
                     "now": now,
                 },
             )
