@@ -9,6 +9,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, Form, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse
 
+from app.dependencies import get_hoh_service
 from app.utils import sheets
 from app.twilio_client import send_content_message as send_content
 

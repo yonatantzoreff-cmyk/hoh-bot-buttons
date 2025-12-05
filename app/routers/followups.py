@@ -6,6 +6,7 @@ import datetime
 import pytz
 from fastapi import APIRouter
 
+from app.dependencies import get_hoh_service
 from app.utils import sheets
 from app.twilio_client import send_content_message  # שולח דרך Messaging Service בלבד
 from app.utils import vault  # ← מחסן אנשי קשר (ContactsVault)
