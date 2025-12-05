@@ -189,27 +189,45 @@ class HOHService:
             if not contact or not event or not template:
                 continue
 
-            content_sid = template.get("content_sid")
-            if not content_sid:
-                continue
-
             variables = self._build_followup_variables(contact=contact, event=event)
 
-            twilio_response = twilio_client.send_content_message(
-                to=contact.get("phone"),
-                content_sid=content_sid,
-                variables=variables,
-                channel=template.get("channel", "whatsapp"),
-            )
+            channel = template.get("channel", "whatsapp")
+            content_sid = template.get("content_sid")
+            body_template = template.get("body_template")
 
-            whatsapp_sid = getattr(twilio_response, "sid", None)
-            body = f"Followup sent via template {template.get('name') or template.get('template_id')}"
-            raw_payload = {
-                "content_sid": content_sid,
-                "variables": variables,
-                "followup_rule_id": item.get("rule_id"),
-                "twilio_message_sid": whatsapp_sid,
-            }
+            if content_sid:
+                twilio_response = twilio_client.send_content_message(
+                    to=contact.get("phone"),
+                    content_sid=content_sid,
+                    variables=variables,
+                    channel=channel,
+                )
+                whatsapp_sid = getattr(twilio_response, "sid", None)
+                body = f"Followup sent via template {template.get('name') or template.get('template_id')}"
+                raw_payload = {
+                    "content_sid": content_sid,
+                    "variables": variables,
+                    "followup_rule_id": item.get("rule_id"),
+                    "twilio_message_sid": whatsapp_sid,
+                }
+            elif body_template:
+                rendered_body = self._render_body_template(body_template, variables)
+                twilio_response = twilio_client.send_text(
+                    to=contact.get("phone"),
+                    body=rendered_body,
+                    channel=channel,
+                )
+                whatsapp_sid = getattr(twilio_response, "sid", None)
+                body = rendered_body
+                raw_payload = {
+                    "body_template": body_template,
+                    "rendered_body": rendered_body,
+                    "variables": variables,
+                    "followup_rule_id": item.get("rule_id"),
+                    "twilio_message_sid": whatsapp_sid,
+                }
+            else:
+                continue
 
             self.messages.log_message(
                 org_id=org_id,
@@ -241,6 +259,13 @@ class HOHService:
             "event_date": event_date_str,
             "show_time": show_time_str,
         }
+
+    def _render_body_template(self, template_str: str, variables: dict) -> str:
+        class _SafeDict(dict):
+            def __missing__(self, key):
+                return "{" + key + "}"
+
+        return template_str.format_map(_SafeDict(**(variables or {})))
 
     async def handle_whatsapp_webhook(self, payload: dict, org_id: int = 1) -> None:
         """
