@@ -592,9 +592,9 @@ class HOHService:
             today = datetime.now(timezone.utc)
             start_dt = today.replace(hour=10, minute=0, second=0, microsecond=0)
 
-        times = generate_half_hour_slots(
-            start_dt.timetz(), (start_dt + timedelta(hours=4)).timetz()
-        )
+        start_naive = start_dt.replace(tzinfo=None)
+        end_naive = (start_dt + timedelta(hours=4)).replace(tzinfo=None)
+        times = generate_half_hour_slots(start_naive.time(), end_naive.time())
         slots: List[Dict[str, Any]] = []
         for idx, label in enumerate(times[:10], start=1):
             slot_dt = start_dt + timedelta(minutes=30 * (idx - 1))
