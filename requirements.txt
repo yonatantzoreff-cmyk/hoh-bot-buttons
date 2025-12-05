@@ -1,9 +1,6 @@
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 twilio==9.3.5
-gspread==6.1.4
-google-auth==2.35.0
-google-auth-oauthlib==1.2.1
 python-dotenv==1.0.1
 pytz==2024.1
 pydantic==2.9.2
