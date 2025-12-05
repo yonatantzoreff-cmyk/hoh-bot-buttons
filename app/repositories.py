@@ -1,5 +1,5 @@
 # repositories.py
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Optional
 
 from sqlalchemy import text
@@ -413,3 +413,142 @@ class MessageRepository:
             )
 
             return message_id
+
+    def find_due_followups(self, org_id: int, now: datetime) -> list[dict]:
+        """
+        Return a list of followups that should be sent now based on followup_rules
+        and message history.
+        """
+
+        with get_session() as session:
+            rules = session.execute(
+                text(
+                    """
+                    SELECT *
+                    FROM followup_rules
+                    WHERE org_id = :org_id AND active = TRUE
+                    """
+                ),
+                {"org_id": org_id},
+            ).mappings().all()
+
+            due: list[dict] = []
+
+            for rule in rules:
+                original_messages = session.execute(
+                    text(
+                        """
+                        SELECT *
+                        FROM messages
+                        WHERE org_id = :org_id
+                          AND direction = 'outgoing'
+                          AND template_id = :from_template_id
+                          AND sent_at IS NOT NULL
+                        """
+                    ),
+                    {"org_id": org_id, "from_template_id": rule["from_template_id"]},
+                ).mappings().all()
+
+                for original in original_messages:
+                    sent_at = original.get("sent_at")
+                    if not sent_at:
+                        continue
+
+                    conversation_id = original.get("conversation_id")
+
+                    incoming_reply = session.execute(
+                        text(
+                            """
+                            SELECT 1
+                            FROM messages
+                            WHERE org_id = :org_id
+                              AND conversation_id = :conversation_id
+                              AND direction = 'incoming'
+                              AND received_at IS NOT NULL
+                              AND received_at > :sent_at
+                            LIMIT 1
+                            """
+                        ),
+                        {
+                            "org_id": org_id,
+                            "conversation_id": conversation_id,
+                            "sent_at": sent_at,
+                        },
+                    ).first()
+
+                    if incoming_reply:
+                        continue
+
+                    due_at = sent_at + timedelta(minutes=rule.get("delay_minutes", 0))
+                    if now < due_at:
+                        continue
+
+                    attempts = session.execute(
+                        text(
+                            """
+                            SELECT COUNT(*)
+                            FROM messages
+                            WHERE org_id = :org_id
+                              AND conversation_id = :conversation_id
+                              AND direction = 'outgoing'
+                              AND template_id = :next_template_id
+                              AND sent_at IS NOT NULL
+                              AND sent_at > :sent_at
+                            """
+                        ),
+                        {
+                            "org_id": org_id,
+                            "conversation_id": conversation_id,
+                            "next_template_id": rule.get("next_template_id"),
+                            "sent_at": sent_at,
+                        },
+                    ).scalar()
+
+                    if attempts and attempts >= rule.get("max_attempts", 1):
+                        continue
+
+                    due.append(
+                        {
+                            "conversation_id": conversation_id,
+                            "event_id": original.get("event_id"),
+                            "contact_id": original.get("contact_id"),
+                            "from_message_id": original.get("message_id"),
+                            "from_template_id": rule.get("from_template_id"),
+                            "rule_id": rule.get("rule_id"),
+                            "next_template_id": rule.get("next_template_id"),
+                        }
+                    )
+
+            return due
+
+
+class TemplateRepository:
+    """אחראי על טבלאות message_templates / followup_rules."""
+
+    def get_template_by_id(self, org_id: int, template_id: int):
+        query = text(
+            """
+            SELECT *
+            FROM message_templates
+            WHERE org_id = :org_id AND template_id = :template_id
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(
+                query, {"org_id": org_id, "template_id": template_id}
+            )
+            return result.mappings().first()
+
+    def get_followup_rule_by_id(self, org_id: int, rule_id: int):
+        query = text(
+            """
+            SELECT *
+            FROM followup_rules
+            WHERE org_id = :org_id AND rule_id = :rule_id
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "rule_id": rule_id})
+            return result.mappings().first()

@@ -10,6 +10,7 @@ from app.repositories import (
     ContactRepository,
     ConversationRepository,
     MessageRepository,
+    TemplateRepository,
 )
 from app import twilio_client
 from app.flows.slots import generate_half_hour_slots
@@ -21,6 +22,7 @@ class HOHService:
         self.contacts = ContactRepository()
         self.conversations = ConversationRepository()
         self.messages = MessageRepository()
+        self.templates = TemplateRepository()
 
     # Twilio button/action payload convention:
     #   - All payloads must include the event id using the pattern *_EVT_<event_id>.
@@ -165,6 +167,80 @@ class HOHService:
             sent_at=sent_at,
             raw_payload=raw_payload,
         )
+
+    async def run_due_followups(self, org_id: int = 1) -> int:
+        """
+        Find all due followups for the given org, send them, and log them.
+        """
+
+        now = datetime.now(timezone.utc)
+        due_followups = self.messages.find_due_followups(org_id=org_id, now=now)
+        processed = 0
+
+        for item in due_followups:
+            contact = self.contacts.get_contact_by_id(
+                org_id=org_id, contact_id=item.get("contact_id")
+            )
+            event = self.events.get_event_by_id(org_id=org_id, event_id=item.get("event_id"))
+            template = self.templates.get_template_by_id(
+                org_id=org_id, template_id=item.get("next_template_id")
+            )
+
+            if not contact or not event or not template:
+                continue
+
+            content_sid = template.get("content_sid")
+            if not content_sid:
+                continue
+
+            variables = self._build_followup_variables(contact=contact, event=event)
+
+            twilio_response = twilio_client.send_content_message(
+                to=contact.get("phone"),
+                content_sid=content_sid,
+                variables=variables,
+                channel=template.get("channel", "whatsapp"),
+            )
+
+            whatsapp_sid = getattr(twilio_response, "sid", None)
+            body = f"Followup sent via template {template.get('name') or template.get('template_id')}"
+            raw_payload = {
+                "content_sid": content_sid,
+                "variables": variables,
+                "followup_rule_id": item.get("rule_id"),
+                "twilio_message_sid": whatsapp_sid,
+            }
+
+            self.messages.log_message(
+                org_id=org_id,
+                conversation_id=item.get("conversation_id"),
+                event_id=item.get("event_id"),
+                contact_id=item.get("contact_id"),
+                direction="outgoing",
+                template_id=item.get("next_template_id"),
+                body=body,
+                whatsapp_msg_sid=whatsapp_sid,
+                sent_at=now,
+                raw_payload=raw_payload,
+            )
+
+            processed += 1
+
+        return processed
+
+    def _build_followup_variables(self, contact: dict, event: dict) -> dict:
+        event_date = event.get("event_date")
+        show_time = event.get("show_time")
+
+        event_date_str = event_date.strftime("%d.%m.%Y") if event_date else ""
+        show_time_str = show_time.strftime("%H:%M") if show_time else ""
+
+        return {
+            "producer_name": contact.get("name") or "Producer",
+            "event_name": event.get("name") or "",
+            "event_date": event_date_str,
+            "show_time": show_time_str,
+        }
 
     async def handle_whatsapp_webhook(self, payload: dict, org_id: int = 1) -> None:
         """
