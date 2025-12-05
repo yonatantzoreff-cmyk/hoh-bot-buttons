@@ -5,6 +5,7 @@ from typing import Optional
 from sqlalchemy import text
 
 from .appdb import get_session
+from .utils.phone import normalize_phone_to_e164_il
 
 class EventRepository:
     """אחראי על טבלת events"""
@@ -149,9 +150,11 @@ class ContactRepository:
         name: Optional[str] = None,
         role: Optional[str] = None,
     ) -> int:
-        # קודם מנסה למצוא contact קיים
+        """Return an existing contact_id for the normalized phone or create one."""
+        normalized_phone = normalize_phone_to_e164_il(phone)
+
         select_q = text("""
-            SELECT contact_id
+            SELECT contact_id, phone
             FROM contacts
             WHERE org_id = :org_id AND phone = :phone
         """)
@@ -159,11 +162,32 @@ class ContactRepository:
         with get_session() as session:
             existing = session.execute(
                 select_q,
-                {"org_id": org_id, "phone": phone},
-            ).scalar()
+                {"org_id": org_id, "phone": normalized_phone},
+            ).mappings().first()
+
+            if not existing and phone != normalized_phone:
+                existing = session.execute(
+                    select_q,
+                    {"org_id": org_id, "phone": phone},
+                ).mappings().first()
+                if existing and existing.get("phone") != normalized_phone:
+                    session.execute(
+                        text(
+                            """
+                            UPDATE contacts
+                            SET phone = :normalized_phone
+                            WHERE org_id = :org_id AND contact_id = :contact_id
+                            """
+                        ),
+                        {
+                            "normalized_phone": normalized_phone,
+                            "org_id": org_id,
+                            "contact_id": existing.get("contact_id"),
+                        },
+                    )
 
             if existing:
-                return existing
+                return existing.get("contact_id")
 
             # אם לא קיים - יוצר חדש
             insert_q = text("""
@@ -177,8 +201,8 @@ class ContactRepository:
                 insert_q,
                 {
                     "org_id": org_id,
-                    "name": name or phone,
-                    "phone": phone,
+                    "name": name or normalized_phone,
+                    "phone": normalized_phone,
                     "role": role,
                     "now": now,
                 },
@@ -200,6 +224,25 @@ class ContactRepository:
                 query, {"org_id": org_id, "contact_id": contact_id}
             )
             return result.mappings().first()
+
+    def update_contact_phone(self, org_id: int, contact_id: int, phone: str) -> None:
+        query = text(
+            """
+            UPDATE contacts
+            SET phone = :phone
+            WHERE org_id = :org_id AND contact_id = :contact_id
+            """
+        )
+
+        with get_session() as session:
+            session.execute(
+                query,
+                {
+                    "phone": normalize_phone_to_e164_il(phone),
+                    "org_id": org_id,
+                    "contact_id": contact_id,
+                },
+            )
 
 
 class ConversationRepository:

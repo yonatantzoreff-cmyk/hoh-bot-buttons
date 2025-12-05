@@ -1,5 +1,6 @@
 # app/hoh_service.py
 import json
+import logging
 import os
 import re
 from datetime import datetime, timedelta, timezone
@@ -14,6 +15,10 @@ from app.repositories import (
 )
 from app import twilio_client
 from app.flows.slots import generate_half_hour_slots
+from app.utils.phone import normalize_phone_to_e164_il
+
+
+logger = logging.getLogger(__name__)
 
 
 class HOHService:
@@ -38,16 +43,18 @@ class HOHService:
         show_time_str: str,
         producer_name: str,
         producer_phone: str,
-    ):
+    ) -> dict:
         event_date = datetime.strptime(event_date_str, "%Y-%m-%d").date()
         show_time = None
         if show_time_str:
             time_part = datetime.strptime(show_time_str, "%H:%M").time()
             show_time = datetime.combine(event_date, time_part).replace(tzinfo=timezone.utc)
 
+        normalized_phone = normalize_phone_to_e164_il(producer_phone)
+
         producer_contact_id = self.contacts.get_or_create_by_phone(
             org_id=org_id,
-            phone=producer_phone,
+            phone=normalized_phone,
             name=producer_name,
             role="producer",
         )
@@ -70,20 +77,10 @@ class HOHService:
             status="open",
         )
 
-        msg_id = self.messages.log_message(
-            org_id=org_id,
-            conversation_id=conv_id,
-            event_id=event_id,
-            contact_id=producer_contact_id,
-            direction="outgoing",
-            body="Conversation created",
-        )
-
         return {
             "event_id": event_id,
             "contact_id": producer_contact_id,
             "conversation_id": conv_id,
-            "message_id": msg_id,
         }
 
     def list_events_for_org(self, org_id: int):
@@ -92,19 +89,33 @@ class HOHService:
     async def send_init_for_event(self, event_id: int, org_id: int = 1) -> None:
         event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
         if not event:
-            raise ValueError(f"Event {event_id} not found for org {org_id}")
+            logger.error("Event not found", extra={"org_id": org_id, "event_id": event_id})
+            raise ValueError("Event not found")
 
         producer_contact_id = event.get("producer_contact_id")
         if not producer_contact_id:
+            logger.error(
+                "Missing producer_contact_id for event",
+                extra={"org_id": org_id, "event_id": event_id},
+            )
             raise ValueError("Event missing producer_contact_id; cannot send INIT")
 
         contact = self.contacts.get_contact_by_id(
             org_id=org_id, contact_id=producer_contact_id
         )
         if not contact:
-            raise ValueError(
-                f"Producer contact {producer_contact_id} not found for org {org_id}"
+            logger.error(
+                "Producer contact not found",
+                extra={"org_id": org_id, "contact_id": producer_contact_id},
             )
+            raise ValueError("Producer contact not found")
+
+        normalized_phone = normalize_phone_to_e164_il(contact.get("phone"))
+        if normalized_phone and normalized_phone != contact.get("phone"):
+            self.contacts.update_contact_phone(
+                org_id=org_id, contact_id=producer_contact_id, phone=normalized_phone
+            )
+            contact["phone"] = normalized_phone
 
         conversation = self.conversations.get_open_conversation(
             org_id=org_id, event_id=event_id, contact_id=producer_contact_id
@@ -140,12 +151,24 @@ class HOHService:
         if not content_sid:
             raise RuntimeError("Missing CONTENT_SID_INIT_QR env var for INIT message")
 
-        twilio_response = twilio_client.send_content_message(
-            to=contact.get("phone"),
-            content_sid=content_sid,
-            variables=variables,
-            channel="whatsapp",
-        )
+        try:
+            twilio_response = twilio_client.send_content_message(
+                to=normalized_phone,
+                content_sid=content_sid,
+                variables=variables,
+                channel="whatsapp",
+            )
+        except Exception as exc:  # pragma: no cover - defensive
+            logger.exception(
+                "Failed to send INIT via Twilio",
+                extra={
+                    "org_id": org_id,
+                    "event_id": event_id,
+                    "contact_id": producer_contact_id,
+                    "phone": normalized_phone,
+                },
+            )
+            raise RuntimeError("Failed to send INIT via Twilio") from exc
 
         sent_at = datetime.now(timezone.utc)
         message_body = f"INIT sent with variables: {json.dumps(variables, ensure_ascii=False)}"
@@ -195,8 +218,10 @@ class HOHService:
 
             variables = self._build_followup_variables(contact=contact, event=event)
 
+            to_phone = normalize_phone_to_e164_il(contact.get("phone"))
+
             twilio_response = twilio_client.send_content_message(
-                to=contact.get("phone"),
+                to=to_phone,
                 content_sid=content_sid,
                 variables=variables,
                 channel=template.get("channel", "whatsapp"),
@@ -262,12 +287,13 @@ class HOHService:
         )
 
         from_number = (payload.get("From") or payload.get("WaId") or "").strip()
+        normalized_from = normalize_phone_to_e164_il(from_number)
         message_body = (payload.get("Body") or "").strip()
 
         contact_id = self.contacts.get_or_create_by_phone(
             org_id=org_id,
-            phone=from_number,
-            name=payload.get("ProfileName") or from_number,
+            phone=normalized_from,
+            name=payload.get("ProfileName") or normalized_from,
             role="producer",
         )
 
@@ -513,10 +539,14 @@ class HOHService:
         if not content_sid:
             return
 
-        twilio_resp = twilio_client.send_content_message(
-            to=self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id).get(
+        to_phone = normalize_phone_to_e164_il(
+            self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id).get(
                 "phone"
-            ),
+            )
+        )
+
+        twilio_resp = twilio_client.send_content_message(
+            to=to_phone,
             content_sid=content_sid,
             variables={},
             channel="whatsapp",
@@ -550,8 +580,9 @@ class HOHService:
             return
 
         contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+        to_phone = normalize_phone_to_e164_il(contact.get("phone"))
         twilio_resp = twilio_client.send_content_message(
-            to=contact.get("phone"),
+            to=to_phone,
             content_sid=content_sid,
             variables={},
             channel="whatsapp",
@@ -656,8 +687,10 @@ class HOHService:
             "confirm_action": f"CONFIRM_SLOT_EVT_{selected['event_id']}",
             "change_slot_action": f"CHANGE_SLOT_EVT_{selected['event_id']}",
         }
+        to_phone = normalize_phone_to_e164_il(contact.get("phone"))
+
         twilio_resp = twilio_client.send_content_message(
-            to=contact.get("phone"),
+            to=to_phone,
             content_sid=content_sid,
             variables=variables,
             channel="whatsapp",
@@ -698,8 +731,10 @@ class HOHService:
         if not content_sid:
             return
 
+        to_phone = normalize_phone_to_e164_il(contact.get("phone"))
+
         twilio_resp = twilio_client.send_content_message(
-            to=contact.get("phone"),
+            to=to_phone,
             content_sid=content_sid,
             variables=variables,
             channel="whatsapp",
