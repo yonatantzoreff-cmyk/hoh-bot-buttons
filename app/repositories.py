@@ -147,6 +147,21 @@ class ContactRepository:
             contact_id = result.scalar_one()
             return contact_id
 
+    def get_contact_by_id(self, org_id: int, contact_id: int):
+        query = text(
+            """
+            SELECT *
+            FROM contacts
+            WHERE org_id = :org_id AND contact_id = :contact_id
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(
+                query, {"org_id": org_id, "contact_id": contact_id}
+            )
+            return result.mappings().first()
+
 
 class ConversationRepository:
     """אחראי על טבלת conversations"""
@@ -232,22 +247,25 @@ class MessageRepository:
         whatsapp_msg_sid: Optional[str] = None,
         sent_at=None,
         received_at=None,
+        raw_payload=None,
     ) -> int:
-        msg_q = text("""
+        msg_q = text(
+            """
             INSERT INTO messages (
                 org_id, conversation_id, event_id, contact_id,
                 direction, template_id, body,
-                whatsapp_msg_sid, sent_at, received_at,
+                raw_payload, whatsapp_msg_sid, sent_at, received_at,
                 created_at
             )
             VALUES (
                 :org_id, :conversation_id, :event_id, :contact_id,
                 :direction, :template_id, :body,
-                :whatsapp_msg_sid, :sent_at, :received_at,
+                :raw_payload, :whatsapp_msg_sid, :sent_at, :received_at,
                 :now
             )
             RETURNING message_id
-        """)
+        """
+        )
 
         now = datetime.utcnow()
 
@@ -262,6 +280,7 @@ class MessageRepository:
                     "direction": direction,
                     "template_id": template_id,
                     "body": body,
+                    "raw_payload": raw_payload,
                     "whatsapp_msg_sid": whatsapp_msg_sid,
                     "sent_at": sent_at,
                     "received_at": received_at,

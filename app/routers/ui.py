@@ -115,6 +115,15 @@ async def add_event(
     return RedirectResponse(url="/ui/events", status_code=303)
 
 
+@router.post("/ui/events/{event_id}/send-init")
+async def ui_send_init(
+    event_id: int,
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    await hoh.send_init_for_event(event_id=event_id, org_id=1)
+    return RedirectResponse(url="/ui/events", status_code=303)
+
+
 @router.get("/ui/events", response_class=HTMLResponse)
 async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLResponse:
     events = hoh.list_events_for_org(org_id=1)
@@ -138,6 +147,11 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
               <td>{time}</td>
               <td>{hall}</td>
               <td>{status}</td>
+              <td>
+                <form method=\"post\" action=\"/ui/events/{event_id}/send-init\" class=\"d-inline\">
+                  <button class=\"btn btn-sm btn-outline-primary\" type=\"submit\">Send INIT</button>
+                </form>
+              </td>
             </tr>
             """.format(
                 name=escape(row.get("name") or ""),
@@ -145,12 +159,13 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 time=escape(time_display),
                 hall=escape(hall_label or ""),
                 status=escape(status),
+                event_id=row.get("event_id"),
             )
         )
 
     table_body = "".join(table_rows) or """
         <tr>
-          <td colspan=\"5\" class=\"text-center text-muted\">No events yet.</td>
+          <td colspan=\"6\" class=\"text-center text-muted\">No events yet.</td>
         </tr>
     """
 
@@ -167,6 +182,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 <th scope=\"col\">Show Time</th>
                 <th scope=\"col\">Hall</th>
                 <th scope=\"col\">Status</th>
+                <th scope=\"col\">Actions</th>
               </tr>
             </thead>
             <tbody>
