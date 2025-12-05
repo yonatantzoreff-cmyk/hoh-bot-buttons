@@ -4,8 +4,7 @@ from typing import Optional
 
 from sqlalchemy import text
 
-from appdb import get_session
-
+from .appdb import get_session
 
 class EventRepository:
     """אחראי על טבלת events"""
