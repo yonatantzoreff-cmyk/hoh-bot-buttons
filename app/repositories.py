@@ -4,7 +4,7 @@ from typing import Optional
 
 from sqlalchemy import text
 
-from db import get_session
+from appdb import get_session
 
 
 class EventRepository:
