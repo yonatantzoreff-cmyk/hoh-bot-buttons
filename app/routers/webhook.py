@@ -12,6 +12,7 @@ import re
 import pytz
 import requests
 
+from app.dependencies import get_hoh_service
 from app.utils import sheets
 from app.utils import vault  # מחסן אנשי קשר
 from app.twilio_client import (
