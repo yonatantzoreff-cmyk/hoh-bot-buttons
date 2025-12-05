@@ -77,6 +77,45 @@ class EventRepository:
             row = result.mappings().first()
             return row
 
+    def update_event_fields(
+        self,
+        org_id: int,
+        event_id: int,
+        *,
+        load_in_time=None,
+        status: Optional[str] = None,
+        producer_contact_id: Optional[int] = None,
+    ) -> None:
+        sets = []
+        params = {"org_id": org_id, "event_id": event_id, "now": datetime.utcnow()}
+
+        if load_in_time is not None:
+            sets.append("load_in_time = :load_in_time")
+            params["load_in_time"] = load_in_time
+
+        if status is not None:
+            sets.append("status = :status")
+            params["status"] = status
+
+        if producer_contact_id is not None:
+            sets.append("producer_contact_id = :producer_contact_id")
+            params["producer_contact_id"] = producer_contact_id
+
+        if not sets:
+            return
+
+        sets.append("updated_at = :now")
+        query = text(
+            f"""
+            UPDATE events
+            SET {', '.join(sets)}
+            WHERE org_id = :org_id AND event_id = :event_id
+            """
+        )
+
+        with get_session() as session:
+            session.execute(query, params)
+
     def list_events_for_org(self, org_id: int):
         query = text(
             """
@@ -193,6 +232,25 @@ class ConversationRepository:
             )
             return result.mappings().first()
 
+    def get_recent_open_for_contact(self, org_id: int, contact_id: int):
+        query = text(
+            """
+            SELECT *
+            FROM conversations
+            WHERE org_id = :org_id
+              AND contact_id = :contact_id
+              AND status IN ('open', 'waiting_for_reply')
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(
+                query, {"org_id": org_id, "contact_id": contact_id}
+            )
+            return result.mappings().first()
+
     def create_conversation(
         self,
         org_id: int,
@@ -230,6 +288,54 @@ class ConversationRepository:
             )
             conv_id = result.scalar_one()
             return conv_id
+
+    def update_pending_data_fields(
+        self,
+        org_id: int,
+        conversation_id: int,
+        pending_data_fields,
+        status: Optional[str] = None,
+    ) -> None:
+        query = text(
+            """
+            UPDATE conversations
+            SET pending_data_fields = :pending_data_fields,
+                updated_at = :now
+                {status_clause}
+            WHERE org_id = :org_id AND conversation_id = :conversation_id
+            """.format(
+                status_clause=", status = :status" if status is not None else ""
+            )
+        )
+        params = {
+            "pending_data_fields": pending_data_fields,
+            "org_id": org_id,
+            "conversation_id": conversation_id,
+            "now": datetime.utcnow(),
+        }
+        if status is not None:
+            params["status"] = status
+
+        with get_session() as session:
+            session.execute(query, params)
+
+    def update_status(self, org_id: int, conversation_id: int, status: str) -> None:
+        query = text(
+            """
+            UPDATE conversations
+            SET status = :status,
+                updated_at = :now
+            WHERE org_id = :org_id AND conversation_id = :conversation_id
+            """
+        )
+        params = {
+            "status": status,
+            "org_id": org_id,
+            "conversation_id": conversation_id,
+            "now": datetime.utcnow(),
+        }
+        with get_session() as session:
+            session.execute(query, params)
 
 
 class MessageRepository:
