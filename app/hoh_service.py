@@ -22,6 +22,11 @@ class HOHService:
         self.conversations = ConversationRepository()
         self.messages = MessageRepository()
 
+    # Twilio button/action payload convention:
+    #   - All payloads must include the event id using the pattern *_EVT_<event_id>.
+    #   - Slot selections also include the slot index: SLOT_<index>_EVT_<event_id>.
+    # This ensures we never guess an event based only on the sender phone number.
+
     def create_event_with_producer_conversation(
         self,
         org_id: int,
@@ -126,7 +131,7 @@ class HOHService:
             "show_time": show_time_str,
             "choose_time_action": f"CHOOSE_TIME_EVT_{event_id}",
             "not_contact_action": f"NOT_CONTACT_EVT_{event_id}",
-            "no_times_action": f"NO_TIMES_EVT_{event_id}",
+            "no_times_action": f"NOT_SURE_EVT_{event_id}",
         }
 
         content_sid = os.getenv("CONTENT_SID_INIT_QR")
@@ -175,9 +180,13 @@ class HOHService:
                 or (data.get("ListItemTitle") or "").strip()
             )
 
+        interactive_value = _pick_interactive_value(payload)
+        action_data = (
+            self._parse_action_payload(interactive_value) if interactive_value else {}
+        )
+
         from_number = (payload.get("From") or payload.get("WaId") or "").strip()
         message_body = (payload.get("Body") or "").strip()
-        interactive_value = _pick_interactive_value(payload)
 
         contact_id = self.contacts.get_or_create_by_phone(
             org_id=org_id,
@@ -186,15 +195,14 @@ class HOHService:
             role="producer",
         )
 
-        event_id: Optional[int] = None
+        event_id: Optional[int] = action_data.get("event_id")
         conversation = None
-
-        if interactive_value:
-            m = re.search(r"_EVT_(\d+)", interactive_value)
-            if m:
-                event_id = int(m.group(1))
-
         event = None
+
+        if interactive_value and not event_id:
+            # Interactive payloads must carry event id; do not guess from phone number.
+            return
+
         if event_id:
             event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
             if event:
@@ -211,16 +219,16 @@ class HOHService:
                     )
                     conversation = {"conversation_id": conv_id, "event_id": event_id}
 
-        if not conversation:
+        if not event_id:
             conversation = self.conversations.get_recent_open_for_contact(
                 org_id=org_id, contact_id=contact_id
             )
-            if conversation and not event_id:
+            if conversation:
                 event_id = conversation.get("event_id")
                 if event_id:
                     event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
 
-        if not conversation or not event_id:
+        if not conversation or not event_id or not event:
             return
 
         conversation_id = conversation.get("conversation_id")
@@ -238,9 +246,9 @@ class HOHService:
             received_at=received_at,
         )
 
-        action = (interactive_value or "").upper()
+        action = (action_data.get("action") or "").upper()
 
-        if action.startswith("CHOOSE_TIME_EVT_"):
+        if action == "CHOOSE_TIME":
             await self._send_slot_list(
                 event=event,
                 contact_id=contact_id,
@@ -249,17 +257,18 @@ class HOHService:
             )
             return
 
-        if action.startswith("SLOT_") and "_EVT_" in action:
+        if action == "SLOT":
             await self._handle_slot_selection(
-                action,
+                action=interactive_value,
                 event=event,
                 contact_id=contact_id,
                 conversation_id=conversation_id,
                 org_id=org_id,
+                slot_index=action_data.get("slot_index"),
             )
             return
 
-        if action.startswith("CONFIRM_SLOT_EVT_"):
+        if action == "CONFIRM_SLOT":
             await self._apply_confirmed_slot(
                 event_id=event_id,
                 conversation_id=conversation_id,
@@ -268,7 +277,7 @@ class HOHService:
             )
             return
 
-        if action.startswith("CHANGE_SLOT_EVT_"):
+        if action == "CHANGE_SLOT":
             await self._send_slot_list(
                 event=event,
                 contact_id=contact_id,
@@ -277,7 +286,7 @@ class HOHService:
             )
             return
 
-        if action.startswith("NOT_SURE_EVT_"):
+        if action == "NOT_SURE":
             await self._handle_not_sure(
                 event_id=event_id,
                 contact_id=contact_id,
@@ -286,7 +295,7 @@ class HOHService:
             )
             return
 
-        if action.startswith("NOT_CONTACT_EVT_"):
+        if action == "NOT_CONTACT":
             await self._handle_not_contact(
                 event_id=event_id,
                 contact_id=contact_id,
@@ -302,6 +311,58 @@ class HOHService:
             conversation_id=conversation_id,
             org_id=org_id,
         )
+
+    def _parse_action_payload(self, payload: str) -> dict:
+        """
+        Parse a button/action payload to extract the action name, event id, and slot index.
+
+        Expected formats:
+            - "CHOOSE_TIME_EVT_<event_id>"
+            - "CONFIRM_SLOT_EVT_<event_id>"
+            - "CHANGE_SLOT_EVT_<event_id>"
+            - "NOT_SURE_EVT_<event_id>"
+            - "NOT_CONTACT_EVT_<event_id>"
+            - "SLOT_<index>_EVT_<event_id>"
+
+        Returns a dictionary such as:
+            {"action": "CHOOSE_TIME", "event_id": 123, "slot_index": None}
+            {"action": "SLOT", "event_id": 42, "slot_index": 3}
+            {"action": "UNKNOWN"} on parse failure.
+        """
+
+        result: Dict[str, Any] = {"action": "UNKNOWN"}
+        if not payload:
+            return result
+
+        try:
+            left, evt_part = payload.split("_EVT_", 1)
+            event_id = int(evt_part)
+        except (ValueError, AttributeError):
+            return result
+
+        left = (left or "").upper()
+        result["event_id"] = event_id
+
+        if left.startswith("SLOT_"):
+            try:
+                _, idx_str = left.split("_", 1)
+                slot_index = int(idx_str)
+            except (ValueError, IndexError):
+                return result
+
+            result.update({"action": "SLOT", "slot_index": slot_index})
+            return result
+
+        if left in {
+            "CHOOSE_TIME",
+            "CONFIRM_SLOT",
+            "CHANGE_SLOT",
+            "NOT_SURE",
+            "NOT_CONTACT",
+        }:
+            result.update({"action": left, "slot_index": None})
+
+        return result
 
     async def _handle_contact_followup(
         self,
@@ -488,6 +549,7 @@ class HOHService:
         contact_id: int,
         conversation_id: int,
         org_id: int,
+        slot_index: Optional[int] = None,
     ) -> None:
         contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
         slots = self._build_slots(event)
@@ -495,6 +557,9 @@ class HOHService:
 
         slot_id = action
         selected = pending_slots.get(slot_id)
+        if not selected and slot_index:
+            slot_key = f"SLOT_{slot_index}_EVT_{event.get('event_id')}"
+            selected = pending_slots.get(slot_key)
         if not selected:
             selected = next(iter(pending_slots.values()), None)
         if not selected:
