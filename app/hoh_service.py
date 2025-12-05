@@ -5,6 +5,8 @@ import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+import pytz
+
 from app.repositories import (
     EventRepository,
     ContactRepository,
@@ -586,18 +588,32 @@ class HOHService:
         event_id = event.get("event_id") if event else None
         show_time = event.get("show_time") if event else None
 
+        default_tzinfo = pytz.timezone("Asia/Jerusalem")
         if show_time:
             start_dt = show_time - timedelta(hours=2)
+            target_tzinfo = show_time.tzinfo or default_tzinfo
         else:
             today = datetime.now(timezone.utc)
             start_dt = today.replace(hour=10, minute=0, second=0, microsecond=0)
+            target_tzinfo = default_tzinfo
 
-        start_naive = start_dt.replace(tzinfo=None)
-        end_naive = (start_dt + timedelta(hours=4)).replace(tzinfo=None)
-        times = generate_half_hour_slots(start_naive.time(), end_naive.time())
+        if start_dt.tzinfo is None:
+            if hasattr(target_tzinfo, "localize"):
+                start_dt_local = target_tzinfo.localize(start_dt)
+            else:
+                start_dt_local = start_dt.replace(tzinfo=target_tzinfo)
+        else:
+            start_dt_local = start_dt.astimezone(target_tzinfo)
+
+        end_dt_local = start_dt_local + timedelta(hours=4)
+        start_naive = start_dt_local.replace(tzinfo=None)
+        end_naive = end_dt_local.replace(tzinfo=None)
+
+        tz_name = getattr(target_tzinfo, "zone", None) or target_tzinfo.tzname(start_dt_local) or "UTC"
+        times = generate_half_hour_slots(start_naive.time(), end_naive.time(), tz=tz_name)
         slots: List[Dict[str, Any]] = []
         for idx, label in enumerate(times[:10], start=1):
-            slot_dt = start_dt + timedelta(minutes=30 * (idx - 1))
+            slot_dt = start_dt_local + timedelta(minutes=30 * (idx - 1))
             slots.append(
                 {
                     "id": f"SLOT_{idx}_EVT_{event_id}",
