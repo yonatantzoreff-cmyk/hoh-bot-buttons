@@ -17,7 +17,8 @@ client = Client(ACCOUNT_SID, AUTH_TOKEN)
 
 
 def _normalize_to(to_number: str, channel: str = "whatsapp") -> str:
-    """החזר כתובת מהפורמט הנכון, למשל whatsapp:+9725..."""
+    """Return the address in the correct format, e.g. whatsapp:+9725..."""
+
     to_number = to_number.strip()
     prefix = f"{channel}:"
     if not to_number.startswith(prefix):
@@ -79,32 +80,37 @@ def send_confirmation_message(to_number: str, event_date: str, setup_time: str, 
 def send_content_message(
     to: str,
     content_sid: str,
-    variables: Dict[str, Any] | str | None = None,
+    content_variables: Dict[str, Any] | str | None = None,
     messaging_service_sid: Optional[str] = None,
     channel: str = "whatsapp",
 ) -> Any:
     """
-    שליחת הודעת WhatsApp דרך Content Template.
-    תואם גם קריאות פוזיציונליות (to, content_sid, variables) וגם מילות מפתח.
+    Send a WhatsApp Content Template message.
+
+    :param to: recipient phone (with or without the "whatsapp:" prefix)
+    :param content_sid: Twilio Content SID
+    :param content_variables: variables dict to be JSON-encoded for Twilio
+    :param messaging_service_sid: optional override for messaging service
+    :param channel: messaging channel (defaults to "whatsapp")
     """
+
     to_addr = _normalize_to(to, channel=channel)
     msid = messaging_service_sid or DEFAULT_MESSAGING_SERVICE_SID
 
     if not msid:
         raise RuntimeError("Missing Messaging Service SID (TWILIO_MESSAGING_SERVICE_SID).")
 
-    # Twilio מצפה למחרוזת JSON בשדה content_variables
-    if variables is None:
-        content_variables = "{}"
-    elif isinstance(variables, str):
-        content_variables = variables
+    if content_variables is None:
+        content_variables_json = "{}"
+    elif isinstance(content_variables, str):
+        content_variables_json = content_variables
     else:
-        content_variables = json.dumps(variables, ensure_ascii=False)
+        content_variables_json = json.dumps(content_variables, ensure_ascii=False)
 
     payload: Dict[str, Any] = {
         "to": to_addr,
         "messaging_service_sid": msid,
         "content_sid": content_sid,
-        "content_variables": content_variables,
+        "content_variables": content_variables_json,
     }
     return client.messages.create(**payload)

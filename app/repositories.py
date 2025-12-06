@@ -9,6 +9,23 @@ from sqlalchemy import text
 from .appdb import get_session
 from .utils.phone import normalize_phone_to_e164_il
 
+
+class OrgRepository:
+    """אחראי על טבלת orgs"""
+
+    def get_org_by_id(self, org_id: int):
+        query = text(
+            """
+            SELECT *
+            FROM orgs
+            WHERE org_id = :org_id
+            """
+        )
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id})
+            return result.mappings().first()
+
+
 class EventRepository:
     """אחראי על טבלת events"""
 
