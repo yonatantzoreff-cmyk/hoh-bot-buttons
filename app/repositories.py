@@ -389,21 +389,27 @@ class MessageRepository:
     def log_message(
         self,
         org_id: int,
-        conversation_id: int,
-        event_id: int,
-        contact_id: int,
+        conversation_id: Optional[int],
+        event_id: Optional[int],
+        contact_id: Optional[int],
         direction: str,  # 'outgoing' / 'incoming'
         body: str,
         template_id: Optional[int] = None,
         whatsapp_msg_sid: Optional[str] = None,
         sent_at=None,
         received_at=None,
-        raw_payload= Optional[dict | str] = None,
+        raw_payload: Optional[dict | str] = None,
     ) -> int:
-
         now = datetime.utcnow()
-         if isinstance(raw_payload, dict):
+
+        if isinstance(raw_payload, dict):
             raw_payload = json.dumps(raw_payload, ensure_ascii=False)
+
+        if sent_at is None and direction == "outgoing":
+            sent_at = now
+
+        if received_at is None and direction == "incoming":
+            received_at = now
 
         msg_q = text(
             """
@@ -423,8 +429,6 @@ class MessageRepository:
         """
         )
 
-        
-       
         with get_session() as session:
             result = session.execute(
                 msg_q,
@@ -445,22 +449,24 @@ class MessageRepository:
             )
             message_id = result.scalar_one()
 
-            # מעדכנים את last_message_id בשיחה
-            update_conv_q = text("""
-                UPDATE conversations
-                SET last_message_id = :message_id,
-                    updated_at = :now
-                WHERE conversation_id = :conversation_id AND org_id = :org_id
-            """)
-            session.execute(
-                update_conv_q,
-                {
-                    "message_id": message_id,
-                    "conversation_id": conversation_id,
-                    "org_id": org_id,
-                    "now": now,
-                },
-            )
+            if conversation_id is not None:
+                update_conv_q = text(
+                    """
+                    UPDATE conversations
+                    SET last_message_id = :message_id,
+                        updated_at = :now
+                    WHERE conversation_id = :conversation_id AND org_id = :org_id
+                    """
+                )
+                session.execute(
+                    update_conv_q,
+                    {
+                        "message_id": message_id,
+                        "conversation_id": conversation_id,
+                        "org_id": org_id,
+                        "now": now,
+                    },
+                )
 
             return message_id
 
