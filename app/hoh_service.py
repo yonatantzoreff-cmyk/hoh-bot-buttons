@@ -1,39 +1,73 @@
-# app/hoh_service.py
-import json
+"""Core service layer for HOH bot."""
+
+from __future__ import annotations
+
 import logging
-import os
-import re
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
+from app import twilio_client
+from app.credentials import (
+    CONTENT_SID_CONFIRM,
+    CONTENT_SID_CONTACT,
+    CONTENT_SID_HALVES,
+    CONTENT_SID_INIT,
+    CONTENT_SID_NOT_SURE,
+    CONTENT_SID_RANGES,
+)
 from app.repositories import (
-    EventRepository,
     ContactRepository,
     ConversationRepository,
+    EventRepository,
     MessageRepository,
+    OrgRepository,
     TemplateRepository,
 )
-from app import twilio_client
-from app.flows.slots import generate_half_hour_slots
+from app.utils.actions import ParsedAction, parse_action_id
 from app.utils.phone import normalize_phone_to_e164_il
 
-
 logger = logging.getLogger(__name__)
+
+RANGE_BOUNDS: Dict[int, tuple[int, int]] = {
+    1: (0, 4),
+    2: (4, 8),
+    3: (8, 12),
+    4: (12, 16),
+    5: (16, 20),
+    6: (20, 24),
+}
+
+
+def _range_labels() -> List[str]:
+    labels: List[str] = []
+    for idx in range(1, 7):
+        start, end = RANGE_BOUNDS[idx]
+        labels.append(f"{start:02d}:00–{end:02d}:00")
+    return labels
+
+
+def _half_hour_slots_for_range(range_id: int) -> List[str]:
+    if range_id not in RANGE_BOUNDS:
+        raise ValueError(f"Unknown range id {range_id}")
+
+    start_hour, _ = RANGE_BOUNDS[range_id]
+    start_dt = datetime(2000, 1, 1, start_hour, 0)
+    return [
+        (start_dt + timedelta(minutes=30 * i)).strftime("%H:%M")
+        for i in range(8)
+    ]
 
 
 class HOHService:
     def __init__(self):
+        self.orgs = OrgRepository()
         self.events = EventRepository()
         self.contacts = ContactRepository()
         self.conversations = ConversationRepository()
         self.messages = MessageRepository()
         self.templates = TemplateRepository()
 
-    # Twilio button/action payload convention:
-    #   - All payloads must include the event id using the pattern *_EVT_<event_id>.
-    #   - Slot selections also include the slot index: SLOT_<index>_EVT_<event_id>.
-    # This ensures we never guess an event based only on the sender phone number.
-
+    # region Event + contact bootstrap -------------------------------------------------
     def create_event_with_producer_conversation(
         self,
         org_id: int,
@@ -86,28 +120,23 @@ class HOHService:
     def list_events_for_org(self, org_id: int):
         return self.events.list_events_for_org(org_id)
 
+    # endregion -----------------------------------------------------------------------
+
     async def send_init_for_event(self, event_id: int, org_id: int = 1) -> None:
         event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
         if not event:
-            logger.error("Event not found", extra={"org_id": org_id, "event_id": event_id})
             raise ValueError("Event not found")
+
+        org = self.orgs.get_org_by_id(org_id)
+        if not org:
+            raise ValueError("Org not found")
 
         producer_contact_id = event.get("producer_contact_id")
         if not producer_contact_id:
-            logger.error(
-                "Missing producer_contact_id for event",
-                extra={"org_id": org_id, "event_id": event_id},
-            )
             raise ValueError("Event missing producer_contact_id; cannot send INIT")
 
-        contact = self.contacts.get_contact_by_id(
-            org_id=org_id, contact_id=producer_contact_id
-        )
+        contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=producer_contact_id)
         if not contact:
-            logger.error(
-                "Producer contact not found",
-                extra={"org_id": org_id, "contact_id": producer_contact_id},
-            )
             raise ValueError("Producer contact not found")
 
         normalized_phone = normalize_phone_to_e164_il(contact.get("phone"))
@@ -117,19 +146,7 @@ class HOHService:
             )
             contact["phone"] = normalized_phone
 
-        conversation = self.conversations.get_open_conversation(
-            org_id=org_id, event_id=event_id, contact_id=producer_contact_id
-        )
-        if conversation:
-            conversation_id = conversation["conversation_id"]
-        else:
-            conversation_id = self.conversations.create_conversation(
-                org_id=org_id,
-                event_id=event_id,
-                contact_id=producer_contact_id,
-                channel="whatsapp",
-                status="open",
-            )
+        conversation_id = self._ensure_conversation(org_id, event_id, producer_contact_id)
 
         event_date = event.get("event_date")
         show_time = event.get("show_time")
@@ -137,45 +154,25 @@ class HOHService:
         event_date_str = event_date.strftime("%d.%m.%Y") if event_date else ""
         show_time_str = show_time.strftime("%H:%M") if show_time else ""
 
-        variables = {
-            "producer_name": contact.get("name") or "Producer",
-            "event_name": event.get("name") or "",
-            "event_date": event_date_str,
-            "show_time": show_time_str,
-            "choose_time_action": f"CHOOSE_TIME_EVT_{event_id}",
-            "not_contact_action": f"NOT_CONTACT_EVT_{event_id}",
-            "no_times_action": f"NOT_SURE_EVT_{event_id}",
+        init_vars = {
+            "1": contact.get("name") or "Producer",
+            "2": event.get("name") or "",
+            "3": event_date_str,
+            "4": show_time_str,
+            "5": str(event_id),
+            "6": org.get("name") or "",
         }
 
-        content_sid = os.getenv("CONTENT_SID_INIT_QR")
-        if not content_sid:
-            raise RuntimeError("Missing CONTENT_SID_INIT_QR env var for INIT message")
+        twilio_response = twilio_client.send_content_message(
+            to=normalized_phone,
+            content_sid=CONTENT_SID_INIT,
+            content_variables=init_vars,
+        )
 
-        try:
-            twilio_response = twilio_client.send_content_message(
-                to=normalized_phone,
-                content_sid=content_sid,
-                variables=variables,
-                channel="whatsapp",
-            )
-        except Exception as exc:  # pragma: no cover - defensive
-            logger.exception(
-                "Failed to send INIT via Twilio",
-                extra={
-                    "org_id": org_id,
-                    "event_id": event_id,
-                    "contact_id": producer_contact_id,
-                    "phone": normalized_phone,
-                },
-            )
-            raise RuntimeError("Failed to send INIT via Twilio") from exc
-
-        sent_at = datetime.now(timezone.utc)
-        message_body = f"INIT sent with variables: {json.dumps(variables, ensure_ascii=False)}"
         whatsapp_sid = getattr(twilio_response, "sid", None)
         raw_payload = {
-            "content_sid": content_sid,
-            "variables": variables,
+            "content_sid": CONTENT_SID_INIT,
+            "variables": init_vars,
             "twilio_message_sid": whatsapp_sid,
         }
 
@@ -185,17 +182,183 @@ class HOHService:
             event_id=event_id,
             contact_id=producer_contact_id,
             direction="outgoing",
-            body=message_body,
+            body=f"INIT sent for event {event_id}",
             whatsapp_msg_sid=whatsapp_sid,
-            sent_at=sent_at,
+            raw_payload=raw_payload,
+        )
+
+    async def send_ranges_for_event(self, org_id: int, event_id: int, contact_id: int) -> None:
+        contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+        if not contact:
+            raise ValueError("Contact not found")
+
+        conversation_id = self._ensure_conversation(org_id, event_id, contact_id)
+        ranges = _range_labels()
+
+        variables = {
+            "range1": ranges[0],
+            "range2": ranges[1],
+            "range3": ranges[2],
+            "range4": ranges[3],
+            "range5": ranges[4],
+            "range6": ranges[5],
+            "event_id": str(event_id),
+        }
+
+        twilio_resp = twilio_client.send_content_message(
+            to=normalize_phone_to_e164_il(contact.get("phone")),
+            content_sid=CONTENT_SID_RANGES,
+            content_variables=variables,
+        )
+
+        whatsapp_sid = getattr(twilio_resp, "sid", None)
+        raw_payload = {
+            "content_sid": CONTENT_SID_RANGES,
+            "variables": variables,
+            "twilio_message_sid": whatsapp_sid,
+        }
+
+        self.messages.log_message(
+            org_id=org_id,
+            conversation_id=conversation_id,
+            event_id=event_id,
+            contact_id=contact_id,
+            direction="outgoing",
+            body="Sent ranges list",
+            whatsapp_msg_sid=whatsapp_sid,
+            raw_payload=raw_payload,
+        )
+
+    async def send_halves_for_event_range(
+        self,
+        org_id: int,
+        event_id: int,
+        contact_id: int,
+        range_id: int,
+    ) -> None:
+        contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+        if not contact:
+            raise ValueError("Contact not found")
+
+        conversation = self.conversations.get_open_conversation(
+            org_id=org_id, event_id=event_id, contact_id=contact_id
+        )
+        conversation_id = conversation.get("conversation_id") if conversation else None
+        if not conversation_id:
+            conversation_id = self._ensure_conversation(org_id, event_id, contact_id)
+
+        slots = _half_hour_slots_for_range(range_id)
+        variables = {
+            "h1": slots[0],
+            "h2": slots[1],
+            "h3": slots[2],
+            "h4": slots[3],
+            "h5": slots[4],
+            "h6": slots[5],
+            "h7": slots[6],
+            "h8": slots[7],
+            "event_id": str(event_id),
+            "range_id": str(range_id),
+        }
+
+        twilio_resp = twilio_client.send_content_message(
+            to=normalize_phone_to_e164_il(contact.get("phone")),
+            content_sid=CONTENT_SID_HALVES,
+            content_variables=variables,
+        )
+        whatsapp_sid = getattr(twilio_resp, "sid", None)
+
+        pending_fields = (conversation or {}).get("pending_data_fields") or {}
+        pending_fields.update({"last_range_id": range_id, "last_slots": slots})
+        self.conversations.update_pending_data_fields(
+            org_id=org_id,
+            conversation_id=conversation_id,
+            pending_data_fields=pending_fields,
+        )
+
+        raw_payload = {
+            "content_sid": CONTENT_SID_HALVES,
+            "variables": variables,
+            "twilio_message_sid": whatsapp_sid,
+        }
+
+        self.messages.log_message(
+            org_id=org_id,
+            conversation_id=conversation_id,
+            event_id=event_id,
+            contact_id=contact_id,
+            direction="outgoing",
+            body=f"Sent halves for range {range_id}",
+            whatsapp_msg_sid=whatsapp_sid,
+            raw_payload=raw_payload,
+        )
+
+    async def send_confirm_for_slot(
+        self,
+        org_id: int,
+        event_id: int,
+        contact_id: int,
+        slot_label: str,
+    ) -> None:
+        event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
+        org = self.orgs.get_org_by_id(org_id)
+        contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+
+        if not (event and org and contact):
+            raise ValueError("Missing entities for confirm")
+
+        conversation_id = self._ensure_conversation(org_id, event_id, contact_id)
+
+        event_date = event.get("event_date")
+        show_time = event.get("show_time")
+
+        event_date_str = event_date.strftime("%d.%m.%Y") if event_date else ""
+        show_time_str = show_time.strftime("%H:%M") if show_time else ""
+
+        variables = {
+            "event_name": event.get("name") or "",
+            "event_date": event_date_str,
+            "show_time": show_time_str,
+            "slot": slot_label,
+            "event_id": str(event_id),
+        }
+
+        twilio_resp = twilio_client.send_content_message(
+            to=normalize_phone_to_e164_il(contact.get("phone")),
+            content_sid=CONTENT_SID_CONFIRM,
+            content_variables=variables,
+        )
+        whatsapp_sid = getattr(twilio_resp, "sid", None)
+
+        conversation = self.conversations.get_open_conversation(
+            org_id=org_id, event_id=event_id, contact_id=contact_id
+        )
+        pending_fields = (conversation or {}).get("pending_data_fields") or {}
+        pending_fields.update({"last_slot_label": slot_label})
+        self.conversations.update_pending_data_fields(
+            org_id=org_id,
+            conversation_id=conversation_id,
+            pending_data_fields=pending_fields,
+        )
+
+        raw_payload = {
+            "content_sid": CONTENT_SID_CONFIRM,
+            "variables": variables,
+            "twilio_message_sid": whatsapp_sid,
+        }
+
+        self.messages.log_message(
+            org_id=org_id,
+            conversation_id=conversation_id,
+            event_id=event_id,
+            contact_id=contact_id,
+            direction="outgoing",
+            body=f"Sent confirm for slot {slot_label}",
+            whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
         )
 
     async def run_due_followups(self, org_id: int = 1) -> int:
-        """
-        Find all due followups for the given org, send them, and log them.
-        """
-
         now = datetime.now(timezone.utc)
         due_followups = self.messages.find_due_followups(org_id=org_id, now=now)
         processed = 0
@@ -223,7 +386,7 @@ class HOHService:
             twilio_response = twilio_client.send_content_message(
                 to=to_phone,
                 content_sid=content_sid,
-                variables=variables,
+                content_variables=variables,
                 channel=template.get("channel", "whatsapp"),
             )
 
@@ -268,11 +431,6 @@ class HOHService:
         }
 
     async def handle_whatsapp_webhook(self, payload: dict, org_id: int = 1) -> None:
-        """
-        Handle an incoming Twilio WhatsApp webhook payload, update DB state,
-        and send any required replies via Twilio's Content API.
-        """
-
         def _pick_interactive_value(data: Dict[str, Any]) -> str:
             return (
                 (data.get("ButtonPayload") or "").strip()
@@ -282,8 +440,8 @@ class HOHService:
             )
 
         interactive_value = _pick_interactive_value(payload)
-        action_data = (
-            self._parse_action_payload(interactive_value) if interactive_value else {}
+        parsed_action: Optional[ParsedAction] = (
+            parse_action_id(interactive_value) if interactive_value else None
         )
 
         from_number = (payload.get("From") or payload.get("WaId") or "").strip()
@@ -297,12 +455,12 @@ class HOHService:
             role="producer",
         )
 
-        event_id: Optional[int] = action_data.get("event_id")
+        event_id = parsed_action.get("event_id") if parsed_action else None
         conversation = None
         event = None
 
         if interactive_value and not event_id:
-            # Interactive payloads must carry event id; do not guess from phone number.
+            logger.warning("Interactive payload missing event id", extra={"payload": payload})
             return
 
         if event_id:
@@ -348,29 +506,67 @@ class HOHService:
             received_at=received_at,
         )
 
-        action = (action_data.get("action") or "").upper()
-
-        if action == "CHOOSE_TIME":
-            await self._send_slot_list(
-                event=event,
-                contact_id=contact_id,
-                org_id=org_id,
-                conversation_id=conversation_id,
-            )
-            return
-
-        if action == "SLOT":
-            await self._handle_slot_selection(
-                action=interactive_value,
-                event=event,
+        if not parsed_action:
+            await self._handle_contact_followup(
+                body_text=message_body,
+                event_id=event_id,
                 contact_id=contact_id,
                 conversation_id=conversation_id,
                 org_id=org_id,
-                slot_index=action_data.get("slot_index"),
             )
             return
 
-        if action == "CONFIRM_SLOT":
+        action_type = parsed_action.get("type")
+
+        if action_type == "CHOOSE_TIME":
+            await self.send_ranges_for_event(org_id, event_id, contact_id)
+            return
+
+        if action_type == "RANGE":
+            await self.send_halves_for_event_range(
+                org_id=org_id,
+                event_id=event_id,
+                contact_id=contact_id,
+                range_id=parsed_action.get("range_id") or 1,
+            )
+            return
+
+        if action_type == "HALF":
+            range_id = parsed_action.get("range_id") or 1
+            half_index = parsed_action.get("half_index") or 1
+            slots = _half_hour_slots_for_range(range_id)
+            slot_label = slots[half_index - 1] if 0 < half_index <= len(slots) else slots[0]
+
+            conversation = self.conversations.get_open_conversation(
+                org_id=org_id, event_id=event_id, contact_id=contact_id
+            )
+            pending_fields = (conversation or {}).get("pending_data_fields") or {}
+            pending_fields.update(
+                {"last_range_id": range_id, "last_slots": slots, "last_slot_label": slot_label}
+            )
+            self.conversations.update_pending_data_fields(
+                org_id=org_id,
+                conversation_id=conversation_id,
+                pending_data_fields=pending_fields,
+            )
+
+            await self.send_confirm_for_slot(
+                org_id=org_id,
+                event_id=event_id,
+                contact_id=contact_id,
+                slot_label=slot_label,
+            )
+            return
+
+        if action_type == "BACK_TO_RANGES":
+            await self.send_ranges_for_event(org_id, event_id, contact_id)
+            return
+
+        if action_type == "BACK_TO_INIT":
+            await self.send_init_for_event(event_id=event_id, org_id=org_id)
+            return
+
+        if action_type == "CONFIRM_SLOT":
             await self._apply_confirmed_slot(
                 event_id=event_id,
                 conversation_id=conversation_id,
@@ -379,16 +575,21 @@ class HOHService:
             )
             return
 
-        if action == "CHANGE_SLOT":
-            await self._send_slot_list(
-                event=event,
-                contact_id=contact_id,
+        if action_type == "CHANGE_SLOT":
+            conversation = self.conversations.get_open_conversation(
+                org_id=org_id, event_id=event_id, contact_id=contact_id
+            )
+            pending = (conversation or {}).get("pending_data_fields") or {}
+            last_range_id = pending.get("last_range_id") or 1
+            await self.send_halves_for_event_range(
                 org_id=org_id,
-                conversation_id=conversation_id,
+                event_id=event_id,
+                contact_id=contact_id,
+                range_id=last_range_id,
             )
             return
 
-        if action == "NOT_SURE":
+        if action_type == "NOT_SURE":
             await self._handle_not_sure(
                 event_id=event_id,
                 contact_id=contact_id,
@@ -397,7 +598,7 @@ class HOHService:
             )
             return
 
-        if action == "NOT_CONTACT":
+        if action_type == "NOT_CONTACT":
             await self._handle_not_contact(
                 event_id=event_id,
                 contact_id=contact_id,
@@ -405,66 +606,6 @@ class HOHService:
                 org_id=org_id,
             )
             return
-
-        await self._handle_contact_followup(
-            body_text=message_body,
-            event_id=event_id,
-            contact_id=contact_id,
-            conversation_id=conversation_id,
-            org_id=org_id,
-        )
-
-    def _parse_action_payload(self, payload: str) -> dict:
-        """
-        Parse a button/action payload to extract the action name, event id, and slot index.
-
-        Expected formats:
-            - "CHOOSE_TIME_EVT_<event_id>"
-            - "CONFIRM_SLOT_EVT_<event_id>"
-            - "CHANGE_SLOT_EVT_<event_id>"
-            - "NOT_SURE_EVT_<event_id>"
-            - "NOT_CONTACT_EVT_<event_id>"
-            - "SLOT_<index>_EVT_<event_id>"
-
-        Returns a dictionary such as:
-            {"action": "CHOOSE_TIME", "event_id": 123, "slot_index": None}
-            {"action": "SLOT", "event_id": 42, "slot_index": 3}
-            {"action": "UNKNOWN"} on parse failure.
-        """
-
-        result: Dict[str, Any] = {"action": "UNKNOWN"}
-        if not payload:
-            return result
-
-        try:
-            left, evt_part = payload.split("_EVT_", 1)
-            event_id = int(evt_part)
-        except (ValueError, AttributeError):
-            return result
-
-        left = (left or "").upper()
-        result["event_id"] = event_id
-
-        if left.startswith("SLOT_"):
-            try:
-                _, idx_str = left.split("_", 1)
-                slot_index = int(idx_str)
-            except (ValueError, IndexError):
-                return result
-
-            result.update({"action": "SLOT", "slot_index": slot_index})
-            return result
-
-        if left in {
-            "CHOOSE_TIME",
-            "CONFIRM_SLOT",
-            "CHANGE_SLOT",
-            "NOT_SURE",
-            "NOT_CONTACT",
-        }:
-            result.update({"action": left, "slot_index": None})
-
-        return result
 
     async def _handle_contact_followup(
         self,
@@ -482,9 +623,10 @@ class HOHService:
         if not pending.get("awaiting_new_contact"):
             return
 
-        digits = re.findall(r"\+?\d{9,15}", body_text)
-        phone = digits[0] if digits else body_text.strip()
-        name = body_text.strip()
+        digits = [token for token in body_text.split() if token]
+        phone_candidate = next((d for d in digits if any(ch.isdigit() for ch in d)), body_text)
+        phone = normalize_phone_to_e164_il(phone_candidate)
+        name = body_text.strip() or phone
 
         new_contact_id = self.contacts.get_or_create_by_phone(
             org_id=org_id,
@@ -501,16 +643,13 @@ class HOHService:
             org_id=org_id, event_id=event_id, contact_id=new_contact_id
         )
         if not new_conv:
-            new_conv_id = self.conversations.create_conversation(
+            self.conversations.create_conversation(
                 org_id=org_id,
                 event_id=event_id,
                 contact_id=new_contact_id,
                 channel="whatsapp",
                 status="open",
             )
-        else:
-            new_conv_id = new_conv.get("conversation_id")
-
         self.conversations.update_pending_data_fields(
             org_id=org_id,
             conversation_id=conversation_id,
@@ -519,15 +658,6 @@ class HOHService:
 
         await self.send_init_for_event(event_id=event_id, org_id=org_id)
 
-        self.messages.log_message(
-            org_id=org_id,
-            conversation_id=new_conv_id,
-            event_id=event_id,
-            contact_id=new_contact_id,
-            direction="outgoing",
-            body="Sent new INIT to updated contact",
-        )
-
     async def _handle_not_sure(
         self,
         event_id: int,
@@ -535,27 +665,34 @@ class HOHService:
         conversation_id: int,
         org_id: int,
     ) -> None:
-        content_sid = os.getenv("CONTENT_SID_NOT_SURE_QR")
-        if not content_sid:
-            return
-
-        to_phone = normalize_phone_to_e164_il(
-            self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id).get(
-                "phone"
-            )
+        followup_at = datetime.now(timezone.utc) + timedelta(hours=72)
+        conversation = self.conversations.get_open_conversation(
+            org_id=org_id, event_id=event_id, contact_id=contact_id
+        )
+        pending_fields = (conversation or {}).get("pending_data_fields") or {}
+        pending_fields.update({"followup_due_at": followup_at.isoformat()})
+        self.conversations.update_pending_data_fields(
+            org_id=org_id,
+            conversation_id=conversation_id,
+            pending_data_fields=pending_fields,
         )
 
+        contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+        if not contact:
+            return
+
         twilio_resp = twilio_client.send_content_message(
-            to=to_phone,
-            content_sid=content_sid,
-            variables={},
-            channel="whatsapp",
+            to=normalize_phone_to_e164_il(contact.get("phone")),
+            content_sid=CONTENT_SID_NOT_SURE,
+            content_variables={},
         )
         whatsapp_sid = getattr(twilio_resp, "sid", None)
 
-        self.events.update_event_fields(
-            org_id=org_id, event_id=event_id, status="waiting_for_reply"
-        )
+        raw_payload = {
+            "content_sid": CONTENT_SID_NOT_SURE,
+            "variables": {},
+            "twilio_message_sid": whatsapp_sid,
+        }
 
         self.messages.log_message(
             org_id=org_id,
@@ -563,9 +700,9 @@ class HOHService:
             event_id=event_id,
             contact_id=contact_id,
             direction="outgoing",
-            body="Sent NOT_SURE follow-up",
+            body="Sent NOT SURE message",
             whatsapp_msg_sid=whatsapp_sid,
-            raw_payload={"content_sid": content_sid},
+            raw_payload=raw_payload,
         )
 
     async def _handle_not_contact(
@@ -575,35 +712,43 @@ class HOHService:
         conversation_id: int,
         org_id: int,
     ) -> None:
-        content_sid = os.getenv("CONTENT_SID_CONTACT_QR")
-        if not content_sid:
+        contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+        if not contact:
             return
 
-        contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
-        to_phone = normalize_phone_to_e164_il(contact.get("phone"))
         twilio_resp = twilio_client.send_content_message(
-            to=to_phone,
-            content_sid=content_sid,
-            variables={},
-            channel="whatsapp",
+            to=normalize_phone_to_e164_il(contact.get("phone")),
+            content_sid=CONTENT_SID_CONTACT,
+            content_variables={},
         )
+        whatsapp_sid = getattr(twilio_resp, "sid", None)
 
+        conversation = self.conversations.get_open_conversation(
+            org_id=org_id, event_id=event_id, contact_id=contact_id
+        )
+        pending = (conversation or {}).get("pending_data_fields") or {}
+        pending.update({"awaiting_new_contact": True})
         self.conversations.update_pending_data_fields(
             org_id=org_id,
             conversation_id=conversation_id,
-            pending_data_fields={"awaiting_new_contact": True},
+            pending_data_fields=pending,
         )
 
-        whatsapp_sid = getattr(twilio_resp, "sid", None)
+        raw_payload = {
+            "content_sid": CONTENT_SID_CONTACT,
+            "variables": {},
+            "twilio_message_sid": whatsapp_sid,
+        }
+
         self.messages.log_message(
             org_id=org_id,
             conversation_id=conversation_id,
             event_id=event_id,
             contact_id=contact_id,
             direction="outgoing",
-            body="Requested alternate contact",
+            body="Sent NOT CONTACT template",
             whatsapp_msg_sid=whatsapp_sid,
-            raw_payload={"content_sid": content_sid},
+            raw_payload=raw_payload,
         )
 
     async def _apply_confirmed_slot(
@@ -617,170 +762,40 @@ class HOHService:
             org_id=org_id, event_id=event_id, contact_id=contact_id
         )
         pending = (conversation or {}).get("pending_data_fields") or {}
-        selected = pending.get("selected_slot") or {}
-        selected_iso = selected.get("datetime")
+        slot_label = pending.get("last_slot_label")
 
-        load_in_time = None
-        if selected_iso:
-            try:
-                load_in_time = datetime.fromisoformat(selected_iso)
-            except ValueError:
-                load_in_time = None
+        if not slot_label:
+            return
 
-        self.events.update_event_fields(
+        event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
+        event_date: Optional[date] = event.get("event_date") if event else None
+        if event_date:
+            hour, minute = map(int, slot_label.split(":"))
+            load_in_dt = datetime.combine(event_date, time(hour=hour, minute=minute)).replace(
+                tzinfo=timezone.utc
+            )
+            self.events.update_event_fields(
+                org_id=org_id, event_id=event_id, load_in_time=load_in_dt, status="confirmed"
+            )
+
+        pending.pop("last_slot_label", None)
+        self.conversations.update_pending_data_fields(
             org_id=org_id,
-            event_id=event_id,
-            load_in_time=load_in_time,
-            status="confirmed",
+            conversation_id=conversation_id,
+            pending_data_fields=pending,
         )
 
+    def _ensure_conversation(self, org_id: int, event_id: int, contact_id: int) -> int:
+        conversation = self.conversations.get_open_conversation(
+            org_id=org_id, event_id=event_id, contact_id=contact_id
+        )
         if conversation:
-            self.conversations.update_status(
-                org_id=org_id, conversation_id=conversation_id, status="closed"
-            )
+            return conversation.get("conversation_id")
 
-        self.messages.log_message(
+        return self.conversations.create_conversation(
             org_id=org_id,
-            conversation_id=conversation_id,
             event_id=event_id,
             contact_id=contact_id,
-            direction="outgoing",
-            body="Slot confirmed",
-        )
-
-    async def _handle_slot_selection(
-        self,
-        action: str,
-        *,
-        event,
-        contact_id: int,
-        conversation_id: int,
-        org_id: int,
-        slot_index: Optional[int] = None,
-    ) -> None:
-        contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
-        slots = self._build_slots(event)
-        pending_slots = {slot["id"]: slot for slot in slots}
-
-        slot_id = action
-        selected = pending_slots.get(slot_id)
-        if not selected and slot_index:
-            slot_key = f"SLOT_{slot_index}_EVT_{event.get('event_id')}"
-            selected = pending_slots.get(slot_key)
-        if not selected:
-            selected = next(iter(pending_slots.values()), None)
-        if not selected:
-            return
-
-        self.conversations.update_pending_data_fields(
-            org_id=org_id,
-            conversation_id=conversation_id,
-            pending_data_fields={"selected_slot": selected, "slots": slots},
-        )
-
-        content_sid = os.getenv("CONTENT_SID_CONFIRM_QR")
-        if not content_sid:
-            return
-
-        variables = {
-            "slot": selected["label"],
-            "confirm_action": f"CONFIRM_SLOT_EVT_{selected['event_id']}",
-            "change_slot_action": f"CHANGE_SLOT_EVT_{selected['event_id']}",
-        }
-        to_phone = normalize_phone_to_e164_il(contact.get("phone"))
-
-        twilio_resp = twilio_client.send_content_message(
-            to=to_phone,
-            content_sid=content_sid,
-            variables=variables,
             channel="whatsapp",
+            status="open",
         )
-        whatsapp_sid = getattr(twilio_resp, "sid", None)
-
-        self.messages.log_message(
-            org_id=org_id,
-            conversation_id=conversation_id,
-            event_id=selected["event_id"],
-            contact_id=contact_id,
-            direction="outgoing",
-            body=f"Sent confirm for slot {selected['label']}",
-            whatsapp_msg_sid=whatsapp_sid,
-            raw_payload={"content_sid": content_sid, "variables": variables},
-        )
-
-    async def _send_slot_list(
-        self,
-        *,
-        event,
-        contact_id: int,
-        org_id: int,
-        conversation_id: int,
-    ) -> None:
-        contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
-        slots = self._build_slots(event)
-        variables = {
-            f"item{i+1}": slot["label"]
-            for i, slot in enumerate(slots)
-            if i < 10
-        }
-        variables.update(
-            {f"id{i+1}": slot["id"] for i, slot in enumerate(slots) if i < 10}
-        )
-
-        content_sid = os.getenv("CONTENT_SID_SLOT_LIST")
-        if not content_sid:
-            return
-
-        to_phone = normalize_phone_to_e164_il(contact.get("phone"))
-
-        twilio_resp = twilio_client.send_content_message(
-            to=to_phone,
-            content_sid=content_sid,
-            variables=variables,
-            channel="whatsapp",
-        )
-        whatsapp_sid = getattr(twilio_resp, "sid", None)
-
-        self.conversations.update_pending_data_fields(
-            org_id=org_id,
-            conversation_id=conversation_id,
-            pending_data_fields={"slots": slots},
-        )
-
-        self.messages.log_message(
-            org_id=org_id,
-            conversation_id=conversation_id,
-            event_id=slots[0]["event_id"] if slots else event.get("event_id"),
-            contact_id=contact_id,
-            direction="outgoing",
-            body="Sent slot list",
-            whatsapp_msg_sid=whatsapp_sid,
-            raw_payload={"content_sid": content_sid, "variables": variables},
-        )
-
-    def _build_slots(self, event) -> List[Dict[str, Any]]:
-        event_id = event.get("event_id") if event else None
-        show_time = event.get("show_time") if event else None
-
-        if show_time:
-            start_dt = show_time - timedelta(hours=2)
-        else:
-            today = datetime.now(timezone.utc)
-            start_dt = today.replace(hour=10, minute=0, second=0, microsecond=0)
-
-        start_time = start_dt.timetz().replace(tzinfo=None)
-        end_time = (start_dt + timedelta(hours=4)).timetz().replace(tzinfo=None)
-
-        times = generate_half_hour_slots(start_time, end_time)
-        slots: List[Dict[str, Any]] = []
-        for idx, label in enumerate(times[:10], start=1):
-            slot_dt = start_dt + timedelta(minutes=30 * (idx - 1))
-            slots.append(
-                {
-                    "id": f"SLOT_{idx}_EVT_{event_id}",
-                    "label": label,
-                    "datetime": slot_dt.isoformat(),
-                    "event_id": event_id,
-                }
-            )
-        return slots
