@@ -358,6 +358,9 @@ class ConversationRepository:
         pending_data_fields,
         status: Optional[str] = None,
     ) -> None:
+        if isinstance(pending_data_fields, dict):
+            pending_data_fields = json.dumps(pending_data_fields, ensure_ascii=False)
+
         query = text(
             """
             UPDATE conversations
