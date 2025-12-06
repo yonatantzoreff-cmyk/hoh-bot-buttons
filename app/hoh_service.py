@@ -117,6 +117,22 @@ class HOHService:
             "conversation_id": conv_id,
         }
 
+    @staticmethod
+    def _get_contact_value(contact: Any, field: str) -> Any:
+        if hasattr(contact, field):
+            return getattr(contact, field)
+
+        if isinstance(contact, dict):
+            return contact.get(field)
+
+        try:
+            return contact.get(field)
+        except AttributeError:
+            try:
+                return contact[field]
+            except Exception:
+                return None
+
     def list_events_for_org(self, org_id: int):
         return self.events.list_events_for_org(org_id)
 
@@ -139,12 +155,12 @@ class HOHService:
         if not contact:
             raise ValueError("Producer contact not found")
 
-        normalized_phone = normalize_phone_to_e164_il(contact.get("phone"))
-        if normalized_phone and normalized_phone != contact.get("phone"):
+        original_phone = self._get_contact_value(contact, "phone")
+        normalized_phone = normalize_phone_to_e164_il(original_phone)
+        if normalized_phone and normalized_phone != original_phone:
             self.contacts.update_contact_phone(
                 org_id=org_id, contact_id=producer_contact_id, phone=normalized_phone
             )
-            contact["phone"] = normalized_phone
 
         conversation_id = self._ensure_conversation(org_id, event_id, producer_contact_id)
 
@@ -155,7 +171,7 @@ class HOHService:
         show_time_str = show_time.strftime("%H:%M") if show_time else ""
 
         init_vars = {
-            "1": contact.get("name") or "Producer",
+            "1": self._get_contact_value(contact, "name") or "Producer",
             "2": event.get("name") or "",
             "3": event_date_str,
             "4": show_time_str,
@@ -206,7 +222,7 @@ class HOHService:
         }
 
         twilio_resp = twilio_client.send_content_message(
-            to=normalize_phone_to_e164_il(contact.get("phone")),
+            to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
             content_sid=CONTENT_SID_RANGES,
             content_variables=variables,
         )
@@ -262,7 +278,7 @@ class HOHService:
         }
 
         twilio_resp = twilio_client.send_content_message(
-            to=normalize_phone_to_e164_il(contact.get("phone")),
+            to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
             content_sid=CONTENT_SID_HALVES,
             content_variables=variables,
         )
@@ -324,7 +340,7 @@ class HOHService:
         }
 
         twilio_resp = twilio_client.send_content_message(
-            to=normalize_phone_to_e164_il(contact.get("phone")),
+            to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
             content_sid=CONTENT_SID_CONFIRM,
             content_variables=variables,
         )
@@ -381,7 +397,7 @@ class HOHService:
 
             variables = self._build_followup_variables(contact=contact, event=event)
 
-            to_phone = normalize_phone_to_e164_il(contact.get("phone"))
+            to_phone = normalize_phone_to_e164_il(self._get_contact_value(contact, "phone"))
 
             twilio_response = twilio_client.send_content_message(
                 to=to_phone,
@@ -424,7 +440,7 @@ class HOHService:
         show_time_str = show_time.strftime("%H:%M") if show_time else ""
 
         return {
-            "producer_name": contact.get("name") or "Producer",
+            "producer_name": self._get_contact_value(contact, "name") or "Producer",
             "event_name": event.get("name") or "",
             "event_date": event_date_str,
             "show_time": show_time_str,
@@ -432,12 +448,22 @@ class HOHService:
 
     async def handle_whatsapp_webhook(self, payload: dict, org_id: int = 1) -> None:
         def _pick_interactive_value(data: Dict[str, Any]) -> str:
-            return (
-                (data.get("ButtonPayload") or "").strip()
-                or (data.get("ListItemValue") or "").strip()
-                or (data.get("ButtonText") or "").strip()
-                or (data.get("ListItemTitle") or "").strip()
-            )
+            candidates = [
+                data.get("ButtonPayload"),
+                data.get("ListResponse[Selection][Id]"),
+                data.get("ListResponse.SelectionId"),
+                data.get("ListItemValue"),
+                data.get("ListResponse[Selection][Title]"),
+                data.get("ListResponse.SelectionTitle"),
+                data.get("ButtonText"),
+                data.get("ListItemTitle"),
+            ]
+
+            for value in candidates:
+                if value:
+                    return str(value).strip()
+
+            return ""
 
         interactive_value = _pick_interactive_value(payload)
         parsed_action: Optional[ParsedAction] = (
@@ -682,7 +708,7 @@ class HOHService:
             return
 
         twilio_resp = twilio_client.send_content_message(
-            to=normalize_phone_to_e164_il(contact.get("phone")),
+            to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
             content_sid=CONTENT_SID_NOT_SURE,
             content_variables={},
         )
@@ -717,7 +743,7 @@ class HOHService:
             return
 
         twilio_resp = twilio_client.send_content_message(
-            to=normalize_phone_to_e164_il(contact.get("phone")),
+            to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
             content_sid=CONTENT_SID_CONTACT,
             content_variables={},
         )
