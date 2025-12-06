@@ -447,6 +447,19 @@ class HOHService:
         }
 
     async def handle_whatsapp_webhook(self, payload: dict, org_id: int = 1) -> None:
+        def _looks_like_action_id(value: str) -> bool:
+            prefixes = (
+                "CHOOSE_TIME_EVT_",
+                "RANGE_",
+                "HALF_",
+                "BACK_TO_",
+                "CONFIRM_SLOT_EVT_",
+                "CHANGE_SLOT_EVT_",
+                "NOT_SURE_EVT_",
+                "NOT_CONTACT_EVT_",
+            )
+            return any(value.startswith(prefix) for prefix in prefixes)
+
         def _pick_interactive_value(data: Dict[str, Any]) -> str:
             candidates = [
                 data.get("ButtonPayload"),
@@ -466,13 +479,23 @@ class HOHService:
             return ""
 
         interactive_value = _pick_interactive_value(payload)
-        parsed_action: Optional[ParsedAction] = (
-            parse_action_id(interactive_value) if interactive_value else None
-        )
 
         from_number = (payload.get("From") or payload.get("WaId") or "").strip()
         normalized_from = normalize_phone_to_e164_il(from_number)
         message_body = (payload.get("Body") or "").strip()
+
+        logger.info("Incoming WhatsApp body: %s", message_body)
+
+        action_id = ""
+        if message_body and _looks_like_action_id(message_body):
+            action_id = message_body
+        elif interactive_value and _looks_like_action_id(interactive_value):
+            action_id = interactive_value
+        else:
+            action_id = interactive_value or ""
+
+        parsed_action: Optional[ParsedAction] = parse_action_id(action_id) if action_id else None
+        logger.info("Parsed action: %s", parsed_action)
 
         contact_id = self.contacts.get_or_create_by_phone(
             org_id=org_id,
