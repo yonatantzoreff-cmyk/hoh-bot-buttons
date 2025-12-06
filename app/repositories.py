@@ -2,6 +2,8 @@
 from datetime import datetime, timedelta
 from typing import Optional
 
+import json
+
 from sqlalchemy import text
 
 from .appdb import get_session
@@ -396,8 +398,13 @@ class MessageRepository:
         whatsapp_msg_sid: Optional[str] = None,
         sent_at=None,
         received_at=None,
-        raw_payload=None,
+        raw_payload= Optional[dict | str] = None,
     ) -> int:
+
+        now = datetime.utcnow()
+         if isinstance(raw_payload, dict):
+            raw_payload = json.dumps(raw_payload, ensure_ascii=False)
+
         msg_q = text(
             """
             INSERT INTO messages (
@@ -416,8 +423,8 @@ class MessageRepository:
         """
         )
 
-        now = datetime.utcnow()
-
+        
+       
         with get_session() as session:
             result = session.execute(
                 msg_q,
