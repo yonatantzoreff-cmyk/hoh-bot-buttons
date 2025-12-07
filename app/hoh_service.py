@@ -351,7 +351,9 @@ class HOHService:
     def list_messages_with_events(self, org_id: int) -> list[dict]:
         return self.messages.list_messages_with_events(org_id)
 
-    async def send_init_for_event(self, event_id: int, org_id: int = 1) -> None:
+    async def send_init_for_event(
+        self, event_id: int, org_id: int = 1, contact_id: Optional[int] = None
+    ) -> None:
         event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
         if not event:
             raise ValueError("Event not found")
@@ -360,7 +362,7 @@ class HOHService:
         if not org:
             raise ValueError("Org not found")
 
-        producer_contact_id = event.get("producer_contact_id")
+        producer_contact_id = contact_id or event.get("producer_contact_id")
         if not producer_contact_id:
             raise ValueError("Event missing producer_contact_id; cannot send INIT")
 
@@ -771,6 +773,7 @@ class HOHService:
         if not parsed_action:
             await self._handle_contact_followup(
                 body_text=message_body,
+                payload=payload,
                 event_id=event_id,
                 contact_id=contact_id,
                 conversation_id=conversation_id,
@@ -869,9 +872,49 @@ class HOHService:
             )
             return
 
+    @staticmethod
+    def _extract_contact_details(payload: dict, body_text: str) -> tuple[str, str]:
+        payload = payload or {}
+
+        def _first_non_empty(keys: tuple[str, ...]) -> str:
+            for key in keys:
+                value = payload.get(key)
+                if value:
+                    return str(value).strip()
+            return ""
+
+        payload_phone = _first_non_empty(
+            (
+                "Contacts[0][PhoneNumber]",
+                "Contacts[0][WaId]",
+            )
+        )
+        payload_name = _first_non_empty(
+            (
+                "Contacts[0][Name]",
+                "Contacts[0][FirstName]",
+                "Contacts[0][WaId]",
+            )
+        )
+
+        fallback_text = body_text or ""
+        if payload_phone:
+            phone_candidate = payload_phone
+        else:
+            digits = [token for token in fallback_text.split() if token]
+            phone_candidate = next(
+                (d for d in digits if any(ch.isdigit() for ch in d)), fallback_text
+            )
+
+        phone = normalize_phone_to_e164_il(phone_candidate)
+        name = payload_name or fallback_text.strip() or phone
+
+        return phone, name
+
     async def _handle_contact_followup(
         self,
         body_text: str,
+        payload: dict,
         event_id: int,
         contact_id: int,
         conversation_id: int,
@@ -885,40 +928,34 @@ class HOHService:
         if not pending.get("awaiting_new_contact"):
             return
 
-        digits = [token for token in body_text.split() if token]
-        phone_candidate = next((d for d in digits if any(ch.isdigit() for ch in d)), body_text)
-        phone = normalize_phone_to_e164_il(phone_candidate)
-        name = body_text.strip() or phone
+        phone, name = self._extract_contact_details(payload, body_text)
+
+        if not phone:
+            logger.warning(
+                "Missing phone number in NOT CONTACT follow-up",
+                extra={"event_id": event_id, "contact_id": contact_id, "payload": payload},
+            )
+            return
 
         new_contact_id = self.contacts.get_or_create_by_phone(
             org_id=org_id,
             phone=phone,
             name=name,
-            role="producer",
+            role="technical",
         )
 
         self.events.update_event_fields(
-            org_id=org_id, event_id=event_id, producer_contact_id=new_contact_id
+            org_id=org_id, event_id=event_id, technical_contact_id=new_contact_id
         )
-
-        new_conv = self.conversations.get_open_conversation(
-            org_id=org_id, event_id=event_id, contact_id=new_contact_id
-        )
-        if not new_conv:
-            self.conversations.create_conversation(
-                org_id=org_id,
-                event_id=event_id,
-                contact_id=new_contact_id,
-                channel="whatsapp",
-                status="open",
-            )
         self.conversations.update_pending_data_fields(
             org_id=org_id,
             conversation_id=conversation_id,
             pending_data_fields={},
         )
 
-        await self.send_init_for_event(event_id=event_id, org_id=org_id)
+        await self.send_init_for_event(
+            event_id=event_id, org_id=org_id, contact_id=new_contact_id
+        )
 
     async def _handle_not_sure(
         self,
