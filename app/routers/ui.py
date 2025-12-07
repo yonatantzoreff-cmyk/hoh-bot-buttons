@@ -22,7 +22,7 @@ def _to_local(dt):
         return None
 
     if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=LOCAL_TZ)
 
     return dt.astimezone(LOCAL_TZ)
 
