@@ -2,14 +2,16 @@
 import logging
 from html import escape
 
-from fastapi import APIRouter, Depends, Form, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 
 from app.dependencies import get_hoh_service
 from app.hoh_service import HOHService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+templates = Jinja2Templates(directory="templates")
 
 
 def _render_page(title: str, body: str) -> str:
@@ -29,6 +31,7 @@ def _render_page(title: str, body: str) -> str:
             <div>
               <a class=\"btn btn-outline-light btn-sm me-2\" href=\"/ui\">Add Event</a>
               <a class=\"btn btn-outline-light btn-sm\" href=\"/ui/events\">View Events</a>
+              <a class=\"btn btn-light btn-sm ms-2\" href=\"/ui/messages\">Messages</a>
             </div>
           </div>
         </nav>
@@ -38,6 +41,16 @@ def _render_page(title: str, body: str) -> str:
       </body>
     </html>
     """
+
+
+def _contact_label(name: str | None, phone: str | None) -> str:
+    if name and phone:
+        return f"{name} ({phone})"
+    if name:
+        return name
+    if phone:
+        return phone
+    return "Unknown"
 
 
 @router.get("/ui", response_class=HTMLResponse)

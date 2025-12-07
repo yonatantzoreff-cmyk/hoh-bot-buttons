@@ -287,6 +287,9 @@ class HOHService:
 
     # endregion -----------------------------------------------------------------------
 
+    def list_messages_with_events(self, org_id: int) -> list[dict]:
+        return self.messages.list_messages_with_events(org_id)
+
     async def send_init_for_event(self, event_id: int, org_id: int = 1) -> None:
         event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
         if not event:

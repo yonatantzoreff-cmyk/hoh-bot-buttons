@@ -735,6 +735,35 @@ class MessageRepository:
 
             return due
 
+    def list_messages_with_events(self, org_id: int) -> list[dict]:
+        query = text(
+            """
+            SELECT
+                m.message_id,
+                m.event_id,
+                e.name AS event_name,
+                e.event_date,
+                e.show_time,
+                m.direction,
+                m.body,
+                m.sent_at,
+                m.received_at,
+                m.created_at,
+                c.name AS contact_name,
+                c.phone AS contact_phone
+            FROM messages m
+            LEFT JOIN events e ON m.event_id = e.event_id
+            LEFT JOIN contacts c ON m.contact_id = c.contact_id
+            WHERE m.org_id = :org_id
+            ORDER BY e.event_date DESC NULLS LAST,
+                     COALESCE(m.sent_at, m.received_at, m.created_at) DESC
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id})
+            return result.mappings().all()
+
 
 class TemplateRepository:
     """אחראי על טבלאות message_templates / followup_rules."""
