@@ -31,6 +31,7 @@ def _render_page(title: str, body: str) -> str:
             <div>
               <a class=\"btn btn-outline-light btn-sm me-2\" href=\"/ui\">Add Event</a>
               <a class=\"btn btn-outline-light btn-sm\" href=\"/ui/events\">View Events</a>
+              <a class=\"btn btn-outline-light btn-sm ms-2\" href=\"/ui/contacts\">Contacts</a>
               <a class=\"btn btn-light btn-sm ms-2\" href=\"/ui/messages\">Messages</a>
             </div>
           </div>
@@ -131,6 +132,197 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
 
     html = _render_page("Messages", table)
     return HTMLResponse(content=html)
+
+
+def _contact_rows(contacts: list[dict]) -> str:
+    if not contacts:
+        return (
+            '<tr><td colspan="4" class="text-center text-muted">No contacts yet.</td></tr>'
+        )
+
+    rows = []
+    for contact in contacts:
+        rows.append(
+            """
+            <tr>
+              <td class="fw-semibold">{name}</td>
+              <td class="text-break">{phone}</td>
+              <td class="text-capitalize">{role}</td>
+              <td class="text-nowrap">
+                <a class="btn btn-sm btn-outline-secondary" href="/ui/contacts/{contact_id}/edit">Edit</a>
+                <form method="post" action="/ui/contacts/{contact_id}/delete" class="d-inline ms-1" onsubmit="return confirm('Are you sure you want to delete this contact?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                </form>
+              </td>
+            </tr>
+            """.format(
+                name=escape(contact.get("name") or ""),
+                phone=escape(contact.get("phone") or ""),
+                role=escape((contact.get("role") or "").capitalize()),
+                contact_id=contact.get("contact_id"),
+            )
+        )
+
+    return "".join(rows)
+
+
+def _contacts_table(title: str, contacts: list[dict]) -> str:
+    return """
+    <div class="card shadow-sm">
+      <div class="card-header bg-secondary text-white">{title}</div>
+      <div class="card-body">
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead>
+              <tr>
+                <th scope="col">Name</th>
+                <th scope="col">Phone</th>
+                <th scope="col">Role</th>
+                <th scope="col">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    """.format(title=escape(title), rows=_contact_rows(contacts))
+
+
+@router.get("/ui/contacts", response_class=HTMLResponse)
+async def list_contacts(hoh: HOHService = Depends(get_hoh_service)) -> HTMLResponse:
+    grouped_contacts = hoh.list_contacts_by_role(org_id=1)
+
+    add_form = """
+    <div class=\"card mb-4 shadow-sm\">
+      <div class=\"card-header bg-primary text-white\">Add Contact</div>
+      <div class=\"card-body\">
+        <form method=\"post\" action=\"/ui/contacts\">
+          <div class=\"row\">
+            <div class=\"col-md-5 mb-3\">
+              <label class=\"form-label\" for=\"name\">Name</label>
+              <input class=\"form-control\" id=\"name\" name=\"name\" type=\"text\" required>
+            </div>
+            <div class=\"col-md-4 mb-3\">
+              <label class=\"form-label\" for=\"phone\">Phone</label>
+              <input class=\"form-control\" id=\"phone\" name=\"phone\" type=\"text\" required>
+            </div>
+            <div class=\"col-md-3 mb-3\">
+              <label class=\"form-label\" for=\"role\">Role</label>
+              <select class=\"form-select\" id=\"role\" name=\"role\">
+                <option value=\"producer\" selected>Producer</option>
+                <option value=\"technical\">Technical</option>
+              </select>
+            </div>
+          </div>
+          <div class=\"d-flex justify-content-end\">
+            <button class=\"btn btn-primary\" type=\"submit\">Add contact</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    """
+
+    tables = """
+    <div class=\"row g-4\">
+      <div class=\"col-lg-6\">{producer_table}</div>
+      <div class=\"col-lg-6\">{technical_table}</div>
+    </div>
+    """.format(
+        producer_table=_contacts_table("Producer contacts", grouped_contacts.get("producer", [])),
+        technical_table=_contacts_table(
+            "Technical contacts", grouped_contacts.get("technical", [])
+        ),
+    )
+
+    html = _render_page("Contacts", add_form + tables)
+    return HTMLResponse(content=html)
+
+
+@router.post("/ui/contacts")
+async def add_contact(
+    name: str = Form(...),
+    phone: str = Form(...),
+    role: str = Form("producer"),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    hoh.create_contact(org_id=1, name=name.strip(), phone=phone.strip(), role=role.strip())
+    return RedirectResponse(url="/ui/contacts", status_code=303)
+
+
+@router.get("/ui/contacts/{contact_id}/edit", response_class=HTMLResponse)
+async def edit_contact_form(
+    contact_id: int, hoh: HOHService = Depends(get_hoh_service)
+) -> HTMLResponse:
+    contact = hoh.get_contact(org_id=1, contact_id=contact_id)
+    if not contact:
+        raise HTTPException(status_code=404, detail="Contact not found")
+
+    name = escape(contact.get("name") or "")
+    phone = escape(contact.get("phone") or "")
+    role = (contact.get("role") or "producer").lower()
+
+    form = f"""
+    <div class=\"row justify-content-center\">\n
+      <div class=\"col-lg-6\">
+        <div class=\"card shadow-sm\">\n
+          <div class=\"card-header bg-primary text-white\">Edit Contact</div>
+          <div class=\"card-body\">
+            <form method=\"post\" action=\"/ui/contacts/{contact_id}/edit\">\n
+              <div class=\"mb-3\">
+                <label class=\"form-label\" for=\"name\">Name</label>
+                <input class=\"form-control\" id=\"name\" name=\"name\" type=\"text\" value=\"{name}\" required>
+              </div>
+              <div class=\"mb-3\">
+                <label class=\"form-label\" for=\"phone\">Phone</label>
+                <input class=\"form-control\" id=\"phone\" name=\"phone\" type=\"text\" value=\"{phone}\" required>
+              </div>
+              <div class=\"mb-3\">
+                <label class=\"form-label\" for=\"role\">Role</label>
+                <select class=\"form-select\" id=\"role\" name=\"role\">
+                  <option value=\"producer\" {'selected' if role == 'producer' else ''}>Producer</option>
+                  <option value=\"technical\" {'selected' if role == 'technical' else ''}>Technical</option>
+                </select>
+              </div>
+              <div class=\"d-flex justify-content-end\">\n
+                <a class=\"btn btn-outline-secondary me-2\" href=\"/ui/contacts\">Cancel</a>
+                <button class=\"btn btn-primary\" type=\"submit\">Save changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+
+    html = _render_page("Edit Contact", form)
+    return HTMLResponse(content=html)
+
+
+@router.post("/ui/contacts/{contact_id}/edit")
+async def update_contact(
+    contact_id: int,
+    name: str = Form(...),
+    phone: str = Form(...),
+    role: str = Form("producer"),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    hoh.update_contact(
+        org_id=1,
+        contact_id=contact_id,
+        name=name.strip(),
+        phone=phone.strip(),
+        role=role.strip(),
+    )
+    return RedirectResponse(url="/ui/contacts", status_code=303)
+
+
+@router.post("/ui/contacts/{contact_id}/delete")
+async def delete_contact(contact_id: int, hoh: HOHService = Depends(get_hoh_service)):
+    hoh.delete_contact(org_id=1, contact_id=contact_id)
+    return RedirectResponse(url="/ui/contacts", status_code=303)
 
 
 @router.get("/ui", response_class=HTMLResponse)
@@ -239,6 +431,18 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         status = row.get("status") or ""
         producer_phone = row.get("producer_phone") or ""
         technical_phone = row.get("technical_phone") or ""
+        init_sent_at = row.get("init_sent_at")
+        init_sent_display = (
+            init_sent_at.strftime("%Y-%m-%d %H:%M") if init_sent_at else ""
+        )
+        whatsapp_btn_class = (
+            "btn btn-sm btn-success" if init_sent_at else "btn btn-sm btn-primary"
+        )
+        sent_indicator = (
+            f"<div class=\\\"small text-success mt-1\\\">Sent {escape(init_sent_display)}</div>"
+            if init_sent_display
+            else "<div class=\\\"small text-muted mt-1\\\">Not sent yet</div>"
+        )
 
         table_rows.append(
             """
@@ -254,10 +458,11 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
               <td>{created_at}</td>
               <td class=\"text-nowrap\">
                 <form method=\"post\" action=\"/ui/events/{event_id}/send-init\" class=\"d-inline\">
-                  <button class=\"btn btn-sm btn-outline-primary\" type=\"submit\">Send INIT</button>
+                  <button class=\"{whatsapp_btn_class}\" type=\"submit\">Send WhatsApp</button>
                 </form>
+                {sent_indicator}
                 <a class=\"btn btn-sm btn-outline-secondary ms-1\" href=\"/ui/events/{event_id}/edit\">Edit</a>
-                <form method=\"post\" action=\"/ui/events/{event_id}/delete\" class=\"d-inline ms-1\">
+                <form method=\"post\" action=\"/ui/events/{event_id}/delete\" class=\"d-inline ms-1\" onsubmit=\"return confirm('האם אתה בטוח למחוק את האירוע?');\">
                   <button class=\"btn btn-sm btn-outline-danger\" type=\"submit\">Delete</button>
                 </form>
               </td>
@@ -273,6 +478,8 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 technical_phone=escape(technical_phone),
                 created_at=escape(created_at_display),
                 event_id=row.get("event_id"),
+                whatsapp_btn_class=whatsapp_btn_class,
+                sent_indicator=sent_indicator,
             )
         )
 

@@ -139,6 +139,7 @@ class HOHService:
         enriched_events = []
         for event in events:
             event_dict = dict(event)
+            event_id = event_dict.get("event_id")
 
             producer_contact_id = event_dict.get("producer_contact_id")
             if producer_contact_id:
@@ -162,9 +163,69 @@ class HOHService:
             else:
                 event_dict["technical_phone"] = None
 
+            if event_id:
+                event_dict["init_sent_at"] = self.messages.get_last_sent_at_for_content(
+                    org_id=org_id,
+                    event_id=event_id,
+                    content_sid=CONTENT_SID_INIT,
+                )
+
             enriched_events.append(event_dict)
 
         return enriched_events
+
+    def list_contacts_by_role(self, org_id: int) -> dict[str, list[dict]]:
+        contacts = self.contacts.list_contacts(org_id=org_id)
+
+        grouped: dict[str, list[dict]] = {"producer": [], "technical": []}
+        for contact in contacts:
+            role = contact.get("role") or "producer"
+            grouped.setdefault(role, []).append(dict(contact))
+
+        return grouped
+
+    def get_contact(self, org_id: int, contact_id: int):
+        return self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+
+    def create_contact(self, org_id: int, name: str, phone: str, role: str) -> int:
+        role_value = role if role in {"producer", "technical"} else "producer"
+        normalized_phone = normalize_phone_to_e164_il(phone)
+        contact_id = self.contacts.get_or_create_by_phone(
+            org_id=org_id, phone=normalized_phone, name=name, role=role_value
+        )
+        self.contacts.update_contact(
+            org_id=org_id,
+            contact_id=contact_id,
+            name=name,
+            phone=normalized_phone,
+            role=role_value,
+        )
+        return contact_id
+
+    def update_contact(
+        self,
+        org_id: int,
+        contact_id: int,
+        *,
+        name: Optional[str] = None,
+        phone: Optional[str] = None,
+        role: Optional[str] = None,
+    ) -> None:
+        normalized_phone = normalize_phone_to_e164_il(phone) if phone else None
+        role_value = role if role in {None, "producer", "technical"} else None
+        self.contacts.update_contact(
+            org_id=org_id,
+            contact_id=contact_id,
+            name=name,
+            phone=normalized_phone,
+            role=role_value,
+        )
+
+    def delete_contact(self, org_id: int, contact_id: int) -> None:
+        self.events.clear_contact_references(org_id=org_id, contact_id=contact_id)
+        self.messages.clear_contact(org_id=org_id, contact_id=contact_id)
+        self.conversations.clear_contact(org_id=org_id, contact_id=contact_id)
+        self.contacts.delete_contact(org_id=org_id, contact_id=contact_id)
 
     def get_event_with_contacts(self, org_id: int, event_id: int):
         event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
@@ -985,6 +1046,33 @@ class HOHService:
             conversation_id=conversation_id,
             pending_data_fields=pending,
         )
+
+        contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+        if contact:
+            thank_you_body = (
+                "תודה לך! אשלח את פרטי הטכנאי שיהיה איתכם בסמוך לאירוע. ניפגש!"
+            )
+            to_phone = normalize_phone_to_e164_il(self._get_contact_value(contact, "phone"))
+            if to_phone:
+                twilio_resp = twilio_client.send_text(to=to_phone, body=thank_you_body)
+                whatsapp_sid = getattr(twilio_resp, "sid", None) if twilio_resp else None
+
+                raw_payload = {
+                    "body": thank_you_body,
+                    "type": "load_in_confirmation_followup",
+                    "twilio_message_sid": whatsapp_sid,
+                }
+
+                self.messages.log_message(
+                    org_id=org_id,
+                    conversation_id=conversation_id,
+                    event_id=event_id,
+                    contact_id=contact_id,
+                    direction="outgoing",
+                    body=thank_you_body,
+                    whatsapp_msg_sid=whatsapp_sid,
+                    raw_payload=raw_payload,
+                )
 
     def _ensure_conversation(self, org_id: int, event_id: int, contact_id: int) -> int:
         conversation = self.conversations.get_open_conversation(
