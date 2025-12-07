@@ -373,7 +373,7 @@ class HOHService:
         original_phone = self._get_contact_value(contact, "phone")
         normalized_phone = normalize_phone_to_e164_il(original_phone)
         if not normalized_phone:
-            raise ValueError("Producer contact is missing a valid phone number")
+            raise ValueError("Valid phone number is missing")
 
         if normalized_phone != original_phone:
             self.contacts.update_contact_phone(
