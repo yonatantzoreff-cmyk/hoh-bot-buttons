@@ -1,7 +1,6 @@
 import logging
 
-from fastapi import APIRouter, Request, Depends
-from fastapi.responses import PlainTextResponse
+from fastapi import APIRouter, Request, Depends, Response
 
 from app.dependencies import get_hoh_service
 from app.hoh_service import HOHService
@@ -21,4 +20,4 @@ async def whatsapp_webhook(
     logger.info("Incoming WhatsApp body: %s", body)
 
     await hoh.handle_whatsapp_webhook(dict(data), org_id=1)
-    return PlainTextResponse("OK")
+    return Response(status_code=204)
