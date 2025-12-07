@@ -281,7 +281,7 @@ class HOHService:
         return datetime.combine(event_date, time_part).replace(tzinfo=timezone.utc)
 
     def delete_event(self, org_id: int, event_id: int) -> None:
-        self.messages.delete_by_event(org_id=org_id, event_id=event_id)
+        self.conversations.clear_last_message_for_event(org_id=org_id, event_id=event_id)
         self.conversations.delete_by_event(org_id=org_id, event_id=event_id)
         self.events.delete_event(org_id=org_id, event_id=event_id)
 
