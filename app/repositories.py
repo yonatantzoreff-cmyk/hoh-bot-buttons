@@ -199,6 +199,34 @@ class EventRepository:
         with get_session() as session:
             session.execute(query, params)
 
+    def clear_contact_references(self, org_id: int, contact_id: int) -> None:
+        query = text(
+            """
+            UPDATE events
+            SET producer_contact_id = CASE
+                    WHEN producer_contact_id = :contact_id THEN NULL
+                    ELSE producer_contact_id
+                END,
+                technical_contact_id = CASE
+                    WHEN technical_contact_id = :contact_id THEN NULL
+                    ELSE technical_contact_id
+                END,
+                updated_at = :now
+            WHERE org_id = :org_id
+              AND (producer_contact_id = :contact_id OR technical_contact_id = :contact_id)
+            """
+        )
+
+        with get_session() as session:
+            session.execute(
+                query,
+                {
+                    "org_id": org_id,
+                    "contact_id": contact_id,
+                    "now": datetime.utcnow(),
+                },
+            )
+
     def list_events_for_org(self, org_id: int):
         query = text(
             """
@@ -239,6 +267,42 @@ class EventRepository:
 
 class ContactRepository:
     """אחראי על טבלת contacts"""
+
+    def list_contacts(self, org_id: int):
+        query = text(
+            """
+            SELECT contact_id, name, phone, role, created_at
+            FROM contacts
+            WHERE org_id = :org_id
+            ORDER BY role, name
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id})
+            return result.mappings().all()
+
+    def create_contact(self, org_id: int, name: str, phone: str, role: str) -> int:
+        query = text(
+            """
+            INSERT INTO contacts (org_id, name, phone, role, created_at)
+            VALUES (:org_id, :name, :phone, :role, :now)
+            RETURNING contact_id
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(
+                query,
+                {
+                    "org_id": org_id,
+                    "name": name,
+                    "phone": normalize_phone_to_e164_il(phone),
+                    "role": role,
+                    "now": datetime.utcnow(),
+                },
+            )
+            return result.scalar_one()
 
     def get_or_create_by_phone(
         self,
@@ -321,6 +385,17 @@ class ContactRepository:
                 query, {"org_id": org_id, "contact_id": contact_id}
             )
             return result.mappings().first()
+
+    def delete_contact(self, org_id: int, contact_id: int) -> None:
+        query = text(
+            """
+            DELETE FROM contacts
+            WHERE org_id = :org_id AND contact_id = :contact_id
+            """
+        )
+
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id, "contact_id": contact_id})
 
     def update_contact_phone(self, org_id: int, contact_id: int, phone: str) -> None:
         query = text(
@@ -541,6 +616,26 @@ class ConversationRepository:
         with get_session() as session:
             session.execute(query, {"org_id": org_id, "event_id": event_id})
 
+    def clear_contact(self, org_id: int, contact_id: int) -> None:
+        query = text(
+            """
+            UPDATE conversations
+            SET contact_id = NULL,
+                updated_at = :now
+            WHERE org_id = :org_id AND contact_id = :contact_id
+            """
+        )
+
+        with get_session() as session:
+            session.execute(
+                query,
+                {
+                    "org_id": org_id,
+                    "contact_id": contact_id,
+                    "now": datetime.utcnow(),
+                },
+            )
+
 
 class MessageRepository:
     """אחראי על טבלת messages + עדכון last_message_id בשיחה"""
@@ -639,6 +734,18 @@ class MessageRepository:
 
         with get_session() as session:
             session.execute(query, {"org_id": org_id, "event_id": event_id})
+
+    def clear_contact(self, org_id: int, contact_id: int) -> None:
+        query = text(
+            """
+            UPDATE messages
+            SET contact_id = NULL
+            WHERE org_id = :org_id AND contact_id = :contact_id
+            """
+        )
+
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id, "contact_id": contact_id})
 
     def find_due_followups(self, org_id: int, now: datetime) -> list[dict]:
         """
@@ -746,6 +853,32 @@ class MessageRepository:
                     )
 
             return due
+
+    def get_last_sent_at_for_content(
+        self, org_id: int, event_id: int, content_sid: str
+    ) -> Optional[datetime]:
+        query = text(
+            """
+            SELECT MAX(sent_at) AS last_sent_at
+            FROM messages
+            WHERE org_id = :org_id
+              AND event_id = :event_id
+              AND direction = 'outgoing'
+              AND raw_payload::json ->> 'content_sid' = :content_sid
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(
+                query,
+                {
+                    "org_id": org_id,
+                    "event_id": event_id,
+                    "content_sid": content_sid,
+                },
+            ).mappings().first()
+
+            return result.get("last_sent_at") if result else None
 
     def list_messages_with_events(self, org_id: int) -> list[dict]:
         query = text(
