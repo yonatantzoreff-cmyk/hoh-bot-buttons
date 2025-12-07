@@ -31,6 +31,9 @@ from app.utils.phone import normalize_phone_to_e164_il
 
 logger = logging.getLogger(__name__)
 
+# TODO: tie this to the org's timezone once multi-org support is implemented.
+LOCAL_TZ = timezone(timedelta(hours=2))
+
 RANGE_BOUNDS: Dict[int, tuple[int, int]] = {
     1: (0, 4),
     2: (4, 8),
@@ -85,7 +88,7 @@ class HOHService:
         show_time = None
         if show_time_str:
             time_part = datetime.strptime(show_time_str, "%H:%M").time()
-            show_time = datetime.combine(event_date, time_part).replace(tzinfo=timezone.utc)
+            show_time = datetime.combine(event_date, time_part).replace(tzinfo=LOCAL_TZ)
 
         normalized_phone = normalize_phone_to_e164_il(producer_phone)
 
@@ -350,7 +353,7 @@ class HOHService:
             return None
 
         time_part = datetime.strptime(time_str, "%H:%M").time()
-        return datetime.combine(event_date, time_part).replace(tzinfo=timezone.utc)
+        return datetime.combine(event_date, time_part).replace(tzinfo=LOCAL_TZ)
 
     def delete_event(self, org_id: int, event_id: int) -> None:
         self.conversations.clear_last_message_for_event(org_id=org_id, event_id=event_id)
