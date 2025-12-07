@@ -52,6 +52,7 @@ def _render_page(title: str, body: str) -> str:
         <main class=\"container py-4\">
           {body}
         </main>
+        <script src=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js\" crossorigin=\"anonymous\"></script>
       </body>
     </html>
     """
@@ -70,16 +71,26 @@ def _contact_label(name: str | None, phone: str | None) -> str:
 @router.get("/ui/messages", response_class=HTMLResponse)
 async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLResponse:
     messages = hoh.list_messages_with_events(org_id=1)
+    grouped_events: list[dict] = []
+    event_lookup: dict[str | int, dict] = {}
 
-    rows = []
     for message in messages:
         event_id = message.get("event_id")
-        event_name = message.get("event_name") or "Unassigned"
-        event_link = (
-            f"<a href=\"/ui/events/{event_id}/edit\">{escape(event_name)}</a>"
-            if event_id
-            else escape(event_name)
-        )
+        event_key: str | int = event_id if event_id is not None else "unassigned"
+        event_group = event_lookup.get(event_key)
+
+        if not event_group:
+            event_date = message.get("event_date")
+            show_time = _to_local(message.get("show_time"))
+            event_group = {
+                "event_id": event_id,
+                "event_name": message.get("event_name") or "Unassigned",
+                "event_date_display": event_date.strftime("%Y-%m-%d") if event_date else "",
+                "show_time_display": show_time.strftime("%H:%M") if show_time else "",
+                "messages": [],
+            }
+            event_lookup[event_key] = event_group
+            grouped_events.append(event_group)
 
         contact_label = _contact_label(
             name=message.get("contact_name"), phone=message.get("contact_phone")
@@ -97,54 +108,88 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
             timestamp_local.strftime("%Y-%m-%d %H:%M") if timestamp_local else ""
         )
 
-        rows.append(
-            """
-            <tr>
-              <td>{event}</td>
-              <td>{contact}</td>
-              <td><span class=\"badge text-bg-{direction_class}\">{direction}</span></td>
-              <td class=\"text-break\">{body}</td>
-              <td class=\"text-nowrap\">{timestamp}</td>
-            </tr>
-            """.format(
-                event=event_link,
-                contact=escape(contact_label),
-                direction_class="primary" if direction == "outbound" else "secondary",
-                direction=escape(direction.title() if direction else ""),
-                body=escape(body),
-                timestamp=escape(timestamp_display),
-            )
+        event_group["messages"].append(
+            {
+                "contact": contact_label,
+                "direction": direction,
+                "body": body,
+                "timestamp_display": timestamp_display,
+            }
         )
 
-    table_body = "".join(rows) or """
-        <tr>
-          <td colspan=\"5\" class=\"text-center text-muted\">No messages yet.</td>
-        </tr>
-    """
+    if not grouped_events:
+        table = '<div class="alert alert-info">No messages yet.</div>'
+    else:
+        accordion_items = []
+        for idx, event in enumerate(grouped_events):
+            heading_id = f"heading{idx}"
+            collapse_id = f"collapse{idx}"
+            event_code = event.get("event_id")
+            subtitle = " · ".join(
+                filter(None, [event.get("event_date_display"), event.get("show_time_display")])
+            )
 
-    table = f"""
-    <div class=\"card\">
-      <div class=\"card-header bg-secondary text-white\">Recent Messages</div>
-      <div class=\"card-body\">
-        <div class=\"table-responsive\">
-          <table class=\"table table-striped align-middle\">
-            <thead>
-              <tr>
-                <th scope=\"col\">Event</th>
-                <th scope=\"col\">Contact</th>
-                <th scope=\"col\">Direction</th>
-                <th scope=\"col\">Body</th>
-                <th scope=\"col\">Timestamp</th>
-              </tr>
-            </thead>
-            <tbody>
-              {table_body}
-            </tbody>
-          </table>
+            rows = []
+            for message in event.get("messages", []):
+                direction = message.get("direction") or ""
+                rows.append(
+                    """
+                    <tr>
+                      <td class=\"text-break\">{contact}</td>
+                      <td><span class=\"badge text-bg-{direction_class}\">{direction}</span></td>
+                      <td class=\"text-break\">{body}</td>
+                      <td class=\"text-nowrap\">{timestamp}</td>
+                    </tr>
+                    """.format(
+                        contact=escape(message.get("contact") or ""),
+                        direction_class="primary" if direction == "outgoing" else "secondary",
+                        direction=escape(direction.title() if direction else ""),
+                        body=escape(message.get("body") or ""),
+                        timestamp=escape(message.get("timestamp_display") or ""),
+                    )
+                )
+
+            table_body = "".join(rows) or """
+                <tr>
+                  <td colspan=\"4\" class=\"text-center text-muted\">No messages for this event.</td>
+                </tr>
+            """
+
+            accordion_items.append(
+                """
+                <div class=\"accordion-item\">
+                  <h2 class=\"accordion-header\" id=\"{heading_id}\">
+                    <button class=\"accordion-button{collapsed}\" type=\"button\" data-bs-toggle=\"collapse\" data-bs-target=\"#{collapse_id}\" aria-expanded=\"{expanded}\" aria-controls=\"{collapse_id}\">
+                      <div>
+                        <div class=\"fw-semibold\">{event_name} (קוד אירוע: {event_code})</div>
+                        <div class=\"text-muted small\">{subtitle}</div>
+                      </div>
+                    </button>
+                  </h2>
+                  <div id=\"{collapse_id}\" class=\"accordion-collapse collapse{show}\" aria-labelledby=\"{heading_id}\" data-bs-parent=\"#messagesAccordion\">
+                    <div class=\"accordion-body p-0\">
+                      <div class=\"table-responsive mb-0\">\n                        <table class=\"table table-striped align-middle mb-0\">\n                          <thead class=\"table-light\">\n                            <tr>\n                              <th scope=\"col\">Contact</th>\n                              <th scope=\"col\">Direction</th>\n                              <th scope=\"col\">Body</th>\n                              <th scope=\"col\">Timestamp</th>\n                            </tr>\n                          </thead>\n                          <tbody>\n                            {table_body}\n                          </tbody>\n                        </table>\n                      </div>
+                    </div>
+                  </div>
+                </div>
+                """.format(
+                    heading_id=heading_id,
+                    collapse_id=collapse_id,
+                    collapsed="" if idx == 0 else " collapsed",
+                    expanded=str(idx == 0).lower(),
+                    show=" show" if idx == 0 else "",
+                    event_name=escape(event.get("event_name") or "Unassigned"),
+                    event_code=escape(str(event_code) if event_code is not None else "N/A"),
+                    subtitle=escape(subtitle or ""),
+                    table_body=table_body,
+                )
+            )
+
+        table = """
+        <div class=\"accordion\" id=\"messagesAccordion\">
+          {items}
         </div>
-      </div>
-    </div>
-    """
+        """.format(items="".join(accordion_items))
 
     html = _render_page("Messages", table)
     return HTMLResponse(content=html)
@@ -158,17 +203,28 @@ def _contact_rows(contacts: list[dict]) -> str:
 
     rows = []
     for contact in contacts:
+        usage_count = contact.get("event_usage_count") or 0
+        is_locked = usage_count > 0
+        delete_action = (
+            """
+                <button class=\"btn btn-sm btn-outline-danger\" type=\"button\" disabled>Delete</button>
+                <div class=\"small text-muted mt-1\">לא ניתן למחוק - איש הקשר משויך לאירוע קיים. הסר אותו מהאירוע לפני מחיקה.</div>
+            """
+            if is_locked
+            else """
+                <form method=\"post\" action=\"/ui/contacts/{contact_id}/delete\" class=\"d-inline ms-1\" onsubmit=\"return confirm('האם אתה בטוח שברצונך למחוק את איש הקשר?');\">\n                  <button class=\"btn btn-sm btn-outline-danger\" type=\"submit\">Delete</button>\n                </form>
+            """
+        )
+
         rows.append(
             """
             <tr>
-              <td class="fw-semibold">{name}</td>
-              <td class="text-break">{phone}</td>
-              <td class="text-capitalize">{role}</td>
-              <td class="text-nowrap">
-                <a class="btn btn-sm btn-outline-secondary" href="/ui/contacts/{contact_id}/edit">Edit</a>
-                <form method="post" action="/ui/contacts/{contact_id}/delete" class="d-inline ms-1" onsubmit="return confirm('Are you sure you want to delete this contact?');">
-                  <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
-                </form>
+              <td class=\"fw-semibold\">{name}</td>
+              <td class=\"text-break\">{phone}</td>
+              <td class=\"text-capitalize\">{role}</td>
+              <td class=\"text-nowrap\">
+                <a class=\"btn btn-sm btn-outline-secondary\" href=\"/ui/contacts/{contact_id}/edit\">Edit</a>
+                {delete_action}
               </td>
             </tr>
             """.format(
@@ -176,6 +232,7 @@ def _contact_rows(contacts: list[dict]) -> str:
                 phone=escape(contact.get("phone") or ""),
                 role=escape((contact.get("role") or "").capitalize()),
                 contact_id=contact.get("contact_id"),
+                delete_action=delete_action,
             )
         )
 
@@ -337,7 +394,10 @@ async def update_contact(
 
 @router.post("/ui/contacts/{contact_id}/delete")
 async def delete_contact(contact_id: int, hoh: HOHService = Depends(get_hoh_service)):
-    hoh.delete_contact(org_id=1, contact_id=contact_id)
+    try:
+        hoh.delete_contact(org_id=1, contact_id=contact_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return RedirectResponse(url="/ui/contacts", status_code=303)
 
 
