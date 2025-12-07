@@ -124,6 +124,7 @@ class EventRepository:
         load_in_time=None,
         status: Optional[str] = None,
         producer_contact_id: Optional[int] = None,
+        technical_contact_id: Optional[int] = None,
     ) -> None:
         sets = []
         params = {"org_id": org_id, "event_id": event_id, "now": datetime.utcnow()}
@@ -139,6 +140,10 @@ class EventRepository:
         if producer_contact_id is not None:
             sets.append("producer_contact_id = :producer_contact_id")
             params["producer_contact_id"] = producer_contact_id
+
+        if technical_contact_id is not None:
+            sets.append("technical_contact_id = :technical_contact_id")
+            params["technical_contact_id"] = technical_contact_id
 
         if not sets:
             return
