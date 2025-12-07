@@ -30,55 +30,80 @@
       </div>
 
       {% if events %}
-        {% for event in events %}
-          <div class="card mb-4 shadow-sm">
-            <div class="card-header d-flex justify-content-between align-items-center">
-              <div>
-                <div class="fw-bold">{{ event.event_name }}</div>
-                <div class="text-muted small">
-                  {% if event.event_date_display %}{{ event.event_date_display }}{% endif %}
-                  {% if event.show_time_display %} · {{ event.show_time_display }}{% endif %}
+        <div class="accordion" id="eventsAccordion">
+          {% for event in events %}
+            <div class="accordion-item mb-3 shadow-sm border-0">
+              <h2 class="accordion-header" id="heading-{{ event.event_id }}">
+                <button
+                  class="accordion-button collapsed"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#collapse-{{ event.event_id }}"
+                  aria-expanded="false"
+                  aria-controls="collapse-{{ event.event_id }}"
+                >
+                  <div class="w-100 d-flex justify-content-between align-items-center">
+                    <div>
+                      <div class="fw-bold">{{ event.event_name }}</div>
+                      <div class="text-muted small">
+                        {% if event.event_date_display %}{{ event.event_date_display }}{% endif %}
+                        {% if event.show_time_display %} · {{ event.show_time_display }}{% endif %}
+                      </div>
+                    </div>
+                    <div class="text-muted small ms-3">Event ID: {{ event.event_id }}</div>
+                  </div>
+                </button>
+              </h2>
+              <div
+                id="collapse-{{ event.event_id }}"
+                class="accordion-collapse collapse"
+                aria-labelledby="heading-{{ event.event_id }}"
+                data-bs-parent="#eventsAccordion"
+              >
+                <div class="accordion-body p-0">
+                  <div class="table-responsive">
+                    <table class="table table-striped align-middle mb-0">
+                      <thead class="table-light">
+                        <tr>
+                          <th scope="col" style="width: 10%">Direction</th>
+                          <th scope="col" style="width: 20%">From</th>
+                          <th scope="col" style="width: 20%">To</th>
+                          <th scope="col" style="width: 35%">Body</th>
+                          <th scope="col" style="width: 15%">Timestamp</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% if event.messages %}
+                          {% for message in event.messages %}
+                            <tr>
+                              <td class="text-capitalize">{{ message.direction }}</td>
+                              <td class="text-break">{{ message.from }}</td>
+                              <td class="text-break">{{ message.to }}</td>
+                              <td class="text-break">{{ message.body }}</td>
+                              <td class="text-nowrap">{{ message.timestamp_display }}</td>
+                            </tr>
+                          {% endfor %}
+                        {% else %}
+                          <tr>
+                            <td colspan="5" class="text-center text-muted">No messages for this event.</td>
+                          </tr>
+                        {% endif %}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </div>
-              <div class="text-muted small">Event ID: {{ event.event_id }}</div>
             </div>
-            <div class="card-body p-0">
-              <div class="table-responsive">
-                <table class="table table-striped align-middle mb-0">
-                  <thead class="table-light">
-                    <tr>
-                      <th scope="col" style="width: 10%">Direction</th>
-                      <th scope="col" style="width: 20%">From</th>
-                      <th scope="col" style="width: 20%">To</th>
-                      <th scope="col" style="width: 35%">Body</th>
-                      <th scope="col" style="width: 15%">Timestamp</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {% if event.messages %}
-                      {% for message in event.messages %}
-                        <tr>
-                          <td class="text-capitalize">{{ message.direction }}</td>
-                          <td class="text-break">{{ message.from }}</td>
-                          <td class="text-break">{{ message.to }}</td>
-                          <td class="text-break">{{ message.body }}</td>
-                          <td class="text-nowrap">{{ message.timestamp_display }}</td>
-                        </tr>
-                      {% endfor %}
-                    {% else %}
-                      <tr>
-                        <td colspan="5" class="text-center text-muted">No messages for this event.</td>
-                      </tr>
-                    {% endif %}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </div>
-        {% endfor %}
+          {% endfor %}
+        </div>
       {% else %}
         <div class="alert alert-info">No messages available.</div>
       {% endif %}
     </main>
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-R6RYVbkNvIDgf/mBlC9ZwTe74MkRUYw35vjpsIadB1iKsFcfoTmyaKOwQ3v1h4FJ"
+      crossorigin="anonymous"
+    ></script>
   </body>
 </html>
