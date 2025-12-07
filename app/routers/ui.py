@@ -175,9 +175,9 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
                 """.format(
                     heading_id=heading_id,
                     collapse_id=collapse_id,
-                    collapsed="" if idx == 0 else " collapsed",
-                    expanded=str(idx == 0).lower(),
-                    show=" show" if idx == 0 else "",
+                    collapsed=" collapsed",
+                    expanded="false",
+                    show="",
                     event_name=escape(event.get("event_name") or "Unassigned"),
                     event_code=escape(str(event_code) if event_code is not None else "N/A"),
                     subtitle=escape(subtitle or ""),
