@@ -21,7 +21,13 @@ client = Client(ACCOUNT_SID, AUTH_TOKEN)
 def _normalize_to(to_number: str, channel: str = "whatsapp") -> str:
     """Return the address in the correct format, e.g. whatsapp:+9725..."""
 
+    if not to_number:
+        raise ValueError("Recipient phone number is required")
+
     to_number = to_number.strip()
+    if not to_number:
+        raise ValueError("Recipient phone number is required")
+
     prefix = f"{channel}:"
     if not to_number.startswith(prefix):
         return f"{prefix}{to_number}"

@@ -405,7 +405,11 @@ async def ui_send_init(
     event_id: int,
     hoh: HOHService = Depends(get_hoh_service),
 ):
-    await hoh.send_init_for_event(event_id=event_id, org_id=1)
+    try:
+        await hoh.send_init_for_event(event_id=event_id, org_id=1)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     return RedirectResponse(url="/ui/events", status_code=303)
 
 
