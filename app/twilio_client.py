@@ -2,6 +2,7 @@
 from __future__ import annotations
 import os
 import json
+import logging
 from typing import Optional, Dict, Any
 from twilio.rest import Client
 
@@ -13,6 +14,7 @@ DEFAULT_MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")  # MGx
 if not ACCOUNT_SID or not AUTH_TOKEN:
     raise RuntimeError("Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN env vars")
 
+logger = logging.getLogger(__name__)
 client = Client(ACCOUNT_SID, AUTH_TOKEN)
 
 
@@ -33,6 +35,12 @@ def send_text(
     channel: str = "whatsapp",
 ) -> Any:
     """שליחת טקסט רגיל (לא Content Template)."""
+
+    normalized_body = body.strip()
+    if normalized_body.lower() in {"ok", "success"}:
+        logger.info("Skipping sending acknowledgment message: %s", normalized_body)
+        return None
+
     to_addr = _normalize_to(to, channel=channel)
     msid = messaging_service_sid or DEFAULT_MESSAGING_SERVICE_SID
 
