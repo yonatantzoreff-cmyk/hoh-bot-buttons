@@ -1029,6 +1029,8 @@ class HOHService:
                 timeout=10,
             )
             if response.ok:
+                if response.content:
+                    return response.content.decode("utf-8", errors="replace")
                 return response.text
             logger.warning(
                 "Failed to download media", extra={"url": url, "status": response.status_code}

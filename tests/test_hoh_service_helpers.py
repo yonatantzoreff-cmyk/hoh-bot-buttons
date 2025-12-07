@@ -80,3 +80,26 @@ def test_extract_contact_details_uses_body_as_fallback():
 
     assert phone == "+972527654321"
     assert name == "052-7654321 Moshe"
+
+
+def test_download_media_text_handles_utf8_names(monkeypatch):
+    service = HOHService()
+
+    class DummyResponse:
+        ok = True
+        # Simulate Twilio returning Hebrew characters that would be mis-decoded
+        # if the response encoding were treated as ISO-8859-1.
+        content = "BEGIN:VCARD\nFN:יונתן היכל\nTEL:+972503001613\nEND:VCARD".encode(
+            "utf-8"
+        )
+        encoding = "ISO-8859-1"
+
+        @property
+        def text(self):  # pragma: no cover - fallback path
+            return self.content.decode(self.encoding, errors="replace")
+
+    monkeypatch.setattr("app.hoh_service.requests.get", lambda *_, **__: DummyResponse())
+
+    text = service._download_media_text("https://example.test/media")
+
+    assert "יונתן היכל" in text
