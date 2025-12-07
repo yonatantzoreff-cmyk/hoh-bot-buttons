@@ -518,6 +518,18 @@ class ConversationRepository:
         with get_session() as session:
             session.execute(query, params)
 
+    def clear_last_message_for_event(self, org_id: int, event_id: int) -> None:
+        query = text(
+            """
+            UPDATE conversations
+            SET last_message_id = NULL
+            WHERE org_id = :org_id AND event_id = :event_id
+            """
+        )
+
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id, "event_id": event_id})
+
     def delete_by_event(self, org_id: int, event_id: int) -> None:
         query = text(
             """
