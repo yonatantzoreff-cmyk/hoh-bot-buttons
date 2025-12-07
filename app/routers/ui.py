@@ -1,7 +1,6 @@
 """Minimal Bootstrap-based UI for managing events via Postgres."""
 import logging
 from html import escape
-from datetime import timezone, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -14,17 +13,12 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory="templates")
 
-LOCAL_TZ = timezone(timedelta(hours=2))
-
-
 def _to_local(dt):
     if not dt:
         return None
 
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=LOCAL_TZ)
-
-    return dt.astimezone(LOCAL_TZ)
+    # Keep the original clock time without applying timezone conversions.
+    return dt.replace(tzinfo=None)
 
 
 def _render_page(title: str, body: str) -> str:
@@ -518,7 +512,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             init_sent_at.strftime("%Y-%m-%d %H:%M") if init_sent_at else ""
         )
         whatsapp_btn_class = (
-            "btn btn-sm btn-success" if init_sent_at else "btn btn-sm btn-primary"
+            "btn btn-sm btn-primary" if init_sent_at else "btn btn-sm btn-success"
         )
         sent_indicator = (
             f"<div class=\\\"small text-success mt-1\\\">Sent {escape(init_sent_display)}</div>"
@@ -535,6 +529,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
               <td>{load_in}</td>
               <td>{hall}</td>
               <td>{status}</td>
+              <td class=\"text-break\">{notes}</td>
               <td>{producer_phone}</td>
               <td>{technical_phone}</td>
               <td>{created_at}</td>
@@ -556,6 +551,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 load_in=escape(load_in_display),
                 hall=escape(hall_label or ""),
                 status=escape(status),
+                notes=escape(row.get("notes") or ""),
                 producer_phone=escape(producer_phone),
                 technical_phone=escape(technical_phone),
                 created_at=escape(created_at_display),
@@ -567,7 +563,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
 
     table_body = "".join(table_rows) or """
         <tr>
-          <td colspan=\"10\" class=\"text-center text-muted\">No events yet.</td>
+          <td colspan=\"11\" class=\"text-center text-muted\">No events yet.</td>
         </tr>
     """
 
@@ -585,6 +581,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 <th scope=\"col\">Load In</th>
                 <th scope=\"col\">Hall</th>
                 <th scope=\"col\">Status</th>
+                <th scope=\"col\">Notes</th>
                 <th scope=\"col\">Producer Phone</th>
                 <th scope=\"col\">Technical Phone</th>
                 <th scope=\"col\">Created At</th>
