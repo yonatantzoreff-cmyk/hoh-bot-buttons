@@ -34,6 +34,10 @@ async def whatsapp_webhook(
                 payload = {}
 
     body = (payload.get("Body") or payload.get("body") or "").strip()
+    if not body:
+        contact_summary = HOHService._contact_summary_from_payload(payload)
+        if contact_summary:
+            body = contact_summary
     logger.info("Incoming WhatsApp body: %s", body)
 
     await hoh.handle_whatsapp_webhook(payload, org_id=1)
