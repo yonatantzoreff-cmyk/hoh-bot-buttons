@@ -235,59 +235,133 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
     return HTMLResponse(content=html)
 
 
-@router.get("/ui/messages", response_class=HTMLResponse)
-async def list_messages(
-    request: Request, hoh: HOHService = Depends(get_hoh_service)
+@router.get("/ui/events/{event_id}/edit", response_class=HTMLResponse)
+async def edit_event_form(
+    event_id: int, hoh: HOHService = Depends(get_hoh_service)
 ) -> HTMLResponse:
-    rows = hoh.list_messages_with_events(org_id=1)
+    event = hoh.get_event_with_contacts(org_id=1, event_id=event_id)
+    if not event:
+        raise HTTPException(status_code=404, detail="Event not found")
 
-    grouped_events: dict[int | None, dict] = {}
+    event_date = event.get("event_date")
+    show_time = event.get("show_time")
+    load_in_time = event.get("load_in_time")
 
-    for row in rows:
-        event_id = row.get("event_id")
-        event_group = grouped_events.get(event_id)
+    event_date_str = event_date.strftime("%Y-%m-%d") if event_date else ""
+    show_time_str = show_time.strftime("%H:%M") if show_time else ""
+    load_in_time_str = load_in_time.strftime("%H:%M") if load_in_time else ""
 
-        if not event_group:
-            event_date = row.get("event_date")
-            show_time = row.get("show_time")
+    producer_name = event.get("producer_name") or ""
+    producer_phone = event.get("producer_phone") or ""
+    technical_name = event.get("technical_name") or ""
+    technical_phone = event.get("technical_phone") or ""
+    notes = event.get("notes") or ""
 
-            event_group = {
-                "event_id": event_id,
-                "event_name": row.get("event_name") or f"Event #{event_id}",
-                "event_date": event_date,
-                "event_date_display": event_date.strftime("%Y-%m-%d")
-                if event_date
-                else "",
-                "show_time_display": show_time.strftime("%H:%M") if show_time else "",
-                "messages": [],
-            }
-            grouped_events[event_id] = event_group
+    form = f"""
+    <div class=\"row justify-content-center\">
+      <div class=\"col-lg-8\">
+        <div class=\"card shadow-sm\">
+          <div class=\"card-header bg-primary text-white\">Edit Event</div>
+          <div class=\"card-body\">
+            <form method=\"post\" action=\"/ui/events/{event_id}/edit\">
+              <div class=\"mb-3\">
+                <label class=\"form-label\" for=\"event_name\">Event name</label>
+                <input class=\"form-control\" id=\"event_name\" name=\"event_name\" type=\"text\" value=\"{escape(event.get('name') or '')}\" required>
+              </div>
+              <div class=\"row\">
+                <div class=\"col-md-4 mb-3\">
+                  <label class=\"form-label\" for=\"event_date\">Event date</label>
+                  <input class=\"form-control\" id=\"event_date\" name=\"event_date\" type=\"date\" value=\"{escape(event_date_str)}\" required>
+                </div>
+                <div class=\"col-md-4 mb-3\">
+                  <label class=\"form-label\" for=\"show_time\">Show time</label>
+                  <input class=\"form-control\" id=\"show_time\" name=\"show_time\" type=\"time\" value=\"{escape(show_time_str)}\">
+                </div>
+                <div class=\"col-md-4 mb-3\">
+                  <label class=\"form-label\" for=\"load_in_time\">Load-in time</label>
+                  <input class=\"form-control\" id=\"load_in_time\" name=\"load_in_time\" type=\"time\" value=\"{escape(load_in_time_str)}\">
+                </div>
+              </div>
+              <div class=\"row\">
+                <div class=\"col-md-6 mb-3\">
+                  <label class=\"form-label\" for=\"producer_name\">Producer contact name</label>
+                  <input class=\"form-control\" id=\"producer_name\" name=\"producer_name\" type=\"text\" value=\"{escape(producer_name)}\">
+                </div>
+                <div class=\"col-md-6 mb-3\">
+                  <label class=\"form-label\" for=\"producer_phone\">Producer phone</label>
+                  <input class=\"form-control\" id=\"producer_phone\" name=\"producer_phone\" type=\"text\" value=\"{escape(producer_phone)}\">
+                </div>
+              </div>
+              <div class=\"row\">
+                <div class=\"col-md-6 mb-3\">
+                  <label class=\"form-label\" for=\"technical_name\">Technical contact name</label>
+                  <input class=\"form-control\" id=\"technical_name\" name=\"technical_name\" type=\"text\" value=\"{escape(technical_name)}\">
+                </div>
+                <div class=\"col-md-6 mb-3\">
+                  <label class=\"form-label\" for=\"technical_phone\">Technical phone</label>
+                  <input class=\"form-control\" id=\"technical_phone\" name=\"technical_phone\" type=\"text\" value=\"{escape(technical_phone)}\">
+                </div>
+              </div>
+              <div class=\"mb-3\">
+                <label class=\"form-label\" for=\"notes\">Notes</label>
+                <textarea class=\"form-control\" id=\"notes\" name=\"notes\" rows=\"3\">{escape(notes)}</textarea>
+              </div>
+              <div class=\"d-flex justify-content-end\">
+                <a class=\"btn btn-outline-secondary me-2\" href=\"/ui/events\">Cancel</a>
+                <button class=\"btn btn-primary\" type=\"submit\">Save changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
 
-        contact_label = _contact_label(row.get("contact_name"), row.get("contact_phone"))
-        direction = row.get("direction") or ""
-        if direction == "incoming":
-            from_display = contact_label
-            to_display = "HOH BOT"
-        else:
-            from_display = "HOH BOT"
-            to_display = contact_label
+    html = _render_page("Edit Event", form)
+    return HTMLResponse(content=html)
 
-        timestamp = row.get("sent_at") or row.get("received_at") or row.get("created_at")
-        timestamp_display = timestamp.strftime("%Y-%m-%d %H:%M") if timestamp else ""
 
-        event_group["messages"].append(
-            {
-                "direction": direction,
-                "from": from_display,
-                "to": to_display,
-                "body": row.get("body") or "",
-                "timestamp": timestamp,
-                "timestamp_display": timestamp_display,
-            }
+@router.post("/ui/events/{event_id}/edit")
+async def update_event(
+    event_id: int,
+    event_name: str = Form(...),
+    event_date: str = Form(...),
+    show_time: str | None = Form(None),
+    load_in_time: str | None = Form(None),
+    producer_name: str | None = Form(None),
+    producer_phone: str | None = Form(None),
+    technical_name: str | None = Form(None),
+    technical_phone: str | None = Form(None),
+    notes: str | None = Form(None),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    try:
+        hoh.update_event_with_contacts(
+            org_id=1,
+            event_id=event_id,
+            event_name=event_name.strip(),
+            event_date_str=event_date.strip(),
+            show_time_str=show_time.strip() if show_time else None,
+            load_in_time_str=load_in_time.strip() if load_in_time else None,
+            producer_name=producer_name.strip() if producer_name else None,
+            producer_phone=producer_phone.strip() if producer_phone else None,
+            technical_name=technical_name.strip() if technical_name else None,
+            technical_phone=technical_phone.strip() if technical_phone else None,
+            notes=notes.strip() if notes else None,
         )
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception("Failed to update event: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to update event") from exc
 
-    events = list(grouped_events.values())
+    return RedirectResponse(url="/ui/events", status_code=303)
 
-    return templates.TemplateResponse(
-        "ui/messages.html", {"request": request, "events": events}
-    )
+
+@router.post("/ui/events/{event_id}/delete")
+async def delete_event(event_id: int, hoh: HOHService = Depends(get_hoh_service)):
+    try:
+        hoh.delete_event(org_id=1, event_id=event_id)
+    except Exception as exc:  # pragma: no cover - defensive logging
+        logger.exception("Failed to delete event: %s", exc)
+        raise HTTPException(status_code=500, detail="Failed to delete event") from exc
+
+    return RedirectResponse(url="/ui/events", status_code=303)

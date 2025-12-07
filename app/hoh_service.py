@@ -166,6 +166,125 @@ class HOHService:
 
         return enriched_events
 
+    def get_event_with_contacts(self, org_id: int, event_id: int):
+        event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
+        if not event:
+            return None
+
+        event_dict = dict(event)
+
+        producer_contact_id = event_dict.get("producer_contact_id")
+        if producer_contact_id:
+            producer_contact = self.contacts.get_contact_by_id(
+                org_id=org_id, contact_id=producer_contact_id
+            )
+            if producer_contact:
+                event_dict["producer_name"] = self._get_contact_value(
+                    producer_contact, "name"
+                )
+                event_dict["producer_phone"] = self._get_contact_value(
+                    producer_contact, "phone"
+                )
+
+        technical_contact_id = event_dict.get("technical_contact_id")
+        if technical_contact_id:
+            technical_contact = self.contacts.get_contact_by_id(
+                org_id=org_id, contact_id=technical_contact_id
+            )
+            if technical_contact:
+                event_dict["technical_name"] = self._get_contact_value(
+                    technical_contact, "name"
+                )
+                event_dict["technical_phone"] = self._get_contact_value(
+                    technical_contact, "phone"
+                )
+
+        return event_dict
+
+    def update_event_with_contacts(
+        self,
+        *,
+        org_id: int,
+        event_id: int,
+        event_name: str,
+        event_date_str: str,
+        show_time_str: Optional[str],
+        load_in_time_str: Optional[str],
+        producer_name: Optional[str],
+        producer_phone: Optional[str],
+        technical_name: Optional[str],
+        technical_phone: Optional[str],
+        notes: Optional[str] = None,
+    ) -> None:
+        event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
+        if not event:
+            raise ValueError("Event not found")
+
+        event_date = datetime.strptime(event_date_str, "%Y-%m-%d").date()
+        show_time = self._combine_time(event_date, show_time_str)
+        load_in_time = self._combine_time(event_date, load_in_time_str)
+
+        producer_contact_id = event.get("producer_contact_id")
+        if producer_phone or producer_name:
+            if producer_contact_id:
+                self.contacts.update_contact(
+                    org_id=org_id,
+                    contact_id=producer_contact_id,
+                    name=producer_name if producer_name else None,
+                    phone=producer_phone if producer_phone else None,
+                    role="producer",
+                )
+            elif producer_phone:
+                producer_contact_id = self.contacts.get_or_create_by_phone(
+                    org_id=org_id,
+                    phone=producer_phone,
+                    name=producer_name or producer_phone,
+                    role="producer",
+                )
+
+        technical_contact_id = event.get("technical_contact_id")
+        if technical_phone or technical_name:
+            if technical_contact_id:
+                self.contacts.update_contact(
+                    org_id=org_id,
+                    contact_id=technical_contact_id,
+                    name=technical_name if technical_name else None,
+                    phone=technical_phone if technical_phone else None,
+                    role="technical",
+                )
+            elif technical_phone:
+                technical_contact_id = self.contacts.get_or_create_by_phone(
+                    org_id=org_id,
+                    phone=technical_phone,
+                    name=technical_name or technical_phone,
+                    role="technical",
+                )
+
+        self.events.update_event(
+            org_id=org_id,
+            event_id=event_id,
+            name=event_name,
+            event_date=event_date,
+            show_time=show_time,
+            load_in_time=load_in_time,
+            producer_contact_id=producer_contact_id,
+            technical_contact_id=technical_contact_id,
+            notes=notes,
+        )
+
+    @staticmethod
+    def _combine_time(event_date: date, time_str: Optional[str]):
+        if not time_str:
+            return None
+
+        time_part = datetime.strptime(time_str, "%H:%M").time()
+        return datetime.combine(event_date, time_part).replace(tzinfo=timezone.utc)
+
+    def delete_event(self, org_id: int, event_id: int) -> None:
+        self.messages.delete_by_event(org_id=org_id, event_id=event_id)
+        self.conversations.delete_by_event(org_id=org_id, event_id=event_id)
+        self.events.delete_event(org_id=org_id, event_id=event_id)
+
     # endregion -----------------------------------------------------------------------
 
     def list_messages_with_events(self, org_id: int) -> list[dict]:

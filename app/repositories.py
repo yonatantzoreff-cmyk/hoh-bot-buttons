@@ -10,6 +10,9 @@ from .appdb import get_session
 from .utils.phone import normalize_phone_to_e164_il
 
 
+_NO_UPDATE = object()
+
+
 class OrgRepository:
     """אחראי על טבלת orgs"""
 
@@ -136,6 +139,66 @@ class EventRepository:
         with get_session() as session:
             session.execute(query, params)
 
+    def update_event(
+        self,
+        org_id: int,
+        event_id: int,
+        *,
+        hall_id: Optional[int] = _NO_UPDATE,
+        name: Optional[str] = _NO_UPDATE,
+        event_date=_NO_UPDATE,
+        show_time=_NO_UPDATE,
+        load_in_time=_NO_UPDATE,
+        producer_contact_id: Optional[int] = _NO_UPDATE,
+        technical_contact_id: Optional[int] = _NO_UPDATE,
+        notes: Optional[str] = _NO_UPDATE,
+    ) -> None:
+        sets = ["updated_at = :now"]
+        params = {"org_id": org_id, "event_id": event_id, "now": datetime.utcnow()}
+
+        if hall_id is not _NO_UPDATE:
+            sets.append("hall_id = :hall_id")
+            params["hall_id"] = hall_id
+
+        if name is not _NO_UPDATE:
+            sets.append("name = :name")
+            params["name"] = name
+
+        if event_date is not _NO_UPDATE:
+            sets.append("event_date = :event_date")
+            params["event_date"] = event_date
+
+        if show_time is not _NO_UPDATE:
+            sets.append("show_time = :show_time")
+            params["show_time"] = show_time
+
+        if load_in_time is not _NO_UPDATE:
+            sets.append("load_in_time = :load_in_time")
+            params["load_in_time"] = load_in_time
+
+        if producer_contact_id is not _NO_UPDATE:
+            sets.append("producer_contact_id = :producer_contact_id")
+            params["producer_contact_id"] = producer_contact_id
+
+        if technical_contact_id is not _NO_UPDATE:
+            sets.append("technical_contact_id = :technical_contact_id")
+            params["technical_contact_id"] = technical_contact_id
+
+        if notes is not _NO_UPDATE:
+            sets.append("notes = :notes")
+            params["notes"] = notes
+
+        query = text(
+            f"""
+            UPDATE events
+            SET {', '.join(sets)}
+            WHERE org_id = :org_id AND event_id = :event_id
+            """
+        )
+
+        with get_session() as session:
+            session.execute(query, params)
+
     def list_events_for_org(self, org_id: int):
         query = text(
             """
@@ -161,6 +224,17 @@ class EventRepository:
         with get_session() as session:
             result = session.execute(query, {"org_id": org_id})
             return result.mappings().all()
+
+    def delete_event(self, org_id: int, event_id: int) -> None:
+        query = text(
+            """
+            DELETE FROM events
+            WHERE org_id = :org_id AND event_id = :event_id
+            """
+        )
+
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id, "event_id": event_id})
 
 
 class ContactRepository:
@@ -266,6 +340,44 @@ class ContactRepository:
                     "contact_id": contact_id,
                 },
             )
+
+    def update_contact(
+        self,
+        org_id: int,
+        contact_id: int,
+        *,
+        name: Optional[str] = None,
+        phone: Optional[str] = None,
+        role: Optional[str] = None,
+    ) -> None:
+        sets = []
+        params = {"org_id": org_id, "contact_id": contact_id}
+
+        if name is not None:
+            sets.append("name = :name")
+            params["name"] = name
+
+        if phone is not None:
+            sets.append("phone = :phone")
+            params["phone"] = normalize_phone_to_e164_il(phone)
+
+        if role is not None:
+            sets.append("role = :role")
+            params["role"] = role
+
+        if not sets:
+            return
+
+        query = text(
+            f"""
+            UPDATE contacts
+            SET {', '.join(sets)}
+            WHERE org_id = :org_id AND contact_id = :contact_id
+            """
+        )
+
+        with get_session() as session:
+            session.execute(query, params)
 
 
 class ConversationRepository:
@@ -393,7 +505,7 @@ class ConversationRepository:
             """
             UPDATE conversations
             SET status = :status,
-                updated_at = :now
+            updated_at = :now
             WHERE org_id = :org_id AND conversation_id = :conversation_id
             """
         )
@@ -405,6 +517,17 @@ class ConversationRepository:
         }
         with get_session() as session:
             session.execute(query, params)
+
+    def delete_by_event(self, org_id: int, event_id: int) -> None:
+        query = text(
+            """
+            DELETE FROM conversations
+            WHERE org_id = :org_id AND event_id = :event_id
+            """
+        )
+
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id, "event_id": event_id})
 
 
 class MessageRepository:
@@ -493,6 +616,17 @@ class MessageRepository:
                 )
 
             return message_id
+
+    def delete_by_event(self, org_id: int, event_id: int) -> None:
+        query = text(
+            """
+            DELETE FROM messages
+            WHERE org_id = :org_id AND event_id = :event_id
+            """
+        )
+
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id, "event_id": event_id})
 
     def find_due_followups(self, org_id: int, now: datetime) -> list[dict]:
         """
