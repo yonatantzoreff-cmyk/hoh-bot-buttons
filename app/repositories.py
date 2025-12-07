@@ -266,7 +266,7 @@ class EventRepository:
             FROM events e
             LEFT JOIN halls h ON e.hall_id = h.hall_id
             WHERE e.org_id = :org_id
-            ORDER BY e.event_date DESC, e.event_id DESC
+            ORDER BY e.created_at ASC, e.event_id ASC
             """
         )
 
@@ -942,8 +942,9 @@ class MessageRepository:
             LEFT JOIN events e ON m.event_id = e.event_id
             LEFT JOIN contacts c ON m.contact_id = c.contact_id
             WHERE m.org_id = :org_id
-            ORDER BY e.event_date DESC NULLS LAST,
-                     COALESCE(m.sent_at, m.received_at, m.created_at) DESC
+            ORDER BY COALESCE(e.created_at, m.created_at) ASC,
+                     COALESCE(m.sent_at, m.received_at, m.created_at) ASC,
+                     m.message_id ASC
             """
         )
 
