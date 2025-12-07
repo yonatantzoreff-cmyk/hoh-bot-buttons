@@ -36,6 +36,11 @@ def send_text(
 ) -> Any:
     """שליחת טקסט רגיל (לא Content Template)."""
 
+    # Defensive: never send a bare "OK" message to the user
+    if body is not None and body.strip().upper() == "OK":
+        logging.info("twilio_client.send_text: skipping bare 'OK' message to %s", to)
+        return None
+
     normalized_body = body.strip()
     if normalized_body.lower() in {"ok", "success"}:
         logger.info("Skipping sending acknowledgment message: %s", normalized_body)
