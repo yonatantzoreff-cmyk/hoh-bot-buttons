@@ -99,7 +99,7 @@ class HOHService:
             name=event_name,
             event_date=event_date,
             show_time=show_time,
-            status="pending_contact",
+            status="pending",
             producer_contact_id=producer_contact_id,
         )
 
@@ -701,6 +701,10 @@ class HOHService:
         from_number = (payload.get("From") or payload.get("WaId") or "").strip()
         normalized_from = normalize_phone_to_e164_il(from_number)
         message_body = (payload.get("Body") or "").strip()
+        if not message_body:
+            contact_summary = self._contact_summary_from_payload(payload)
+            if contact_summary:
+                message_body = contact_summary
 
         logger.info("Incoming WhatsApp body: %s", message_body)
 
@@ -914,6 +918,18 @@ class HOHService:
 
         return phone, name
 
+    @staticmethod
+    def _contact_summary_from_payload(payload: dict) -> str:
+        """Return a human-friendly description of a shared contact payload."""
+
+        phone, name = HOHService._extract_contact_details(payload, "")
+        if phone or name:
+            if phone and name:
+                return f"Contact shared: {name} ({phone})"
+            return f"Contact shared: {name or phone}"
+
+        return ""
+
     async def _handle_contact_followup(
         self,
         body_text: str,
@@ -949,6 +965,9 @@ class HOHService:
 
         self.events.update_event_fields(
             org_id=org_id, event_id=event_id, technical_contact_id=new_contact_id
+        )
+        self.events.update_event_fields(
+            org_id=org_id, event_id=event_id, status="pending"
         )
         self.conversations.update_pending_data_fields(
             org_id=org_id,
@@ -1017,6 +1036,10 @@ class HOHService:
         contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
         if not contact:
             return
+
+        self.events.update_event_fields(
+            org_id=org_id, event_id=event_id, status="contact_required"
+        )
 
         twilio_resp = twilio_client.send_content_message(
             to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
