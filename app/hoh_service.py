@@ -5,7 +5,9 @@ from __future__ import annotations
 import logging
 import re
 from datetime import date, datetime, time, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
+
+import requests
 
 from app import twilio_client
 from app.credentials import (
@@ -930,13 +932,15 @@ class HOHService:
                     return str(value).strip()
             return ""
 
-        payload_phone = _first_non_empty(
+        vcard_phone, vcard_name = HOHService._extract_contact_from_vcard_media(payload)
+
+        payload_phone = vcard_phone or _first_non_empty(
             (
                 "Contacts[0][PhoneNumber]",
                 "Contacts[0][WaId]",
             )
         )
-        payload_name = _first_non_empty(
+        payload_name = vcard_name or _first_non_empty(
             (
                 "Contacts[0][Name]",
                 "Contacts[0][FirstName]",
@@ -944,10 +948,16 @@ class HOHService:
             )
         )
 
-        text_phone, text_name = HOHService._parse_contact_from_text(body_text)
         fallback_text = body_text or ""
+        text_phone, text_name = HOHService._parse_contact_from_text(body_text)
+        if not payload_name and not vcard_name and fallback_text.strip():
+            text_name = fallback_text.strip()
 
         phone_candidate = payload_phone or text_phone
+        if phone_candidate and any(ch.isalpha() for ch in phone_candidate):
+            match = re.search(r"[+]?\d[\d\s()\-]{5,}", phone_candidate)
+            if match:
+                phone_candidate = match.group(0)
         if not phone_candidate:
             digits = [token for token in fallback_text.split() if token]
             phone_candidate = next(
@@ -956,6 +966,98 @@ class HOHService:
 
         phone = normalize_phone_to_e164_il(phone_candidate)
         name = payload_name or text_name or fallback_text.strip() or phone
+
+        return phone, name
+
+    @staticmethod
+    def _extract_contact_from_vcard_media(payload: dict) -> Tuple[str, str]:
+        """Try to parse a shared contact from vCard media items."""
+
+        try:
+            num_media = int(payload.get("NumMedia") or payload.get("numMedia") or 0)
+        except (TypeError, ValueError):
+            num_media = 0
+
+        if num_media <= 0:
+            return "", ""
+
+        def _media_value(idx: int, key: str) -> str:
+            return (
+                payload.get(f"{key}{idx}")
+                or payload.get(f"{key.lower()}{idx}")
+                or ""
+            )
+
+        for idx in range(num_media):
+            url = _media_value(idx, "MediaUrl")
+            content_type = _media_value(idx, "MediaContentType")
+            filename = _media_value(idx, "MediaFilename")
+
+            if not url:
+                continue
+
+            looks_like_vcard = False
+            if content_type and "vcard" in content_type.lower():
+                looks_like_vcard = True
+            if filename and filename.lower().endswith(".vcf"):
+                looks_like_vcard = True
+
+            if not looks_like_vcard:
+                continue
+
+            vcard_text = HOHService._download_media_text(url)
+            if not vcard_text:
+                continue
+
+            phone, name = HOHService._parse_vcard_contact(vcard_text)
+            if phone or name:
+                return phone, name
+
+        return "", ""
+
+    @staticmethod
+    def _download_media_text(url: str) -> str:
+        """Download Twilio-hosted media using account credentials."""
+
+        try:
+            response = requests.get(
+                url,
+                auth=(twilio_client.ACCOUNT_SID, twilio_client.AUTH_TOKEN),
+                timeout=10,
+            )
+            if response.ok:
+                return response.text
+            logger.warning(
+                "Failed to download media", extra={"url": url, "status": response.status_code}
+            )
+        except Exception as exc:  # pragma: no cover - network/requests safety
+            logger.warning("Error downloading media", exc_info=exc, extra={"url": url})
+
+        return ""
+
+    @staticmethod
+    def _parse_vcard_contact(vcard_text: str) -> Tuple[str, str]:
+        """Extract phone and name from a minimal vCard payload."""
+
+        phone = ""
+        name = ""
+
+        for raw_line in vcard_text.splitlines():
+            line = raw_line.strip()
+            upper_line = line.upper()
+
+            if not name:
+                if upper_line.startswith("FN:"):
+                    name = line.split(":", 1)[1].strip()
+                elif upper_line.startswith("N:"):
+                    name_parts = line.split(":", 1)[1].split(";")
+                    name = " ".join(part for part in name_parts if part).strip()
+
+            if not phone and "TEL" in upper_line:
+                phone = line.split(":", 1)[-1].strip()
+
+            if phone and name:
+                break
 
         return phone, name
 
