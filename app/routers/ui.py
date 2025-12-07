@@ -53,6 +53,86 @@ def _contact_label(name: str | None, phone: str | None) -> str:
     return "Unknown"
 
 
+@router.get("/ui/messages", response_class=HTMLResponse)
+async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLResponse:
+    messages = hoh.list_messages_with_events(org_id=1)
+
+    rows = []
+    for message in messages:
+        event_id = message.get("event_id")
+        event_name = message.get("event_name") or "Unassigned"
+        event_link = (
+            f"<a href=\"/ui/events/{event_id}/edit\">{escape(event_name)}</a>"
+            if event_id
+            else escape(event_name)
+        )
+
+        contact_label = _contact_label(
+            name=message.get("contact_name"), phone=message.get("contact_phone")
+        )
+        direction = message.get("direction") or ""
+        body = message.get("body") or ""
+
+        timestamp = (
+            message.get("sent_at")
+            or message.get("received_at")
+            or message.get("created_at")
+        )
+        timestamp_display = timestamp.strftime("%Y-%m-%d %H:%M") if timestamp else ""
+
+        rows.append(
+            """
+            <tr>
+              <td>{event}</td>
+              <td>{contact}</td>
+              <td><span class=\"badge text-bg-{direction_class}\">{direction}</span></td>
+              <td class=\"text-break\">{body}</td>
+              <td class=\"text-nowrap\">{timestamp}</td>
+            </tr>
+            """.format(
+                event=event_link,
+                contact=escape(contact_label),
+                direction_class="primary" if direction == "outbound" else "secondary",
+                direction=escape(direction.title() if direction else ""),
+                body=escape(body),
+                timestamp=escape(timestamp_display),
+            )
+        )
+
+    table_body = "".join(rows) or """
+        <tr>
+          <td colspan=\"5\" class=\"text-center text-muted\">No messages yet.</td>
+        </tr>
+    """
+
+    table = f"""
+    <div class=\"card\">
+      <div class=\"card-header bg-secondary text-white\">Recent Messages</div>
+      <div class=\"card-body\">
+        <div class=\"table-responsive\">
+          <table class=\"table table-striped align-middle\">
+            <thead>
+              <tr>
+                <th scope=\"col\">Event</th>
+                <th scope=\"col\">Contact</th>
+                <th scope=\"col\">Direction</th>
+                <th scope=\"col\">Body</th>
+                <th scope=\"col\">Timestamp</th>
+              </tr>
+            </thead>
+            <tbody>
+              {table_body}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    """
+
+    html = _render_page("Messages", table)
+    return HTMLResponse(content=html)
+
+
 @router.get("/ui", response_class=HTMLResponse)
 async def show_form() -> HTMLResponse:
     card = """
