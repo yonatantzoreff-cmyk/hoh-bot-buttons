@@ -85,10 +85,7 @@ class HOHService:
         producer_phone: str,
     ) -> dict:
         event_date = datetime.strptime(event_date_str, "%Y-%m-%d").date()
-        show_time = None
-        if show_time_str:
-            time_part = datetime.strptime(show_time_str, "%H:%M").time()
-            show_time = datetime.combine(event_date, time_part).replace(tzinfo=LOCAL_TZ)
+        show_time = self._combine_time(event_date, show_time_str)
 
         normalized_phone = normalize_phone_to_e164_il(producer_phone)
 
@@ -353,7 +350,7 @@ class HOHService:
             return None
 
         time_part = datetime.strptime(time_str, "%H:%M").time()
-        return datetime.combine(event_date, time_part).replace(tzinfo=LOCAL_TZ)
+        return datetime.combine(event_date, time_part)
 
     def delete_event(self, org_id: int, event_id: int) -> None:
         self.conversations.clear_last_message_for_event(org_id=org_id, event_id=event_id)
@@ -1117,6 +1114,32 @@ class HOHService:
         self.events.update_event_fields(
             org_id=org_id, event_id=event_id, status="pending"
         )
+
+        contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+        if contact:
+            thanks_body = "תודה!"
+            twilio_resp = twilio_client.send_text(
+                to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
+                body=thanks_body,
+            )
+            whatsapp_sid = getattr(twilio_resp, "sid", None) if twilio_resp else None
+
+            raw_payload = {
+                "type": "contact_acknowledgment",
+                "body": thanks_body,
+                "twilio_message_sid": whatsapp_sid,
+            }
+            self.messages.log_message(
+                org_id=org_id,
+                conversation_id=conversation_id,
+                event_id=event_id,
+                contact_id=contact_id,
+                direction="outgoing",
+                body=thanks_body,
+                whatsapp_msg_sid=whatsapp_sid,
+                raw_payload=raw_payload,
+            )
+
         self.conversations.update_pending_data_fields(
             org_id=org_id,
             conversation_id=conversation_id,
@@ -1244,9 +1267,7 @@ class HOHService:
         event_date: Optional[date] = event.get("event_date") if event else None
         if event_date:
             hour, minute = map(int, slot_label.split(":"))
-            load_in_dt = datetime.combine(event_date, time(hour=hour, minute=minute)).replace(
-                tzinfo=timezone.utc
-            )
+            load_in_dt = datetime.combine(event_date, time(hour=hour, minute=minute))
             self.events.update_event_fields(
                 org_id=org_id, event_id=event_id, load_in_time=load_in_dt, status="confirmed"
             )
