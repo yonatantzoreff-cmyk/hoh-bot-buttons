@@ -2,14 +2,16 @@
 import logging
 from html import escape
 
-from fastapi import APIRouter, Depends, Form, HTTPException
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.templating import Jinja2Templates
 
 from app.dependencies import get_hoh_service
 from app.hoh_service import HOHService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+templates = Jinja2Templates(directory="templates")
 
 
 def _render_page(title: str, body: str) -> str:
@@ -29,6 +31,7 @@ def _render_page(title: str, body: str) -> str:
             <div>
               <a class=\"btn btn-outline-light btn-sm me-2\" href=\"/ui\">Add Event</a>
               <a class=\"btn btn-outline-light btn-sm\" href=\"/ui/events\">View Events</a>
+              <a class=\"btn btn-light btn-sm ms-2\" href=\"/ui/messages\">Messages</a>
             </div>
           </div>
         </nav>
@@ -38,6 +41,16 @@ def _render_page(title: str, body: str) -> str:
       </body>
     </html>
     """
+
+
+def _contact_label(name: str | None, phone: str | None) -> str:
+    if name and phone:
+        return f"{name} ({phone})"
+    if name:
+        return name
+    if phone:
+        return phone
+    return "Unknown"
 
 
 @router.get("/ui", response_class=HTMLResponse)
@@ -220,3 +233,61 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
 
     html = _render_page("Events", table)
     return HTMLResponse(content=html)
+
+
+@router.get("/ui/messages", response_class=HTMLResponse)
+async def list_messages(
+    request: Request, hoh: HOHService = Depends(get_hoh_service)
+) -> HTMLResponse:
+    rows = hoh.list_messages_with_events(org_id=1)
+
+    grouped_events: dict[int | None, dict] = {}
+
+    for row in rows:
+        event_id = row.get("event_id")
+        event_group = grouped_events.get(event_id)
+
+        if not event_group:
+            event_date = row.get("event_date")
+            show_time = row.get("show_time")
+
+            event_group = {
+                "event_id": event_id,
+                "event_name": row.get("event_name") or f"Event #{event_id}",
+                "event_date": event_date,
+                "event_date_display": event_date.strftime("%Y-%m-%d")
+                if event_date
+                else "",
+                "show_time_display": show_time.strftime("%H:%M") if show_time else "",
+                "messages": [],
+            }
+            grouped_events[event_id] = event_group
+
+        contact_label = _contact_label(row.get("contact_name"), row.get("contact_phone"))
+        direction = row.get("direction") or ""
+        if direction == "incoming":
+            from_display = contact_label
+            to_display = "HOH BOT"
+        else:
+            from_display = "HOH BOT"
+            to_display = contact_label
+
+        timestamp = row.get("sent_at") or row.get("received_at") or row.get("created_at")
+        timestamp_display = timestamp.strftime("%Y-%m-%d %H:%M") if timestamp else ""
+
+        event_group["messages"].append(
+            {
+                "direction": direction,
+                "from": from_display,
+                "to": to_display,
+                "body": row.get("body") or "",
+                "timestamp": timestamp,
+                "timestamp_display": timestamp_display,
+            }
+        )
+
+    events = list(grouped_events.values())
+
+    return templates.TemplateResponse(
+        "ui/messages.html", {"request": request, "events": events}
+    )
