@@ -132,12 +132,20 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
     for row in events:
         event_date = row.get("event_date")
         show_time = row.get("show_time")
+        load_in_time = row.get("load_in_time")
+        created_at = row.get("created_at")
         hall_label = row.get("hall_name") or (
             f"Hall #{row['hall_id']}" if row.get("hall_id") is not None else ""
         )
         date_display = event_date.strftime("%Y-%m-%d") if event_date else ""
         time_display = show_time.strftime("%H:%M") if show_time else ""
+        load_in_display = load_in_time.strftime("%H:%M") if load_in_time else ""
+        created_at_display = (
+            created_at.strftime("%Y-%m-%d %H:%M") if created_at else ""
+        )
         status = row.get("status") or ""
+        producer_phone = row.get("producer_phone") or ""
+        technical_phone = row.get("technical_phone") or ""
 
         table_rows.append(
             """
@@ -145,11 +153,19 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
               <td>{name}</td>
               <td>{date}</td>
               <td>{time}</td>
+              <td>{load_in}</td>
               <td>{hall}</td>
               <td>{status}</td>
-              <td>
+              <td>{producer_phone}</td>
+              <td>{technical_phone}</td>
+              <td>{created_at}</td>
+              <td class=\"text-nowrap\">
                 <form method=\"post\" action=\"/ui/events/{event_id}/send-init\" class=\"d-inline\">
                   <button class=\"btn btn-sm btn-outline-primary\" type=\"submit\">Send INIT</button>
+                </form>
+                <a class=\"btn btn-sm btn-outline-secondary ms-1\" href=\"/ui/events/{event_id}/edit\">Edit</a>
+                <form method=\"post\" action=\"/ui/events/{event_id}/delete\" class=\"d-inline ms-1\">
+                  <button class=\"btn btn-sm btn-outline-danger\" type=\"submit\">Delete</button>
                 </form>
               </td>
             </tr>
@@ -157,15 +173,19 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 name=escape(row.get("name") or ""),
                 date=escape(date_display),
                 time=escape(time_display),
+                load_in=escape(load_in_display),
                 hall=escape(hall_label or ""),
                 status=escape(status),
+                producer_phone=escape(producer_phone),
+                technical_phone=escape(technical_phone),
+                created_at=escape(created_at_display),
                 event_id=row.get("event_id"),
             )
         )
 
     table_body = "".join(table_rows) or """
         <tr>
-          <td colspan=\"6\" class=\"text-center text-muted\">No events yet.</td>
+          <td colspan=\"10\" class=\"text-center text-muted\">No events yet.</td>
         </tr>
     """
 
@@ -180,8 +200,12 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 <th scope=\"col\">Name</th>
                 <th scope=\"col\">Date</th>
                 <th scope=\"col\">Show Time</th>
+                <th scope=\"col\">Load In</th>
                 <th scope=\"col\">Hall</th>
                 <th scope=\"col\">Status</th>
+                <th scope=\"col\">Producer Phone</th>
+                <th scope=\"col\">Technical Phone</th>
+                <th scope=\"col\">Created At</th>
                 <th scope=\"col\">Actions</th>
               </tr>
             </thead>
