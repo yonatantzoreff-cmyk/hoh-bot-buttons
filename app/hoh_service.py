@@ -134,7 +134,37 @@ class HOHService:
                 return None
 
     def list_events_for_org(self, org_id: int):
-        return self.events.list_events_for_org(org_id)
+        events = self.events.list_events_for_org(org_id)
+
+        enriched_events = []
+        for event in events:
+            event_dict = dict(event)
+
+            producer_contact_id = event_dict.get("producer_contact_id")
+            if producer_contact_id:
+                producer_contact = self.contacts.get_contact_by_id(
+                    org_id=org_id, contact_id=producer_contact_id
+                )
+                event_dict["producer_phone"] = self._get_contact_value(
+                    producer_contact, "phone"
+                )
+            else:
+                event_dict["producer_phone"] = None
+
+            technical_contact_id = event_dict.get("technical_contact_id")
+            if technical_contact_id:
+                technical_contact = self.contacts.get_contact_by_id(
+                    org_id=org_id, contact_id=technical_contact_id
+                )
+                event_dict["technical_phone"] = self._get_contact_value(
+                    technical_contact, "phone"
+                )
+            else:
+                event_dict["technical_phone"] = None
+
+            enriched_events.append(event_dict)
+
+        return enriched_events
 
     # endregion -----------------------------------------------------------------------
 

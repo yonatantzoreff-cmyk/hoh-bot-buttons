@@ -144,9 +144,13 @@ class EventRepository:
                 e.name,
                 e.event_date,
                 e.show_time,
+                e.load_in_time,
                 e.hall_id,
                 h.name AS hall_name,
-                e.status
+                e.status,
+                e.producer_contact_id,
+                e.technical_contact_id,
+                e.created_at
             FROM events e
             LEFT JOIN halls h ON e.hall_id = h.hall_id
             WHERE e.org_id = :org_id
