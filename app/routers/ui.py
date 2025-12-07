@@ -203,6 +203,7 @@ def _contact_rows(contacts: list[dict]) -> str:
 
     rows = []
     for contact in contacts:
+        contact_id = contact.get("contact_id")
         usage_count = contact.get("event_usage_count") or 0
         is_locked = usage_count > 0
         delete_action = (
@@ -214,6 +215,7 @@ def _contact_rows(contacts: list[dict]) -> str:
             else """
                 <form method=\"post\" action=\"/ui/contacts/{contact_id}/delete\" class=\"d-inline ms-1\" onsubmit=\"return confirm('האם אתה בטוח שברצונך למחוק את איש הקשר?');\">\n                  <button class=\"btn btn-sm btn-outline-danger\" type=\"submit\">Delete</button>\n                </form>
             """
+            .format(contact_id=contact_id)
         )
 
         rows.append(
@@ -231,7 +233,7 @@ def _contact_rows(contacts: list[dict]) -> str:
                 name=escape(contact.get("name") or ""),
                 phone=escape(contact.get("phone") or ""),
                 role=escape((contact.get("role") or "").capitalize()),
-                contact_id=contact.get("contact_id"),
+                contact_id=contact_id,
                 delete_action=delete_action,
             )
         )
