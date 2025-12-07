@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from datetime import date, datetime, time, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
@@ -222,6 +223,14 @@ class HOHService:
         )
 
     def delete_contact(self, org_id: int, contact_id: int) -> None:
+        related_events = self.events.count_events_for_contact(
+            org_id=org_id, contact_id=contact_id
+        )
+        if related_events:
+            raise ValueError(
+                "Cannot delete contact while it is linked to existing events."
+            )
+
         self.events.clear_contact_references(org_id=org_id, contact_id=contact_id)
         self.messages.clear_contact(org_id=org_id, contact_id=contact_id)
         self.conversations.clear_contact(org_id=org_id, contact_id=contact_id)
@@ -880,6 +889,37 @@ class HOHService:
             return
 
     @staticmethod
+    def _parse_contact_from_text(text: str) -> tuple[str, str]:
+        """Try to pull a phone/name combination from free text (CSV, lines, etc)."""
+
+        text = (text or "").replace("\n", " ").strip()
+        if not text:
+            return "", ""
+
+        parts = [part.strip() for part in re.split(r"[;,]", text) if part.strip()]
+
+        phone_candidate = ""
+        name_candidate = ""
+
+        for part in parts:
+            if not phone_candidate and re.search(r"\d", part):
+                phone_candidate = part
+            elif not name_candidate:
+                name_candidate = part
+
+        if not phone_candidate:
+            match = re.search(r"[+]?\d[\d\s()\-]{5,}", text)
+            if match:
+                phone_candidate = match.group(0)
+
+        if not name_candidate:
+            stripped_text = re.sub(r"[+]?\d[\d\s()\-]{5,}", "", text).strip()
+            if stripped_text:
+                name_candidate = stripped_text.split()[0]
+
+        return phone_candidate, name_candidate
+
+    @staticmethod
     def _extract_contact_details(payload: dict, body_text: str) -> tuple[str, str]:
         payload = payload or {}
 
@@ -904,17 +944,18 @@ class HOHService:
             )
         )
 
+        text_phone, text_name = HOHService._parse_contact_from_text(body_text)
         fallback_text = body_text or ""
-        if payload_phone:
-            phone_candidate = payload_phone
-        else:
+
+        phone_candidate = payload_phone or text_phone
+        if not phone_candidate:
             digits = [token for token in fallback_text.split() if token]
             phone_candidate = next(
                 (d for d in digits if any(ch.isdigit() for ch in d)), fallback_text
             )
 
         phone = normalize_phone_to_e164_il(phone_candidate)
-        name = payload_name or fallback_text.strip() or phone
+        name = payload_name or text_name or fallback_text.strip() or phone
 
         return phone, name
 

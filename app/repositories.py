@@ -100,6 +100,22 @@ class EventRepository:
             row = result.mappings().first()
             return row
 
+    def count_events_for_contact(self, org_id: int, contact_id: int) -> int:
+        query = text(
+            """
+            SELECT COUNT(*) AS related_events
+            FROM events
+            WHERE org_id = :org_id
+              AND (producer_contact_id = :contact_id OR technical_contact_id = :contact_id)
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(
+                query, {"org_id": org_id, "contact_id": contact_id}
+            ).scalar_one()
+            return int(result)
+
     def update_event_fields(
         self,
         org_id: int,
@@ -271,10 +287,31 @@ class ContactRepository:
     def list_contacts(self, org_id: int):
         query = text(
             """
-            SELECT contact_id, name, phone, role, created_at
-            FROM contacts
-            WHERE org_id = :org_id
-            ORDER BY role, name
+            WITH event_links AS (
+                SELECT org_id, contact_id, COUNT(*) AS event_usage_count
+                FROM (
+                    SELECT org_id, producer_contact_id AS contact_id
+                    FROM events
+                    WHERE producer_contact_id IS NOT NULL
+                    UNION ALL
+                    SELECT org_id, technical_contact_id AS contact_id
+                    FROM events
+                    WHERE technical_contact_id IS NOT NULL
+                ) linked
+                GROUP BY org_id, contact_id
+            )
+            SELECT
+                c.contact_id,
+                c.name,
+                c.phone,
+                c.role,
+                c.created_at,
+                COALESCE(el.event_usage_count, 0) AS event_usage_count
+            FROM contacts c
+            LEFT JOIN event_links el
+              ON c.org_id = el.org_id AND c.contact_id = el.contact_id
+            WHERE c.org_id = :org_id
+            ORDER BY c.role, c.name
             """
         )
 
