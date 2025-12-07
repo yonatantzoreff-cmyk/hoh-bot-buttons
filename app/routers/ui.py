@@ -1,6 +1,7 @@
 """Minimal Bootstrap-based UI for managing events via Postgres."""
 import logging
 from html import escape
+from datetime import timezone, timedelta
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -12,6 +13,18 @@ from app.hoh_service import HOHService
 router = APIRouter()
 logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory="templates")
+
+LOCAL_TZ = timezone(timedelta(hours=2))
+
+
+def _to_local(dt):
+    if not dt:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    return dt.astimezone(LOCAL_TZ)
 
 
 def _render_page(title: str, body: str) -> str:
@@ -79,7 +92,10 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
             or message.get("received_at")
             or message.get("created_at")
         )
-        timestamp_display = timestamp.strftime("%Y-%m-%d %H:%M") if timestamp else ""
+        timestamp_local = _to_local(timestamp)
+        timestamp_display = (
+            timestamp_local.strftime("%Y-%m-%d %H:%M") if timestamp_local else ""
+        )
 
         rows.append(
             """
@@ -420,9 +436,9 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
     table_rows = []
     for row in events:
         event_date = row.get("event_date")
-        show_time = row.get("show_time")
-        load_in_time = row.get("load_in_time")
-        created_at = row.get("created_at")
+        show_time = _to_local(row.get("show_time"))
+        load_in_time = _to_local(row.get("load_in_time"))
+        created_at = _to_local(row.get("created_at"))
         hall_label = row.get("hall_name") or (
             f"Hall #{row['hall_id']}" if row.get("hall_id") is not None else ""
         )
@@ -435,7 +451,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         status = row.get("status") or ""
         producer_phone = row.get("producer_phone") or ""
         technical_phone = row.get("technical_phone") or ""
-        init_sent_at = row.get("init_sent_at")
+        init_sent_at = _to_local(row.get("init_sent_at"))
         init_sent_display = (
             init_sent_at.strftime("%Y-%m-%d %H:%M") if init_sent_at else ""
         )
