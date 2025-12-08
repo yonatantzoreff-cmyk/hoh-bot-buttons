@@ -535,6 +535,9 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             return f"{name} ({phone})"
         return name or phone or ""
 
+    hall_lookup: dict[str | int, dict] = {}
+    halls: list[dict] = []
+
     table_rows = []
     for row in events:
         hall_id = row.get("hall_id")
