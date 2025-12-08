@@ -564,6 +564,11 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         )
         status = row.get("status") or ""
         delivery_status = row.get("delivery_status")
+        delivery_badge = _status_badge(
+            delivery_status,
+            success_values={"delivered"},
+            failure_values={"failed", "undelivered"},
+        )
         producer_contact = contact_display(
             row.get("producer_name"), row.get("producer_phone")
         )
