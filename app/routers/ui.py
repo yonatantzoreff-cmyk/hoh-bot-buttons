@@ -62,6 +62,27 @@ def _contact_label(name: str | None, phone: str | None) -> str:
     return "Unknown"
 
 
+def _status_badge(
+    status: str | None,
+    *,
+    success_values: set[str] | None = None,
+    failure_values: set[str] | None = None,
+) -> str:
+    normalized = (status or "unknown").strip()
+    label = normalized or "unknown"
+    status_lower = label.lower()
+    success_set = success_values or {"delivered"}
+    failure_set = failure_values or {"failed", "undelivered"}
+
+    css_class = "text-bg-secondary"
+    if status_lower in success_set:
+        css_class = "text-bg-success"
+    elif status_lower in failure_set:
+        css_class = "text-bg-danger"
+
+    return f'<span class="badge {css_class}">{escape(label)}</span>'
+
+
 @router.get("/ui/messages", response_class=HTMLResponse)
 async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLResponse:
     messages = hoh.list_messages_with_events(org_id=1)
@@ -101,11 +122,13 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
         timestamp_display = (
             timestamp_local.strftime("%Y-%m-%d %H:%M") if timestamp_local else ""
         )
+        status_badge = _status_badge(message.get("delivery_status"))
 
         event_group["messages"].append(
             {
                 "contact": contact_label,
                 "direction": direction,
+                "status_badge": status_badge,
                 "body": body,
                 "timestamp_display": timestamp_display,
             }
@@ -131,6 +154,7 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
                     <tr>
                       <td class=\"text-break\">{contact}</td>
                       <td><span class=\"badge text-bg-{direction_class}\">{direction}</span></td>
+                      <td>{status_badge}</td>
                       <td class=\"text-break\">{body}</td>
                       <td class=\"text-nowrap\">{timestamp}</td>
                     </tr>
@@ -138,6 +162,7 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
                         contact=escape(message.get("contact") or ""),
                         direction_class="primary" if direction == "outgoing" else "secondary",
                         direction=escape(direction.title() if direction else ""),
+                        status_badge=message.get("status_badge") or _status_badge(None),
                         body=escape(message.get("body") or ""),
                         timestamp=escape(message.get("timestamp_display") or ""),
                     )
@@ -145,24 +170,41 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
 
             table_body = "".join(rows) or """
                 <tr>
-                  <td colspan=\"4\" class=\"text-center text-muted\">No messages for this event.</td>
+                  <td colspan=\"5\" class=\"text-center text-muted\">No messages for this event.</td>
                 </tr>
             """
 
+
+
             accordion_items.append(
                 """
-                <div class=\"accordion-item\">
-                  <h2 class=\"accordion-header\" id=\"{heading_id}\">
-                    <button class=\"accordion-button{collapsed}\" type=\"button\" data-bs-toggle=\"collapse\" data-bs-target=\"#{collapse_id}\" aria-expanded=\"{expanded}\" aria-controls=\"{collapse_id}\">
+                <div class="accordion-item">
+                  <h2 class="accordion-header" id="{heading_id}">
+                    <button class="accordion-button{collapsed}" type="button" data-bs-toggle="collapse" data-bs-target="#{collapse_id}" aria-expanded="{expanded}" aria-controls="{collapse_id}">
                       <div>
-                        <div class=\"fw-semibold\">{event_name} (קוד אירוע: {event_code})</div>
-                        <div class=\"text-muted small\">{subtitle}</div>
+                        <div class="fw-semibold">{event_name} (קוד אירוע: {event_code})</div>
+                        <div class="text-muted small">{subtitle}</div>
                       </div>
                     </button>
                   </h2>
-                  <div id=\"{collapse_id}\" class=\"accordion-collapse collapse{show}\" aria-labelledby=\"{heading_id}\" data-bs-parent=\"#messagesAccordion\">
-                    <div class=\"accordion-body p-0\">
-                      <div class=\"table-responsive mb-0\">\n                        <table class=\"table table-striped align-middle mb-0\">\n                          <thead class=\"table-light\">\n                            <tr>\n                              <th scope=\"col\">Contact</th>\n                              <th scope=\"col\">Direction</th>\n                              <th scope=\"col\">Body</th>\n                              <th scope=\"col\">Timestamp</th>\n                            </tr>\n                          </thead>\n                          <tbody>\n                            {table_body}\n                          </tbody>\n                        </table>\n                      </div>
+                  <div id="{collapse_id}" class="accordion-collapse collapse{show}" aria-labelledby="{heading_id}" data-bs-parent="#messagesAccordion">
+                    <div class="accordion-body p-0">
+                      <div class="table-responsive mb-0">
+                        <table class="table table-striped align-middle mb-0">
+                          <thead class="table-light">
+                            <tr>
+                              <th scope="col">Contact</th>
+                              <th scope="col">Direction</th>
+                              <th scope="col">Status</th>
+                              <th scope="col">Body</th>
+                              <th scope="col">Timestamp</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {table_body}
+                          </tbody>
+                        </table>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -178,7 +220,6 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
                     table_body=table_body,
                 )
             )
-
         table = """
         <div class=\"accordion\" id=\"messagesAccordion\">
           {items}
@@ -505,12 +546,14 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             created_at.strftime("%Y-%m-%d %H:%M") if created_at else ""
         )
         status = row.get("status") or ""
+        delivery_status = row.get("delivery_status")
         producer_phone = row.get("producer_phone") or ""
         technical_phone = row.get("technical_phone") or ""
         init_sent_at = _to_local(row.get("init_sent_at"))
         init_sent_display = (
             init_sent_at.strftime("%Y-%m-%d %H:%M") if init_sent_at else ""
         )
+        delivery_badge = _status_badge(delivery_status)
         whatsapp_btn_class = (
             "btn btn-sm btn-primary" if init_sent_at else "btn btn-sm btn-success"
         )
@@ -529,6 +572,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
               <td>{load_in}</td>
               <td>{hall}</td>
               <td>{status}</td>
+              <td>{delivery_status}</td>
               <td class=\"text-break\">{notes}</td>
               <td>{producer_phone}</td>
               <td>{technical_phone}</td>
@@ -551,6 +595,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 load_in=escape(load_in_display),
                 hall=escape(hall_label or ""),
                 status=escape(status),
+                delivery_status=delivery_badge,
                 notes=escape(row.get("notes") or ""),
                 producer_phone=escape(producer_phone),
                 technical_phone=escape(technical_phone),
@@ -563,7 +608,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
 
     table_body = "".join(table_rows) or """
         <tr>
-          <td colspan=\"11\" class=\"text-center text-muted\">No events yet.</td>
+          <td colspan=\"12\" class=\"text-center text-muted\">No events yet.</td>
         </tr>
     """
 
@@ -581,6 +626,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 <th scope=\"col\">Load In</th>
                 <th scope=\"col\">Hall</th>
                 <th scope=\"col\">Status</th>
+                <th scope=\"col\">Delivery Status</th>
                 <th scope=\"col\">Notes</th>
                 <th scope=\"col\">Producer Phone</th>
                 <th scope=\"col\">Technical Phone</th>
