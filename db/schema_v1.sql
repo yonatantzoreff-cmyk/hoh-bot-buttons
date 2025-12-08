@@ -145,6 +145,7 @@ CREATE TABLE messages (
     body             TEXT   NOT NULL,
     raw_payload      JSONB,
     whatsapp_msg_sid TEXT,
+    delivery_status  TEXT,
     sent_at          TIMESTAMPTZ,
     received_at      TIMESTAMPTZ,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
