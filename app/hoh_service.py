@@ -145,26 +145,32 @@ class HOHService:
             event_id = event_dict.get("event_id")
 
             producer_contact_id = event_dict.get("producer_contact_id")
-            if producer_contact_id:
-                producer_contact = self.contacts.get_contact_by_id(
-                    org_id=org_id, contact_id=producer_contact_id
-                )
-                event_dict["producer_phone"] = self._get_contact_value(
-                    producer_contact, "phone"
-                )
-            else:
-                event_dict["producer_phone"] = None
+            producer_contact = (
+                self.contacts.get_contact_by_id(org_id=org_id, contact_id=producer_contact_id)
+                if producer_contact_id
+                else None
+            )
+            event_dict["producer_phone"] = self._get_contact_value(
+                producer_contact, "phone"
+            )
+            event_dict["producer_name"] = self._get_contact_value(
+                producer_contact, "name"
+            )
 
             technical_contact_id = event_dict.get("technical_contact_id")
-            if technical_contact_id:
-                technical_contact = self.contacts.get_contact_by_id(
+            technical_contact = (
+                self.contacts.get_contact_by_id(
                     org_id=org_id, contact_id=technical_contact_id
                 )
-                event_dict["technical_phone"] = self._get_contact_value(
-                    technical_contact, "phone"
-                )
-            else:
-                event_dict["technical_phone"] = None
+                if technical_contact_id
+                else None
+            )
+            event_dict["technical_phone"] = self._get_contact_value(
+                technical_contact, "phone"
+            )
+            event_dict["technical_name"] = self._get_contact_value(
+                technical_contact, "name"
+            )
 
             if event_id:
                 event_dict["init_sent_at"] = self.messages.get_last_sent_at_for_content(

@@ -530,6 +530,11 @@ async def ui_send_init(
 async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLResponse:
     events = hoh.list_events_for_org(org_id=1)
 
+    def contact_display(name: str | None, phone: str | None) -> str:
+        if name and phone:
+            return f"{name} ({phone})"
+        return name or phone or ""
+
     table_rows = []
     for row in events:
         event_date = row.get("event_date")
@@ -547,8 +552,12 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         )
         status = row.get("status") or ""
         delivery_status = row.get("delivery_status")
-        producer_phone = row.get("producer_phone") or ""
-        technical_phone = row.get("technical_phone") or ""
+        producer_contact = contact_display(
+            row.get("producer_name"), row.get("producer_phone")
+        )
+        technical_contact = contact_display(
+            row.get("technical_name"), row.get("technical_phone")
+        )
         init_sent_at = _to_local(row.get("init_sent_at"))
         init_sent_display = (
             init_sent_at.strftime("%Y-%m-%d %H:%M") if init_sent_at else ""
@@ -574,8 +583,8 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
               <td>{status}</td>
               <td>{delivery_status}</td>
               <td class=\"text-break\">{notes}</td>
-              <td>{producer_phone}</td>
-              <td>{technical_phone}</td>
+              <td>{producer_contact}</td>
+              <td>{technical_contact}</td>
               <td>{created_at}</td>
               <td class=\"text-nowrap\">
                 <form method=\"post\" action=\"/ui/events/{event_id}/send-init\" class=\"d-inline\">
@@ -597,8 +606,8 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 status=escape(status),
                 delivery_status=delivery_badge,
                 notes=escape(row.get("notes") or ""),
-                producer_phone=escape(producer_phone),
-                technical_phone=escape(technical_phone),
+                producer_contact=escape(producer_contact),
+                technical_contact=escape(technical_contact),
                 created_at=escape(created_at_display),
                 event_id=row.get("event_id"),
                 whatsapp_btn_class=whatsapp_btn_class,
@@ -628,8 +637,8 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 <th scope=\"col\">Status</th>
                 <th scope=\"col\">Delivery Status</th>
                 <th scope=\"col\">Notes</th>
-                <th scope=\"col\">Producer Phone</th>
-                <th scope=\"col\">Technical Phone</th>
+                <th scope=\"col\">Producer Contact</th>
+                <th scope=\"col\">Technical Contact</th>
                 <th scope=\"col\">Created At</th>
                 <th scope=\"col\">Actions</th>
               </tr>
