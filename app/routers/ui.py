@@ -535,22 +535,12 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             return f"{name} ({phone})"
         return name or phone or ""
 
-    hall_lookup: dict[str | int, dict] = {}
-    halls: list[dict] = []
-
     table_rows = []
     for row in events:
         hall_id = row.get("hall_id")
-        hall_key: str | int = hall_id if hall_id is not None else "unassigned"
         hall_label = row.get("hall_name") or (
             f"Hall #{hall_id}" if hall_id is not None else "Unassigned Hall"
         )
-        hall_group = hall_lookup.get(hall_key)
-
-        if not hall_group:
-            hall_group = {"hall_label": hall_label, "events": []}
-            hall_lookup[hall_key] = hall_group
-            halls.append(hall_group)
 
         event_date = row.get("event_date")
         show_time = _to_local(row.get("show_time"))
@@ -631,15 +621,11 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             )
         )
 
-    if not halls:
-        content = '<div class="alert alert-info">No events yet.</div>'
-    else:
-        accordion_items = []
-        for idx, hall in enumerate(halls):
-            heading_id = f"hallHeading{idx}"
-            collapse_id = f"hallCollapse{idx}"
+    table_body = "".join(table_rows) or (
+        "<tr><td colspan=12 class='text-center text-muted'>No events yet.</td></tr>"
+    )
 
-    table = f"""
+    content = f"""
     <div class=\"card\">
       <div class=\"card-header bg-secondary text-white\">Events</div>
       <div class=\"card-body\">
@@ -666,7 +652,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             </tbody>
           </table>
         </div>
-        """.format(items="".join(accordion_items))
+        """
 
     html = _render_page("Events", content)
     return HTMLResponse(content=html)
