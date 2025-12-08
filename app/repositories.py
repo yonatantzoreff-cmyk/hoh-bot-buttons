@@ -251,6 +251,25 @@ class EventRepository:
     def list_events_for_org(self, org_id: int):
         query = text(
             """
+            WITH latest_delivery AS (
+                SELECT DISTINCT ON (mdl.message_id)
+                    mdl.message_id,
+                    mdl.status,
+                    mdl.created_at
+                FROM message_delivery_log mdl
+                WHERE mdl.org_id = :org_id
+                ORDER BY mdl.message_id, mdl.created_at DESC, mdl.delivery_id DESC
+            ),
+            latest_event_delivery AS (
+                SELECT DISTINCT ON (m.event_id)
+                    m.event_id,
+                    ld.status AS delivery_status,
+                    COALESCE(ld.created_at, m.sent_at, m.created_at) AS status_at
+                FROM messages m
+                LEFT JOIN latest_delivery ld ON ld.message_id = m.message_id
+                WHERE m.org_id = :org_id AND m.direction = 'outgoing'
+                ORDER BY m.event_id, COALESCE(ld.created_at, m.sent_at, m.created_at) DESC, m.message_id DESC
+            )
             SELECT
                 e.event_id,
                 e.name,
@@ -262,9 +281,11 @@ class EventRepository:
                 e.status,
                 e.producer_contact_id,
                 e.technical_contact_id,
-                e.created_at
+                e.created_at,
+                led.delivery_status
             FROM events e
             LEFT JOIN halls h ON e.hall_id = h.hall_id
+            LEFT JOIN latest_event_delivery led ON led.event_id = e.event_id
             WHERE e.org_id = :org_id
             ORDER BY e.created_at ASC, e.event_id ASC
             """
@@ -789,6 +810,65 @@ class MessageRepository:
         with get_session() as session:
             session.execute(query, {"org_id": org_id, "contact_id": contact_id})
 
+    def log_delivery_status(
+        self,
+        org_id: int,
+        message_id: int,
+        status: str,
+        error_code: Optional[str] = None,
+        error_message: Optional[str] = None,
+        provider_payload: Optional[dict | str] = None,
+        provider: str = "twilio",
+    ) -> None:
+        payload_value = provider_payload
+        if isinstance(provider_payload, dict):
+            payload_value = json.dumps(provider_payload, ensure_ascii=False)
+
+        query = text(
+            """
+            INSERT INTO message_delivery_log (
+                org_id, message_id, status, error_code, error_message,
+                provider, provider_payload, created_at
+            )
+            VALUES (
+                :org_id, :message_id, :status, :error_code, :error_message,
+                :provider, :provider_payload, :now
+            )
+            """
+        )
+
+        with get_session() as session:
+            session.execute(
+                query,
+                {
+                    "org_id": org_id,
+                    "message_id": message_id,
+                    "status": status,
+                    "error_code": error_code,
+                    "error_message": error_message,
+                    "provider": provider,
+                    "provider_payload": payload_value,
+                    "now": datetime.utcnow(),
+                },
+            )
+
+    def get_message_by_whatsapp_sid(self, org_id: int, whatsapp_sid: str):
+        query = text(
+            """
+            SELECT *
+            FROM messages
+            WHERE org_id = :org_id AND whatsapp_msg_sid = :whatsapp_sid
+            ORDER BY message_id DESC
+            LIMIT 1
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(
+                query, {"org_id": org_id, "whatsapp_sid": whatsapp_sid}
+            )
+            return result.mappings().first()
+
     def find_due_followups(self, org_id: int, now: datetime) -> list[dict]:
         """
         Return a list of followups that should be sent now based on followup_rules
@@ -925,6 +1005,14 @@ class MessageRepository:
     def list_messages_with_events(self, org_id: int) -> list[dict]:
         query = text(
             """
+            WITH latest_delivery AS (
+                SELECT DISTINCT ON (mdl.message_id)
+                    mdl.message_id,
+                    mdl.status
+                FROM message_delivery_log mdl
+                WHERE mdl.org_id = :org_id
+                ORDER BY mdl.message_id, mdl.created_at DESC, mdl.delivery_id DESC
+            )
             SELECT
                 m.message_id,
                 m.event_id,
@@ -936,11 +1024,13 @@ class MessageRepository:
                 m.sent_at,
                 m.received_at,
                 m.created_at,
+                ld.status AS delivery_status,
                 c.name AS contact_name,
                 c.phone AS contact_phone
             FROM messages m
-            LEFT JOIN events e ON m.event_id = e.event_id
+            LEFT JOIN events e ON m.event_id = e.event_id AND e.org_id = m.org_id
             LEFT JOIN contacts c ON m.contact_id = c.contact_id
+            LEFT JOIN latest_delivery ld ON ld.message_id = m.message_id
             WHERE m.org_id = :org_id
             ORDER BY COALESCE(e.created_at, m.created_at) ASC,
                      COALESCE(m.sent_at, m.received_at, m.created_at) ASC,
