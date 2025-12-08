@@ -71,7 +71,7 @@ def _status_badge(
     normalized = (status or "unknown").strip()
     label = normalized or "unknown"
     status_lower = label.lower()
-    success_set = success_values or {"delivered"}
+    success_set = success_values or {"delivered", "read"}
     failure_set = failure_values or {"failed", "undelivered"}
 
     css_class = "text-bg-secondary"

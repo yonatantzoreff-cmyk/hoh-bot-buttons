@@ -415,10 +415,12 @@ class HOHService:
         )
 
         whatsapp_sid = getattr(twilio_response, "sid", None)
+        twilio_status = getattr(twilio_response, "status", None)
         raw_payload = {
             "content_sid": CONTENT_SID_INIT,
             "variables": init_vars,
             "twilio_message_sid": whatsapp_sid,
+            "twilio_status": twilio_status,
         }
 
         message_id = self.messages.log_message(
@@ -434,7 +436,7 @@ class HOHService:
         self.messages.log_delivery_status(
             org_id=org_id,
             message_id=message_id,
-            status="sent",
+            status=(twilio_status or "sent"),
             provider_payload=raw_payload,
         )
 
@@ -463,10 +465,12 @@ class HOHService:
         )
 
         whatsapp_sid = getattr(twilio_resp, "sid", None)
+        twilio_status = getattr(twilio_resp, "status", None)
         raw_payload = {
             "content_sid": CONTENT_SID_RANGES,
             "variables": variables,
             "twilio_message_sid": whatsapp_sid,
+            "twilio_status": twilio_status,
         }
 
         message_id = self.messages.log_message(
@@ -482,7 +486,7 @@ class HOHService:
         self.messages.log_delivery_status(
             org_id=org_id,
             message_id=message_id,
-            status="sent",
+            status=(twilio_status or "sent"),
             provider_payload=raw_payload,
         )
 
@@ -524,6 +528,7 @@ class HOHService:
             content_variables=variables,
         )
         whatsapp_sid = getattr(twilio_resp, "sid", None)
+        twilio_status = getattr(twilio_resp, "status", None)
 
         pending_fields = (conversation or {}).get("pending_data_fields") or {}
         pending_fields.update({"last_range_id": range_id, "last_slots": slots})
@@ -537,6 +542,7 @@ class HOHService:
             "content_sid": CONTENT_SID_HALVES,
             "variables": variables,
             "twilio_message_sid": whatsapp_sid,
+            "twilio_status": twilio_status,
         }
 
         message_id = self.messages.log_message(
@@ -552,7 +558,7 @@ class HOHService:
         self.messages.log_delivery_status(
             org_id=org_id,
             message_id=message_id,
-            status="sent",
+            status=(twilio_status or "sent"),
             provider_payload=raw_payload,
         )
 
@@ -592,6 +598,7 @@ class HOHService:
             content_variables=variables,
         )
         whatsapp_sid = getattr(twilio_resp, "sid", None)
+        twilio_status = getattr(twilio_resp, "status", None)
 
         conversation = self.conversations.get_open_conversation(
             org_id=org_id, event_id=event_id, contact_id=contact_id
@@ -608,6 +615,7 @@ class HOHService:
             "content_sid": CONTENT_SID_CONFIRM,
             "variables": variables,
             "twilio_message_sid": whatsapp_sid,
+            "twilio_status": twilio_status,
         }
 
         message_id = self.messages.log_message(
@@ -623,7 +631,7 @@ class HOHService:
         self.messages.log_delivery_status(
             org_id=org_id,
             message_id=message_id,
-            status="sent",
+            status=(twilio_status or "sent"),
             provider_payload=raw_payload,
         )
 
@@ -660,12 +668,14 @@ class HOHService:
             )
 
             whatsapp_sid = getattr(twilio_response, "sid", None)
+            twilio_status = getattr(twilio_response, "status", None)
             body = f"Followup sent via template {template.get('name') or template.get('template_id')}"
             raw_payload = {
                 "content_sid": content_sid,
                 "variables": variables,
                 "followup_rule_id": item.get("rule_id"),
                 "twilio_message_sid": whatsapp_sid,
+                "twilio_status": twilio_status,
             }
 
             message_id = self.messages.log_message(
@@ -684,7 +694,7 @@ class HOHService:
             self.messages.log_delivery_status(
                 org_id=org_id,
                 message_id=message_id,
-                status="sent",
+                status=(twilio_status or "sent"),
                 provider_payload=raw_payload,
             )
 
@@ -710,6 +720,7 @@ class HOHService:
         status = (
             payload.get("MessageStatus")
             or payload.get("SmsStatus")
+            or payload.get("ChannelStatus")
             or payload.get("messagestatus")
         )
         message_sid = (
@@ -1182,11 +1193,13 @@ class HOHService:
                 body=thanks_body,
             )
             whatsapp_sid = getattr(twilio_resp, "sid", None) if twilio_resp else None
+            twilio_status = getattr(twilio_resp, "status", None) if twilio_resp else None
 
             raw_payload = {
                 "type": "contact_acknowledgment",
                 "body": thanks_body,
                 "twilio_message_sid": whatsapp_sid,
+                "twilio_status": twilio_status,
             }
             message_id = self.messages.log_message(
                 org_id=org_id,
@@ -1202,7 +1215,7 @@ class HOHService:
             self.messages.log_delivery_status(
                 org_id=org_id,
                 message_id=message_id,
-                status="sent",
+                status=(twilio_status or "sent"),
                 provider_payload=raw_payload,
             )
 
@@ -1245,11 +1258,13 @@ class HOHService:
             content_variables={},
         )
         whatsapp_sid = getattr(twilio_resp, "sid", None)
+        twilio_status = getattr(twilio_resp, "status", None)
 
         raw_payload = {
             "content_sid": CONTENT_SID_NOT_SURE,
             "variables": {},
             "twilio_message_sid": whatsapp_sid,
+            "twilio_status": twilio_status,
         }
 
         message_id = self.messages.log_message(
@@ -1265,7 +1280,7 @@ class HOHService:
         self.messages.log_delivery_status(
             org_id=org_id,
             message_id=message_id,
-            status="sent",
+            status=(twilio_status or "sent"),
             provider_payload=raw_payload,
         )
 
@@ -1290,6 +1305,7 @@ class HOHService:
             content_variables={},
         )
         whatsapp_sid = getattr(twilio_resp, "sid", None)
+        twilio_status = getattr(twilio_resp, "status", None)
 
         conversation = self.conversations.get_open_conversation(
             org_id=org_id, event_id=event_id, contact_id=contact_id
@@ -1306,6 +1322,7 @@ class HOHService:
             "content_sid": CONTENT_SID_CONTACT,
             "variables": {},
             "twilio_message_sid": whatsapp_sid,
+            "twilio_status": twilio_status,
         }
 
         message_id = self.messages.log_message(
@@ -1321,7 +1338,7 @@ class HOHService:
         self.messages.log_delivery_status(
             org_id=org_id,
             message_id=message_id,
-            status="sent",
+            status=(twilio_status or "sent"),
             provider_payload=raw_payload,
         )
 
@@ -1366,11 +1383,13 @@ class HOHService:
             if to_phone:
                 twilio_resp = twilio_client.send_text(to=to_phone, body=thank_you_body)
                 whatsapp_sid = getattr(twilio_resp, "sid", None) if twilio_resp else None
+                twilio_status = getattr(twilio_resp, "status", None) if twilio_resp else None
 
                 raw_payload = {
                     "body": thank_you_body,
                     "type": "load_in_confirmation_followup",
                     "twilio_message_sid": whatsapp_sid,
+                    "twilio_status": twilio_status,
                 }
 
                 message_id = self.messages.log_message(
@@ -1386,7 +1405,7 @@ class HOHService:
                 self.messages.log_delivery_status(
                     org_id=org_id,
                     message_id=message_id,
-                    status="sent",
+                    status=(twilio_status or "sent"),
                     provider_payload=raw_payload,
                 )
 
