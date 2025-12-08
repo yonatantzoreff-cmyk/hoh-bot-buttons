@@ -1,21 +1,43 @@
 # app/twilio_client.py
 from __future__ import annotations
-import os
 import json
 import logging
+import os
 from typing import Optional, Dict, Any
+from urllib.parse import urljoin
 from twilio.rest import Client
 
 # ENV (Render/Dotenv)
 ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 DEFAULT_MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")  # MGxxxxxxxx
+STATUS_CALLBACK_URL = os.getenv("TWILIO_STATUS_CALLBACK_URL")
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL") or os.getenv("RENDER_EXTERNAL_URL")
+STATUS_CALLBACK_PATH = os.getenv("TWILIO_STATUS_CALLBACK_PATH", "/twilio-status")
 
 if not ACCOUNT_SID or not AUTH_TOKEN:
     raise RuntimeError("Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN env vars")
 
 logger = logging.getLogger(__name__)
 client = Client(ACCOUNT_SID, AUTH_TOKEN)
+
+
+def _build_status_callback_url() -> Optional[str]:
+    """Return the absolute status callback URL if configured.
+
+    Preference order:
+    1) TWILIO_STATUS_CALLBACK_URL – full URL
+    2) PUBLIC_BASE_URL/RENDER_EXTERNAL_URL + TWILIO_STATUS_CALLBACK_PATH
+    """
+
+    if STATUS_CALLBACK_URL:
+        return STATUS_CALLBACK_URL
+
+    if PUBLIC_BASE_URL:
+        return urljoin(PUBLIC_BASE_URL.rstrip("/") + "/", STATUS_CALLBACK_PATH.lstrip("/"))
+
+    logger.warning("Status callback URL not configured; delivery callbacks will be skipped.")
+    return None
 
 
 def _normalize_to(to_number: str, channel: str = "whatsapp") -> str:
@@ -63,6 +85,10 @@ def send_text(
         "messaging_service_sid": msid,
         "body": body,
     }
+
+    status_callback = _build_status_callback_url()
+    if status_callback:
+        payload["status_callback"] = status_callback
     return client.messages.create(**payload)
 
 
@@ -85,6 +111,10 @@ def send_confirmation_message(to_number: str, event_date: str, setup_time: str, 
         "to": _normalize_to(to_number, channel="whatsapp"),
         "body": body,
     }
+
+    status_callback = _build_status_callback_url()
+    if status_callback:
+        params["status_callback"] = status_callback
 
     if messaging_service_sid:
         params["messaging_service_sid"] = messaging_service_sid
@@ -132,4 +162,8 @@ def send_content_message(
         "content_sid": content_sid,
         "content_variables": content_variables_json,
     }
+
+    status_callback = _build_status_callback_url()
+    if status_callback:
+        payload["status_callback"] = status_callback
     return client.messages.create(**payload)
