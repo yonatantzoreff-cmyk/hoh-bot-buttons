@@ -144,6 +144,9 @@ class HOHService:
             event_dict = dict(event)
             event_id = event_dict.get("event_id")
 
+            # Ensure UI receives any stored notes for display
+            event_dict["notes"] = event_dict.get("notes")
+
             producer_contact_id = event_dict.get("producer_contact_id")
             if producer_contact_id:
                 producer_contact = self.contacts.get_contact_by_id(

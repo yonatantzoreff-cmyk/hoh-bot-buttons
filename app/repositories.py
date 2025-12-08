@@ -279,6 +279,7 @@ class EventRepository:
                 e.hall_id,
                 h.name AS hall_name,
                 e.status,
+                e.notes,
                 e.producer_contact_id,
                 e.technical_contact_id,
                 e.created_at,
