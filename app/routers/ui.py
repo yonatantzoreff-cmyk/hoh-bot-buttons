@@ -537,13 +537,22 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
 
     table_rows = []
     for row in events:
+        hall_id = row.get("hall_id")
+        hall_key: str | int = hall_id if hall_id is not None else "unassigned"
+        hall_label = row.get("hall_name") or (
+            f"Hall #{hall_id}" if hall_id is not None else "Unassigned Hall"
+        )
+        hall_group = hall_lookup.get(hall_key)
+
+        if not hall_group:
+            hall_group = {"hall_label": hall_label, "events": []}
+            hall_lookup[hall_key] = hall_group
+            halls.append(hall_group)
+
         event_date = row.get("event_date")
         show_time = _to_local(row.get("show_time"))
         load_in_time = _to_local(row.get("load_in_time"))
         created_at = _to_local(row.get("created_at"))
-        hall_label = row.get("hall_name") or (
-            f"Hall #{row['hall_id']}" if row.get("hall_id") is not None else ""
-        )
         date_display = event_date.strftime("%Y-%m-%d") if event_date else ""
         time_display = show_time.strftime("%H:%M") if show_time else ""
         load_in_display = load_in_time.strftime("%H:%M") if load_in_time else ""
@@ -562,7 +571,6 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         init_sent_display = (
             init_sent_at.strftime("%Y-%m-%d %H:%M") if init_sent_at else ""
         )
-        delivery_badge = _status_badge(delivery_status)
         whatsapp_btn_class = (
             "btn btn-sm btn-primary" if init_sent_at else "btn btn-sm btn-success"
         )
@@ -615,11 +623,13 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             )
         )
 
-    table_body = "".join(table_rows) or """
-        <tr>
-          <td colspan=\"12\" class=\"text-center text-muted\">No events yet.</td>
-        </tr>
-    """
+    if not halls:
+        content = '<div class="alert alert-info">No events yet.</div>'
+    else:
+        accordion_items = []
+        for idx, hall in enumerate(halls):
+            heading_id = f"hallHeading{idx}"
+            collapse_id = f"hallCollapse{idx}"
 
     table = f"""
     <div class=\"card\">
@@ -648,11 +658,9 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
-    """
+        """.format(items="".join(accordion_items))
 
-    html = _render_page("Events", table)
+    html = _render_page("Events", content)
     return HTMLResponse(content=html)
 
 
