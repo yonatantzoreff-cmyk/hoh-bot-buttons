@@ -421,7 +421,7 @@ class HOHService:
             "twilio_message_sid": whatsapp_sid,
         }
 
-        self.messages.log_message(
+        message_id = self.messages.log_message(
             org_id=org_id,
             conversation_id=conversation_id,
             event_id=event_id,
@@ -430,6 +430,12 @@ class HOHService:
             body=f"INIT sent for event {event_id}",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
+        )
+        self.messages.log_delivery_status(
+            org_id=org_id,
+            message_id=message_id,
+            status="sent",
+            provider_payload=raw_payload,
         )
 
     async def send_ranges_for_event(self, org_id: int, event_id: int, contact_id: int) -> None:
@@ -463,7 +469,7 @@ class HOHService:
             "twilio_message_sid": whatsapp_sid,
         }
 
-        self.messages.log_message(
+        message_id = self.messages.log_message(
             org_id=org_id,
             conversation_id=conversation_id,
             event_id=event_id,
@@ -472,6 +478,12 @@ class HOHService:
             body="Sent ranges list",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
+        )
+        self.messages.log_delivery_status(
+            org_id=org_id,
+            message_id=message_id,
+            status="sent",
+            provider_payload=raw_payload,
         )
 
     async def send_halves_for_event_range(
@@ -527,7 +539,7 @@ class HOHService:
             "twilio_message_sid": whatsapp_sid,
         }
 
-        self.messages.log_message(
+        message_id = self.messages.log_message(
             org_id=org_id,
             conversation_id=conversation_id,
             event_id=event_id,
@@ -536,6 +548,12 @@ class HOHService:
             body=f"Sent halves for range {range_id}",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
+        )
+        self.messages.log_delivery_status(
+            org_id=org_id,
+            message_id=message_id,
+            status="sent",
+            provider_payload=raw_payload,
         )
 
     async def send_confirm_for_slot(
@@ -592,7 +610,7 @@ class HOHService:
             "twilio_message_sid": whatsapp_sid,
         }
 
-        self.messages.log_message(
+        message_id = self.messages.log_message(
             org_id=org_id,
             conversation_id=conversation_id,
             event_id=event_id,
@@ -601,6 +619,12 @@ class HOHService:
             body=f"Sent confirm for slot {slot_label}",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
+        )
+        self.messages.log_delivery_status(
+            org_id=org_id,
+            message_id=message_id,
+            status="sent",
+            provider_payload=raw_payload,
         )
 
     async def run_due_followups(self, org_id: int = 1) -> int:
@@ -644,7 +668,7 @@ class HOHService:
                 "twilio_message_sid": whatsapp_sid,
             }
 
-            self.messages.log_message(
+            message_id = self.messages.log_message(
                 org_id=org_id,
                 conversation_id=item.get("conversation_id"),
                 event_id=item.get("event_id"),
@@ -655,6 +679,13 @@ class HOHService:
                 whatsapp_msg_sid=whatsapp_sid,
                 sent_at=now,
                 raw_payload=raw_payload,
+            )
+
+            self.messages.log_delivery_status(
+                org_id=org_id,
+                message_id=message_id,
+                status="sent",
+                provider_payload=raw_payload,
             )
 
             processed += 1
@@ -676,6 +707,34 @@ class HOHService:
         }
 
     async def handle_whatsapp_webhook(self, payload: dict, org_id: int = 1) -> None:
+        status = (
+            payload.get("MessageStatus")
+            or payload.get("SmsStatus")
+            or payload.get("messagestatus")
+        )
+        message_sid = (
+            payload.get("MessageSid")
+            or payload.get("SmsMessageSid")
+            or payload.get("messagesid")
+        )
+
+        if status and message_sid:
+            message = self.messages.get_message_by_whatsapp_sid(
+                org_id=org_id, whatsapp_sid=message_sid
+            )
+            if message:
+                error_code = payload.get("ErrorCode") or payload.get("error_code")
+                error_message = payload.get("ErrorMessage") or payload.get("error_message")
+                self.messages.log_delivery_status(
+                    org_id=org_id,
+                    message_id=message.get("message_id"),
+                    status=str(status).lower(),
+                    error_code=str(error_code) if error_code is not None else None,
+                    error_message=error_message,
+                    provider_payload=payload,
+                )
+            return
+
         def _looks_like_action_id(value: str) -> bool:
             prefixes = (
                 "CHOOSE_TIME_EVT_",
@@ -1129,7 +1188,7 @@ class HOHService:
                 "body": thanks_body,
                 "twilio_message_sid": whatsapp_sid,
             }
-            self.messages.log_message(
+            message_id = self.messages.log_message(
                 org_id=org_id,
                 conversation_id=conversation_id,
                 event_id=event_id,
@@ -1138,6 +1197,13 @@ class HOHService:
                 body=thanks_body,
                 whatsapp_msg_sid=whatsapp_sid,
                 raw_payload=raw_payload,
+            )
+
+            self.messages.log_delivery_status(
+                org_id=org_id,
+                message_id=message_id,
+                status="sent",
+                provider_payload=raw_payload,
             )
 
         self.conversations.update_pending_data_fields(
@@ -1186,7 +1252,7 @@ class HOHService:
             "twilio_message_sid": whatsapp_sid,
         }
 
-        self.messages.log_message(
+        message_id = self.messages.log_message(
             org_id=org_id,
             conversation_id=conversation_id,
             event_id=event_id,
@@ -1195,6 +1261,12 @@ class HOHService:
             body="Sent NOT SURE message",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
+        )
+        self.messages.log_delivery_status(
+            org_id=org_id,
+            message_id=message_id,
+            status="sent",
+            provider_payload=raw_payload,
         )
 
     async def _handle_not_contact(
@@ -1236,7 +1308,7 @@ class HOHService:
             "twilio_message_sid": whatsapp_sid,
         }
 
-        self.messages.log_message(
+        message_id = self.messages.log_message(
             org_id=org_id,
             conversation_id=conversation_id,
             event_id=event_id,
@@ -1245,6 +1317,12 @@ class HOHService:
             body="Sent NOT CONTACT template",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
+        )
+        self.messages.log_delivery_status(
+            org_id=org_id,
+            message_id=message_id,
+            status="sent",
+            provider_payload=raw_payload,
         )
 
     async def _apply_confirmed_slot(
@@ -1295,7 +1373,7 @@ class HOHService:
                     "twilio_message_sid": whatsapp_sid,
                 }
 
-                self.messages.log_message(
+                message_id = self.messages.log_message(
                     org_id=org_id,
                     conversation_id=conversation_id,
                     event_id=event_id,
@@ -1304,6 +1382,12 @@ class HOHService:
                     body=thank_you_body,
                     whatsapp_msg_sid=whatsapp_sid,
                     raw_payload=raw_payload,
+                )
+                self.messages.log_delivery_status(
+                    org_id=org_id,
+                    message_id=message_id,
+                    status="sent",
+                    provider_payload=raw_payload,
                 )
 
     def _ensure_conversation(self, org_id: int, event_id: int, contact_id: int) -> int:
