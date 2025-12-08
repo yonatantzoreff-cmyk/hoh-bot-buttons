@@ -530,9 +530,12 @@ async def ui_send_init(
 async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLResponse:
     events = hoh.list_events_for_org(org_id=1)
 
-    halls: list[dict] = []
-    hall_lookup: dict[str | int, dict] = {}
+    def contact_display(name: str | None, phone: str | None) -> str:
+        if name and phone:
+            return f"{name} ({phone})"
+        return name or phone or ""
 
+    table_rows = []
     for row in events:
         hall_id = row.get("hall_id")
         hall_key: str | int = hall_id if hall_id is not None else "unassigned"
@@ -558,8 +561,12 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         )
         status = row.get("status") or ""
         delivery_status = row.get("delivery_status")
-        producer_phone = row.get("producer_phone") or ""
-        technical_phone = row.get("technical_phone") or ""
+        producer_contact = contact_display(
+            row.get("producer_name"), row.get("producer_phone")
+        )
+        technical_contact = contact_display(
+            row.get("technical_name"), row.get("technical_phone")
+        )
         init_sent_at = _to_local(row.get("init_sent_at"))
         init_sent_display = (
             init_sent_at.strftime("%Y-%m-%d %H:%M") if init_sent_at else ""
@@ -573,22 +580,47 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             else "<div class=\\\"small text-muted mt-1\\\">Not sent yet</div>"
         )
 
-        hall_group["events"].append(
-            {
-                "event_id": row.get("event_id"),
-                "name": row.get("name") or "",
-                "date_display": date_display,
-                "time_display": time_display,
-                "load_in_display": load_in_display,
-                "status": status,
-                "delivery_badge": _status_badge(delivery_status),
-                "notes": row.get("notes") or "",
-                "producer_phone": producer_phone,
-                "technical_phone": technical_phone,
-                "created_at_display": created_at_display,
-                "whatsapp_btn_class": whatsapp_btn_class,
-                "sent_indicator": sent_indicator,
-            }
+        table_rows.append(
+            """
+            <tr>
+              <td>{name}</td>
+              <td>{date}</td>
+              <td>{time}</td>
+              <td>{load_in}</td>
+              <td>{hall}</td>
+              <td>{status}</td>
+              <td>{delivery_status}</td>
+              <td class=\"text-break\">{notes}</td>
+              <td>{producer_contact}</td>
+              <td>{technical_contact}</td>
+              <td>{created_at}</td>
+              <td class=\"text-nowrap\">
+                <form method=\"post\" action=\"/ui/events/{event_id}/send-init\" class=\"d-inline\">
+                  <button class=\"{whatsapp_btn_class}\" type=\"submit\">Send WhatsApp</button>
+                </form>
+                {sent_indicator}
+                <a class=\"btn btn-sm btn-outline-secondary ms-1\" href=\"/ui/events/{event_id}/edit\">Edit</a>
+                <form method=\"post\" action=\"/ui/events/{event_id}/delete\" class=\"d-inline ms-1\" onsubmit=\"return confirm('האם אתה בטוח למחוק את האירוע?');\">
+                  <button class=\"btn btn-sm btn-outline-danger\" type=\"submit\">Delete</button>
+                </form>
+              </td>
+            </tr>
+            """.format(
+                name=escape(row.get("name") or ""),
+                date=escape(date_display),
+                time=escape(time_display),
+                load_in=escape(load_in_display),
+                hall=escape(hall_label or ""),
+                status=escape(status),
+                delivery_status=delivery_badge,
+                notes=escape(row.get("notes") or ""),
+                producer_contact=escape(producer_contact),
+                technical_contact=escape(technical_contact),
+                created_at=escape(created_at_display),
+                event_id=row.get("event_id"),
+                whatsapp_btn_class=whatsapp_btn_class,
+                sent_indicator=sent_indicator,
+            )
         )
 
     if not halls:
@@ -599,104 +631,32 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             heading_id = f"hallHeading{idx}"
             collapse_id = f"hallCollapse{idx}"
 
-            rows = []
-            for event in hall.get("events", []):
-                rows.append(
-                    """
-                    <tr>
-                      <td>{name}</td>
-                      <td>{date}</td>
-                      <td>{time}</td>
-                      <td>{load_in}</td>
-                      <td>{status}</td>
-                      <td>{delivery_status}</td>
-                      <td class=\"text-break\">{notes}</td>
-                      <td>{producer_phone}</td>
-                      <td>{technical_phone}</td>
-                      <td>{created_at}</td>
-                      <td class=\"text-nowrap\">
-                        <form method=\"post\" action=\"/ui/events/{event_id}/send-init\" class=\"d-inline\">
-                          <button class=\"{whatsapp_btn_class}\" type=\"submit\">Send WhatsApp</button>
-                        </form>
-                        {sent_indicator}
-                        <a class=\"btn btn-sm btn-outline-secondary ms-1\" href=\"/ui/events/{event_id}/edit\">Edit</a>
-                        <form method=\"post\" action=\"/ui/events/{event_id}/delete\" class=\"d-inline ms-1\" onsubmit=\"return confirm('האם אתה בטוח למחוק את האירוע?');\">\n                          <button class=\"btn btn-sm btn-outline-danger\" type=\"submit\">Delete</button>\n                        </form>
-                      </td>
-                    </tr>
-                    """.format(
-                        name=escape(event.get("name") or ""),
-                        date=escape(event.get("date_display") or ""),
-                        time=escape(event.get("time_display") or ""),
-                        load_in=escape(event.get("load_in_display") or ""),
-                        status=escape(event.get("status") or ""),
-                        delivery_status=event.get("delivery_badge") or _status_badge(None),
-                        notes=escape(event.get("notes") or ""),
-                        producer_phone=escape(event.get("producer_phone") or ""),
-                        technical_phone=escape(event.get("technical_phone") or ""),
-                        created_at=escape(event.get("created_at_display") or ""),
-                        event_id=event.get("event_id"),
-                        whatsapp_btn_class=event.get("whatsapp_btn_class") or "btn btn-sm btn-primary",
-                        sent_indicator=event.get("sent_indicator") or "",
-                    )
-                )
-
-            table_body = "".join(rows) or """
-                <tr>
-                  <td colspan=\"11\" class=\"text-center text-muted\">No events for this hall.</td>
-                </tr>
-            """
-
-            accordion_items.append(
-                """
-                <div class="accordion-item">
-                  <h2 class="accordion-header" id="{heading_id}">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#{collapse_id}" aria-expanded="false" aria-controls="{collapse_id}">
-                      <div class="fw-semibold">{hall_label}</div>
-                    </button>
-                  </h2>
-                  <div id="{collapse_id}" class="accordion-collapse collapse" aria-labelledby="{heading_id}" data-bs-parent="#eventsAccordion">
-                    <div class="accordion-body p-0">
-                      <div class="table-responsive mb-0">
-                        <table class="table table-striped align-middle mb-0">
-                          <thead class="table-light">
-                            <tr>
-                              <th scope="col">Name</th>
-                              <th scope="col">Date</th>
-                              <th scope="col">Show Time</th>
-                              <th scope="col">Load In</th>
-                              <th scope="col">Status</th>
-                              <th scope="col">Delivery Status</th>
-                              <th scope="col">Notes</th>
-                              <th scope="col">Producer Phone</th>
-                              <th scope="col">Technical Phone</th>
-                              <th scope="col">Created At</th>
-                              <th scope="col">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {table_body}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                """.format(
-                    heading_id=heading_id,
-                    collapse_id=collapse_id,
-                    hall_label=escape(hall.get("hall_label") or ""),
-                    table_body=table_body,
-                )
-            )
-
-        content = """
-        <div class=\"card\">
-          <div class=\"card-header bg-secondary text-white\">Events by Hall</div>
-          <div class=\"card-body p-0\">
-            <div class=\"accordion\" id=\"eventsAccordion\">
-              {items}
-            </div>
-          </div>
+    table = f"""
+    <div class=\"card\">
+      <div class=\"card-header bg-secondary text-white\">Events</div>
+      <div class=\"card-body\">
+        <div class=\"table-responsive\">
+          <table class=\"table table-striped align-middle\">
+            <thead>
+              <tr>
+                <th scope=\"col\">Name</th>
+                <th scope=\"col\">Date</th>
+                <th scope=\"col\">Show Time</th>
+                <th scope=\"col\">Load In</th>
+                <th scope=\"col\">Hall</th>
+                <th scope=\"col\">Status</th>
+                <th scope=\"col\">Delivery Status</th>
+                <th scope=\"col\">Notes</th>
+                <th scope=\"col\">Producer Contact</th>
+                <th scope=\"col\">Technical Contact</th>
+                <th scope=\"col\">Created At</th>
+                <th scope=\"col\">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {table_body}
+            </tbody>
+          </table>
         </div>
         """.format(items="".join(accordion_items))
 
