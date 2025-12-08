@@ -45,11 +45,18 @@ def test_build_followup_variables_use_event_and_contact_data():
     variables = service._build_followup_variables(contact=contact, event=event)
 
     assert variables == {
-        "producer_name": "Dana Producer",
+        "producer_name": "Dana",
         "event_name": "Spring Gala",
         "event_date": "01.05.2024",
         "show_time": "18:30",
     }
+
+
+def test_get_first_name_uses_first_word_and_handles_missing_values():
+    assert HOHService._get_first_name("Dana Producer") == "Dana"
+    assert HOHService._get_first_name("  John   Doe  ") == "John"
+    assert HOHService._get_first_name("") == ""
+    assert HOHService._get_first_name(None) == ""
 
 
 def test_build_slots_includes_event_context():
