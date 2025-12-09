@@ -530,15 +530,22 @@ async def ui_send_init(
 async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLResponse:
     events = hoh.list_events_for_org(org_id=1)
 
+    def contact_display(name: str | None, phone: str | None) -> str:
+        if name and phone:
+            return f"{name} ({phone})"
+        return name or phone or ""
+
     table_rows = []
     for row in events:
+        hall_id = row.get("hall_id")
+        hall_label = row.get("hall_name") or (
+            f"Hall #{hall_id}" if hall_id is not None else "Unassigned Hall"
+        )
+
         event_date = row.get("event_date")
         show_time = _to_local(row.get("show_time"))
         load_in_time = _to_local(row.get("load_in_time"))
         created_at = _to_local(row.get("created_at"))
-        hall_label = row.get("hall_name") or (
-            f"Hall #{row['hall_id']}" if row.get("hall_id") is not None else ""
-        )
         date_display = event_date.strftime("%Y-%m-%d") if event_date else ""
         time_display = show_time.strftime("%H:%M") if show_time else ""
         load_in_display = load_in_time.strftime("%H:%M") if load_in_time else ""
@@ -547,13 +554,21 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         )
         status = row.get("status") or ""
         delivery_status = row.get("delivery_status")
-        producer_phone = row.get("producer_phone") or ""
-        technical_phone = row.get("technical_phone") or ""
+        delivery_badge = _status_badge(
+            delivery_status,
+            success_values={"delivered"},
+            failure_values={"failed", "undelivered"},
+        )
+        producer_contact = contact_display(
+            row.get("producer_name"), row.get("producer_phone")
+        )
+        technical_contact = contact_display(
+            row.get("technical_name"), row.get("technical_phone")
+        )
         init_sent_at = _to_local(row.get("init_sent_at"))
         init_sent_display = (
             init_sent_at.strftime("%Y-%m-%d %H:%M") if init_sent_at else ""
         )
-        delivery_badge = _status_badge(delivery_status)
         whatsapp_btn_class = (
             "btn btn-sm btn-primary" if init_sent_at else "btn btn-sm btn-success"
         )
@@ -574,8 +589,8 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
               <td>{status}</td>
               <td>{delivery_status}</td>
               <td class=\"text-break\">{notes}</td>
-              <td>{producer_phone}</td>
-              <td>{technical_phone}</td>
+              <td>{producer_contact}</td>
+              <td>{technical_contact}</td>
               <td>{created_at}</td>
               <td class=\"text-nowrap\">
                 <form method=\"post\" action=\"/ui/events/{event_id}/send-init\" class=\"d-inline\">
@@ -597,8 +612,8 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 status=escape(status),
                 delivery_status=delivery_badge,
                 notes=escape(row.get("notes") or ""),
-                producer_phone=escape(producer_phone),
-                technical_phone=escape(technical_phone),
+                producer_contact=escape(producer_contact),
+                technical_contact=escape(technical_contact),
                 created_at=escape(created_at_display),
                 event_id=row.get("event_id"),
                 whatsapp_btn_class=whatsapp_btn_class,
@@ -606,13 +621,11 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             )
         )
 
-    table_body = "".join(table_rows) or """
-        <tr>
-          <td colspan=\"12\" class=\"text-center text-muted\">No events yet.</td>
-        </tr>
-    """
+    table_body = "".join(table_rows) or (
+        "<tr><td colspan=12 class='text-center text-muted'>No events yet.</td></tr>"
+    )
 
-    table = f"""
+    content = f"""
     <div class=\"card\">
       <div class=\"card-header bg-secondary text-white\">Events</div>
       <div class=\"card-body\">
@@ -628,8 +641,8 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 <th scope=\"col\">Status</th>
                 <th scope=\"col\">Delivery Status</th>
                 <th scope=\"col\">Notes</th>
-                <th scope=\"col\">Producer Phone</th>
-                <th scope=\"col\">Technical Phone</th>
+                <th scope=\"col\">Producer Contact</th>
+                <th scope=\"col\">Technical Contact</th>
                 <th scope=\"col\">Created At</th>
                 <th scope=\"col\">Actions</th>
               </tr>
@@ -639,11 +652,9 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
-    """
+        """
 
-    html = _render_page("Events", table)
+    html = _render_page("Events", content)
     return HTMLResponse(content=html)
 
 

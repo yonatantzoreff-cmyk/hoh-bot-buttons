@@ -136,6 +136,25 @@ class HOHService:
             except Exception:
                 return None
 
+    @staticmethod
+    def _get_first_name(full_name: Any) -> str:
+        """Return the first whitespace-delimited token from a full name."""
+
+        if not full_name:
+            return ""
+
+        if not isinstance(full_name, str):
+            try:
+                full_name = str(full_name)
+            except Exception:
+                return ""
+
+        parts = full_name.strip().split()
+        if not parts:
+            return ""
+
+        return parts[0]
+
     def list_events_for_org(self, org_id: int):
         events = self.events.list_events_for_org(org_id)
 
@@ -144,27 +163,36 @@ class HOHService:
             event_dict = dict(event)
             event_id = event_dict.get("event_id")
 
+            # Ensure UI receives any stored notes for display
+            event_dict["notes"] = event_dict.get("notes")
+
             producer_contact_id = event_dict.get("producer_contact_id")
-            if producer_contact_id:
-                producer_contact = self.contacts.get_contact_by_id(
-                    org_id=org_id, contact_id=producer_contact_id
-                )
-                event_dict["producer_phone"] = self._get_contact_value(
-                    producer_contact, "phone"
-                )
-            else:
-                event_dict["producer_phone"] = None
+            producer_contact = (
+                self.contacts.get_contact_by_id(org_id=org_id, contact_id=producer_contact_id)
+                if producer_contact_id
+                else None
+            )
+            event_dict["producer_phone"] = self._get_contact_value(
+                producer_contact, "phone"
+            )
+            event_dict["producer_name"] = self._get_contact_value(
+                producer_contact, "name"
+            )
 
             technical_contact_id = event_dict.get("technical_contact_id")
-            if technical_contact_id:
-                technical_contact = self.contacts.get_contact_by_id(
+            technical_contact = (
+                self.contacts.get_contact_by_id(
                     org_id=org_id, contact_id=technical_contact_id
                 )
-                event_dict["technical_phone"] = self._get_contact_value(
-                    technical_contact, "phone"
-                )
-            else:
-                event_dict["technical_phone"] = None
+                if technical_contact_id
+                else None
+            )
+            event_dict["technical_phone"] = self._get_contact_value(
+                technical_contact, "phone"
+            )
+            event_dict["technical_name"] = self._get_contact_value(
+                technical_contact, "name"
+            )
 
             if event_id:
                 event_dict["init_sent_at"] = self.messages.get_last_sent_at_for_content(
@@ -399,8 +427,12 @@ class HOHService:
         event_date_str = event_date.strftime("%d.%m.%Y") if event_date else ""
         show_time_str = show_time.strftime("%H:%M") if show_time else ""
 
+        producer_first_name = self._get_first_name(
+            self._get_contact_value(contact, "name")
+        )
+
         init_vars = {
-            "1": self._get_contact_value(contact, "name") or "Producer",
+            "1": producer_first_name or "Producer",
             "2": event.get("name") or "",
             "3": event_date_str,
             "4": show_time_str,
@@ -709,8 +741,12 @@ class HOHService:
         event_date_str = event_date.strftime("%d.%m.%Y") if event_date else ""
         show_time_str = show_time.strftime("%H:%M") if show_time else ""
 
+        producer_first_name = self._get_first_name(
+            self._get_contact_value(contact, "name")
+        )
+
         return {
-            "producer_name": self._get_contact_value(contact, "name") or "Producer",
+            "producer_name": producer_first_name or "Producer",
             "event_name": event.get("name") or "",
             "event_date": event_date_str,
             "show_time": show_time_str,
