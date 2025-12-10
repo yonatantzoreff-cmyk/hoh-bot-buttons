@@ -568,6 +568,24 @@ class ConversationRepository:
             )
             return result.mappings().first()
 
+    def get_most_recent_for_contact(self, org_id: int, contact_id: int):
+        query = text(
+            """
+            SELECT *
+            FROM conversations
+            WHERE org_id = :org_id
+              AND contact_id = :contact_id
+            ORDER BY updated_at DESC
+            LIMIT 1
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(
+                query, {"org_id": org_id, "contact_id": contact_id}
+            )
+            return result.mappings().first()
+
     def create_conversation(
         self,
         org_id: int,
