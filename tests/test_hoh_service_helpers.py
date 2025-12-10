@@ -136,6 +136,9 @@ class DummyConversations:
     def get_recent_open_for_contact(self, **_):
         return self.conversation
 
+    def get_most_recent_for_contact(self, **_):  # pragma: no cover - overridden per test
+        return self.conversation
+
 
 class DummyMessages:
     def __init__(self):
@@ -190,3 +193,36 @@ def test_handle_webhook_prompts_when_no_event_found(monkeypatch):
 
     assert sent
     assert not service.messages.logged
+
+
+def test_handle_webhook_falls_back_to_recent_non_open(monkeypatch):
+    service = HOHService()
+
+    recent_conversation = {
+        "conversation_id": 8,
+        "event_id": None,
+        "pending_data_fields": {"pending_event_id": 77},
+    }
+
+    class RecentOnlyConversations(DummyConversations):
+        def get_recent_open_for_contact(self, **_):
+            return None
+
+        def get_most_recent_for_contact(self, **_):
+            return recent_conversation
+
+    service.contacts = DummyContacts()
+    service.events = DummyEvents()
+    service.conversations = RecentOnlyConversations(recent_conversation)
+    service.messages = DummyMessages()
+
+    sent = []
+    monkeypatch.setattr("app.hoh_service.twilio_client.send_text", lambda *args, **kwargs: sent.append(kwargs))
+
+    payload = {"From": "+972500000003", "ListItemTitle": "Option B"}
+
+    asyncio.run(service.handle_whatsapp_webhook(payload, org_id=1))
+
+    assert not sent
+    assert service.messages.logged
+    assert service.messages.logged[0]["event_id"] == 77

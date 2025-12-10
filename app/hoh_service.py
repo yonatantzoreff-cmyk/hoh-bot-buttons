@@ -848,6 +848,11 @@ class HOHService:
             conversation = conversation or self.conversations.get_recent_open_for_contact(
                 org_id=org_id, contact_id=contact_id
             )
+            if not conversation and interactive_value:
+                conversation = self.conversations.get_most_recent_for_contact(
+                    org_id=org_id, contact_id=contact_id
+                )
+
             if conversation:
                 event_id = event_id or conversation.get("event_id")
                 event_id = event_id or _pending_event_id_from(conversation)
