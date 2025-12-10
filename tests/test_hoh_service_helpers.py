@@ -1,5 +1,6 @@
+import asyncio
 import os
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, timezone
 
 os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
 os.environ.setdefault("TWILIO_ACCOUNT_SID", "test-sid")
@@ -103,3 +104,89 @@ def test_download_media_text_handles_utf8_names(monkeypatch):
     text = service._download_media_text("https://example.test/media")
 
     assert "יונתן היכל" in text
+
+
+class DummyContacts:
+    def get_or_create_by_phone(self, **_):
+        return 1
+
+    def get_contact_by_id(self, **_):  # pragma: no cover - unused in tests
+        return {"phone": "+972500000000"}
+
+
+class DummyEvents:
+    def __init__(self):
+        self.requested_ids = []
+
+    def get_event_by_id(self, org_id: int, event_id: int):
+        self.requested_ids.append((org_id, event_id))
+        return {"event_id": event_id, "name": "Fallback Event"}
+
+
+class DummyConversations:
+    def __init__(self, conversation):
+        self.conversation = conversation
+
+    def get_open_conversation(self, **_):
+        return self.conversation
+
+    def create_conversation(self, **_):  # pragma: no cover - defensive
+        raise AssertionError("Unexpected conversation creation")
+
+    def get_recent_open_for_contact(self, **_):
+        return self.conversation
+
+
+class DummyMessages:
+    def __init__(self):
+        self.logged = []
+
+    def log_message(self, **payload):
+        self.logged.append(payload)
+
+    def log_delivery_status(self, **_):  # pragma: no cover - not exercised
+        return None
+
+
+def test_handle_webhook_falls_back_to_recent_conversation(monkeypatch):
+    service = HOHService()
+    conversation = {
+        "conversation_id": 7,
+        "event_id": 44,
+        "pending_data_fields": {"last_range_id": 2},
+    }
+
+    service.contacts = DummyContacts()
+    service.events = DummyEvents()
+    service.conversations = DummyConversations(conversation)
+    service.messages = DummyMessages()
+
+    sent = []
+    monkeypatch.setattr("app.hoh_service.twilio_client.send_text", lambda *args, **kwargs: sent.append(kwargs))
+
+    payload = {"From": "+972500000001", "ButtonText": "Pick this"}
+
+    asyncio.run(service.handle_whatsapp_webhook(payload, org_id=1))
+
+    assert service.messages.logged
+    assert service.messages.logged[0]["event_id"] == 44
+    assert not sent
+
+
+def test_handle_webhook_prompts_when_no_event_found(monkeypatch):
+    service = HOHService()
+
+    service.contacts = DummyContacts()
+    service.events = DummyEvents()
+    service.conversations = DummyConversations(None)
+    service.messages = DummyMessages()
+
+    sent = []
+    monkeypatch.setattr("app.hoh_service.twilio_client.send_text", lambda *args, **kwargs: sent.append(kwargs))
+
+    payload = {"From": "+972500000002", "ListItemTitle": "Option A"}
+
+    asyncio.run(service.handle_whatsapp_webhook(payload, org_id=1))
+
+    assert sent
+    assert not service.messages.logged

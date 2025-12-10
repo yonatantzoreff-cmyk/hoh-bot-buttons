@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import date, datetime, time, timedelta, timezone
@@ -814,9 +815,18 @@ class HOHService:
         conversation = None
         event = None
 
-        if interactive_value and not event_id:
-            logger.warning("Interactive payload missing event id", extra={"payload": payload})
-            return
+        def _pending_event_id_from(conversation_data: dict) -> Optional[int]:
+            pending = (conversation_data or {}).get("pending_data_fields")
+            if isinstance(pending, str):
+                try:
+                    pending = json.loads(pending)
+                except Exception:  # pragma: no cover - defensive parse
+                    pending = None
+
+            if isinstance(pending, dict):
+                return pending.get("event_id") or pending.get("pending_event_id")
+
+            return None
 
         if event_id:
             event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
@@ -834,16 +844,27 @@ class HOHService:
                     )
                     conversation = {"conversation_id": conv_id, "event_id": event_id}
 
-        if not event_id:
-            conversation = self.conversations.get_recent_open_for_contact(
+        if not event_id or not event:
+            conversation = conversation or self.conversations.get_recent_open_for_contact(
                 org_id=org_id, contact_id=contact_id
             )
             if conversation:
-                event_id = conversation.get("event_id")
+                event_id = event_id or conversation.get("event_id")
+                event_id = event_id or _pending_event_id_from(conversation)
                 if event_id:
-                    event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
+                    event = event or self.events.get_event_by_id(
+                        org_id=org_id, event_id=event_id
+                    )
 
         if not conversation or not event_id or not event:
+            logger.warning(
+                "Interactive payload missing event id", extra={"payload": payload}
+            )
+            twilio_client.send_text(
+                to=normalized_from,
+                body="לא הצלחתי למצוא את האירוע המתאים. אפשר לשלוח שוב את שם האירוע או להשתמש בקישור האחרון שקיבלת?",
+                channel="whatsapp",
+            )
             return
 
         conversation_id = conversation.get("conversation_id")
