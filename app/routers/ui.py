@@ -80,6 +80,25 @@ def _contact_label(name: str | None, phone: str | None) -> str:
     return "Unknown"
 
 
+def _status_badge_class(status: str | None) -> str:
+    """Map delivery status to Bootstrap badge color class."""
+    if not status:
+        return "secondary"
+    status_lower = status.lower()
+    if status_lower == "delivered":
+        return "success"
+    elif status_lower == "sent":
+        return "info"
+    elif status_lower == "queued":
+        return "warning"
+    elif status_lower in ("failed", "undelivered"):
+        return "danger"
+    elif status_lower == "read":
+        return "primary"
+    else:
+        return "secondary"
+
+
 @router.get("/ui/messages", response_class=HTMLResponse)
 async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLResponse:
     messages = hoh.list_messages_with_events(org_id=1)
@@ -109,6 +128,7 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
         )
         direction = message.get("direction") or ""
         body = message.get("body") or ""
+        delivery_status = message.get("delivery_status")
 
         timestamp = (
             message.get("sent_at")
@@ -126,6 +146,7 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
                 "direction": direction,
                 "body": body,
                 "timestamp_display": timestamp_display,
+                "delivery_status": delivery_status,
             }
         )
 
@@ -144,6 +165,11 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
             rows = []
             for message in event.get("messages", []):
                 direction = message.get("direction") or ""
+                delivery_status = message.get("delivery_status")
+                status_class = _status_badge_class(delivery_status)
+                # Use title case but preserve the actual status string for accuracy
+                status_display = delivery_status.capitalize() if delivery_status and isinstance(delivery_status, str) else "N/A"
+                
                 rows.append(
                     """
                     <tr>
@@ -151,6 +177,7 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
                       <td><span class=\"badge text-bg-{direction_class}\">{direction}</span></td>
                       <td class=\"text-break\">{body}</td>
                       <td class=\"text-nowrap\">{timestamp}</td>
+                      <td><span class=\"badge text-bg-{status_class}\">{status}</span></td>
                     </tr>
                     """.format(
                         contact=escape(message.get("contact") or ""),
@@ -158,12 +185,14 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
                         direction=escape(direction.title() if direction else ""),
                         body=escape(message.get("body") or ""),
                         timestamp=escape(message.get("timestamp_display") or ""),
+                        status_class=status_class,
+                        status=escape(status_display),
                     )
                 )
 
             table_body = "".join(rows) or """
                 <tr>
-                  <td colspan=\"4\" class=\"text-center text-muted\">No messages for this event.</td>
+                  <td colspan=\"5\" class=\"text-center text-muted\">No messages for this event.</td>
                 </tr>
             """
 
@@ -180,7 +209,7 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
                   </h2>
                   <div id=\"{collapse_id}\" class=\"accordion-collapse collapse{show}\" aria-labelledby=\"{heading_id}\" data-bs-parent=\"#messagesAccordion\">
                     <div class=\"accordion-body p-0\">
-                      <div class=\"table-responsive mb-0\">\n                        <table class=\"table table-striped align-middle mb-0\">\n                          <thead class=\"table-light\">\n                            <tr>\n                              <th scope=\"col\">Contact</th>\n                              <th scope=\"col\">Direction</th>\n                              <th scope=\"col\">Body</th>\n                              <th scope=\"col\">Timestamp</th>\n                            </tr>\n                          </thead>\n                          <tbody>\n                            {table_body}\n                          </tbody>\n                        </table>\n                      </div>
+                      <div class=\"table-responsive mb-0\">\n                        <table class=\"table table-striped align-middle mb-0\">\n                          <thead class=\"table-light\">\n                            <tr>\n                              <th scope=\"col\">Contact</th>\n                              <th scope=\"col\">Direction</th>\n                              <th scope=\"col\">Body</th>\n                              <th scope=\"col\">Timestamp</th>\n                              <th scope=\"col\">Status</th>\n                            </tr>\n                          </thead>\n                          <tbody>\n                            {table_body}\n                          </tbody>\n                        </table>\n                      </div>
                     </div>
                   </div>
                 </div>

@@ -937,10 +937,18 @@ class MessageRepository:
                 m.received_at,
                 m.created_at,
                 c.name AS contact_name,
-                c.phone AS contact_phone
+                c.phone AS contact_phone,
+                latest_delivery.status AS delivery_status
             FROM messages m
             LEFT JOIN events e ON m.event_id = e.event_id
             LEFT JOIN contacts c ON m.contact_id = c.contact_id
+            LEFT JOIN LATERAL (
+                SELECT status
+                FROM message_delivery_log
+                WHERE message_id = m.message_id
+                ORDER BY created_at DESC
+                LIMIT 1
+            ) latest_delivery ON true
             WHERE m.org_id = :org_id
             ORDER BY COALESCE(e.created_at, m.created_at) ASC,
                      COALESCE(m.sent_at, m.received_at, m.created_at) ASC,
