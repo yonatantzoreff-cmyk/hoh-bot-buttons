@@ -1,6 +1,8 @@
 """Minimal Bootstrap-based UI for managing events via Postgres."""
 import logging
+from datetime import timezone
 from html import escape
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
@@ -13,12 +15,28 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory="templates")
 
-def _to_local(dt):
+ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
+
+
+def _strip_timezone(dt):
+    """Drop timezone info while keeping the clock time as-is."""
+
     if not dt:
         return None
 
-    # Keep the original clock time without applying timezone conversions.
     return dt.replace(tzinfo=None)
+
+
+def _to_israel_time(dt):
+    """Convert a timestamp (assumed UTC if naive) to Israel time."""
+
+    if not dt:
+        return None
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+
+    return dt.astimezone(ISRAEL_TZ)
 
 
 def _render_page(title: str, body: str) -> str:
@@ -75,7 +93,7 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
 
         if not event_group:
             event_date = message.get("event_date")
-            show_time = _to_local(message.get("show_time"))
+            show_time = _strip_timezone(message.get("show_time"))
             event_group = {
                 "event_id": event_id,
                 "event_name": message.get("event_name") or "Unassigned",
@@ -97,7 +115,7 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
             or message.get("received_at")
             or message.get("created_at")
         )
-        timestamp_local = _to_local(timestamp)
+        timestamp_local = _to_israel_time(timestamp)
         timestamp_display = (
             timestamp_local.strftime("%Y-%m-%d %H:%M") if timestamp_local else ""
         )
@@ -492,9 +510,9 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
     table_rows = []
     for row in events:
         event_date = row.get("event_date")
-        show_time = _to_local(row.get("show_time"))
-        load_in_time = _to_local(row.get("load_in_time"))
-        created_at = _to_local(row.get("created_at"))
+        show_time = _strip_timezone(row.get("show_time"))
+        load_in_time = _strip_timezone(row.get("load_in_time"))
+        created_at = _to_israel_time(row.get("created_at"))
         hall_label = row.get("hall_name") or (
             f"Hall #{row['hall_id']}" if row.get("hall_id") is not None else ""
         )
@@ -507,7 +525,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         status = row.get("status") or ""
         producer_phone = row.get("producer_phone") or ""
         technical_phone = row.get("technical_phone") or ""
-        init_sent_at = _to_local(row.get("init_sent_at"))
+        init_sent_at = _to_israel_time(row.get("init_sent_at"))
         init_sent_display = (
             init_sent_at.strftime("%Y-%m-%d %H:%M") if init_sent_at else ""
         )
