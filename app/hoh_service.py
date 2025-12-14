@@ -27,7 +27,6 @@ from app.repositories import (
     TemplateRepository,
 )
 from app.utils.actions import ParsedAction, parse_action_id
-from app.utils.delivery_status import normalize_delivery_status
 from app.utils.phone import normalize_phone_to_e164_il
 
 logger = logging.getLogger(__name__)
@@ -73,24 +72,6 @@ class HOHService:
         self.conversations = ConversationRepository()
         self.messages = MessageRepository()
         self.templates = TemplateRepository()
-
-    @staticmethod
-    def _delivery_meta_from_twilio_response(twilio_response: Any) -> tuple[str, dict]:
-        """Extract canonical delivery status and payload from a Twilio response."""
-
-        sid = getattr(twilio_response, "sid", None) if twilio_response else None
-        provider_status = (
-            getattr(twilio_response, "status", None) if twilio_response else None
-        )
-        normalized_status = normalize_delivery_status(provider_status or "queued")
-
-        provider_payload: dict = {}
-        if sid:
-            provider_payload["sid"] = sid
-        if provider_status:
-            provider_payload["status"] = provider_status
-
-        return normalized_status, provider_payload
 
     # region Event + contact bootstrap -------------------------------------------------
     def create_event_with_producer_conversation(
@@ -433,9 +414,6 @@ class HOHService:
             content_variables=init_vars,
         )
 
-        delivery_status, delivery_provider_payload = self._delivery_meta_from_twilio_response(
-            twilio_response
-        )
         whatsapp_sid = getattr(twilio_response, "sid", None)
         raw_payload = {
             "content_sid": CONTENT_SID_INIT,
@@ -452,8 +430,6 @@ class HOHService:
             body=f"INIT sent for event {event_id}",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
-            delivery_status=delivery_status,
-            delivery_provider_payload=delivery_provider_payload,
         )
 
     async def send_ranges_for_event(self, org_id: int, event_id: int, contact_id: int) -> None:
@@ -480,9 +456,6 @@ class HOHService:
             content_variables=variables,
         )
 
-        delivery_status, delivery_provider_payload = self._delivery_meta_from_twilio_response(
-            twilio_resp
-        )
         whatsapp_sid = getattr(twilio_resp, "sid", None)
         raw_payload = {
             "content_sid": CONTENT_SID_RANGES,
@@ -499,8 +472,6 @@ class HOHService:
             body="Sent ranges list",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
-            delivery_status=delivery_status,
-            delivery_provider_payload=delivery_provider_payload,
         )
 
     async def send_halves_for_event_range(
@@ -540,9 +511,6 @@ class HOHService:
             content_sid=CONTENT_SID_HALVES,
             content_variables=variables,
         )
-        delivery_status, delivery_provider_payload = self._delivery_meta_from_twilio_response(
-            twilio_resp
-        )
         whatsapp_sid = getattr(twilio_resp, "sid", None)
 
         pending_fields = (conversation or {}).get("pending_data_fields") or {}
@@ -568,8 +536,6 @@ class HOHService:
             body=f"Sent halves for range {range_id}",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
-            delivery_status=delivery_status,
-            delivery_provider_payload=delivery_provider_payload,
         )
 
     async def send_confirm_for_slot(
@@ -607,9 +573,6 @@ class HOHService:
             content_sid=CONTENT_SID_CONFIRM,
             content_variables=variables,
         )
-        delivery_status, delivery_provider_payload = self._delivery_meta_from_twilio_response(
-            twilio_resp
-        )
         whatsapp_sid = getattr(twilio_resp, "sid", None)
 
         conversation = self.conversations.get_open_conversation(
@@ -638,8 +601,6 @@ class HOHService:
             body=f"Sent confirm for slot {slot_label}",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
-            delivery_status=delivery_status,
-            delivery_provider_payload=delivery_provider_payload,
         )
 
     async def run_due_followups(self, org_id: int = 1) -> int:
@@ -673,9 +634,7 @@ class HOHService:
                 content_variables=variables,
                 channel=template.get("channel", "whatsapp"),
             )
-            delivery_status, delivery_provider_payload = self._delivery_meta_from_twilio_response(
-                twilio_response
-            )
+
             whatsapp_sid = getattr(twilio_response, "sid", None)
             body = f"Followup sent via template {template.get('name') or template.get('template_id')}"
             raw_payload = {
@@ -696,8 +655,6 @@ class HOHService:
                 whatsapp_msg_sid=whatsapp_sid,
                 sent_at=now,
                 raw_payload=raw_payload,
-                delivery_status=delivery_status,
-                delivery_provider_payload=delivery_provider_payload,
             )
 
             processed += 1
@@ -1165,9 +1122,6 @@ class HOHService:
                 to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
                 body=thanks_body,
             )
-            delivery_status, delivery_provider_payload = self._delivery_meta_from_twilio_response(
-                twilio_resp
-            )
             whatsapp_sid = getattr(twilio_resp, "sid", None) if twilio_resp else None
 
             raw_payload = {
@@ -1184,8 +1138,6 @@ class HOHService:
                 body=thanks_body,
                 whatsapp_msg_sid=whatsapp_sid,
                 raw_payload=raw_payload,
-                delivery_status=delivery_status,
-                delivery_provider_payload=delivery_provider_payload,
             )
 
         self.conversations.update_pending_data_fields(
@@ -1226,9 +1178,6 @@ class HOHService:
             content_sid=CONTENT_SID_NOT_SURE,
             content_variables={},
         )
-        delivery_status, delivery_provider_payload = self._delivery_meta_from_twilio_response(
-            twilio_resp
-        )
         whatsapp_sid = getattr(twilio_resp, "sid", None)
 
         raw_payload = {
@@ -1246,8 +1195,6 @@ class HOHService:
             body="Sent NOT SURE message",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
-            delivery_status=delivery_status,
-            delivery_provider_payload=delivery_provider_payload,
         )
 
     async def _handle_not_contact(
@@ -1269,9 +1216,6 @@ class HOHService:
             to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
             content_sid=CONTENT_SID_CONTACT,
             content_variables={},
-        )
-        delivery_status, delivery_provider_payload = self._delivery_meta_from_twilio_response(
-            twilio_resp
         )
         whatsapp_sid = getattr(twilio_resp, "sid", None)
 
@@ -1301,8 +1245,6 @@ class HOHService:
             body="Sent NOT CONTACT template",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
-            delivery_status=delivery_status,
-            delivery_provider_payload=delivery_provider_payload,
         )
 
     async def _apply_confirmed_slot(
@@ -1345,9 +1287,6 @@ class HOHService:
             to_phone = normalize_phone_to_e164_il(self._get_contact_value(contact, "phone"))
             if to_phone:
                 twilio_resp = twilio_client.send_text(to=to_phone, body=thank_you_body)
-                delivery_status, delivery_provider_payload = self._delivery_meta_from_twilio_response(
-                    twilio_resp
-                )
                 whatsapp_sid = getattr(twilio_resp, "sid", None) if twilio_resp else None
 
                 raw_payload = {
@@ -1365,8 +1304,6 @@ class HOHService:
                     body=thank_you_body,
                     whatsapp_msg_sid=whatsapp_sid,
                     raw_payload=raw_payload,
-                    delivery_status=delivery_status,
-                    delivery_provider_payload=delivery_provider_payload,
                 )
 
     def _ensure_conversation(self, org_id: int, event_id: int, contact_id: int) -> int:
