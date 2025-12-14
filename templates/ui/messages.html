@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>HOH BOT – Messages</title>
+    <link
+      href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+      rel="stylesheet"
+      integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH"
+      crossorigin="anonymous"
+    >
+  </head>
+  <body class="bg-light">
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+      <div class="container-fluid">
+        <a class="navbar-brand" href="/ui">HOH BOT – Events</a>
+        <div>
+          <a class="btn btn-outline-light btn-sm me-2" href="/ui">Add Event</a>
+          <a class="btn btn-outline-light btn-sm me-2" href="/ui/events">View Events</a>
+          <a class="btn btn-outline-light btn-sm me-2" href="/ui/contacts">Contacts</a>
+          <a class="btn btn-light btn-sm" href="/ui/messages">Messages</a>
+        </div>
+      </div>
+    </nav>
+
+    <main class="container py-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h1 class="h3 mb-0">Messages</h1>
+      </div>
+
+      {% if events %}
+        <div class="accordion" id="eventsAccordion">
+          {% for event in events %}
+            <div class="accordion-item mb-3 shadow-sm border-0">
+              <h2 class="accordion-header" id="heading-{{ event.event_id }}">
+                <button
+                  class="accordion-button collapsed"
+                  type="button"
+                  data-bs-toggle="collapse"
+                  data-bs-target="#collapse-{{ event.event_id }}"
+                  aria-expanded="false"
+                  aria-controls="collapse-{{ event.event_id }}"
+                >
+                  <div class="w-100 d-flex justify-content-between align-items-center">
+                    <div>
+                      <div class="fw-bold">{{ event.event_name }}</div>
+                      <div class="text-muted small">
+                        {% if event.event_date_display %}{{ event.event_date_display }}{% endif %}
+                        {% if event.show_time_display %} · {{ event.show_time_display }}{% endif %}
+                      </div>
+                    </div>
+                    <div class="text-muted small ms-3">Event ID: {{ event.event_id }}</div>
+                  </div>
+                </button>
+              </h2>
+              <div
+                id="collapse-{{ event.event_id }}"
+                class="accordion-collapse collapse"
+                aria-labelledby="heading-{{ event.event_id }}"
+                data-bs-parent="#eventsAccordion"
+              >
+                <div class="accordion-body p-0">
+                  <div class="table-responsive">
+                    <table class="table table-striped align-middle mb-0">
+                      <thead class="table-light">
+                        <tr>
+                          <th scope="col" style="width: 10%">Direction</th>
+                          <th scope="col" style="width: 20%">From</th>
+                          <th scope="col" style="width: 20%">To</th>
+                          <th scope="col" style="width: 35%">Body</th>
+                          <th scope="col" style="width: 15%">Timestamp</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {% if event.messages %}
+                          {% for message in event.messages %}
+                            <tr>
+                              <td class="text-capitalize">{{ message.direction }}</td>
+                              <td class="text-break">{{ message.from }}</td>
+                              <td class="text-break">{{ message.to }}</td>
+                              <td class="text-break">{{ message.body }}</td>
+                              <td class="text-nowrap">{{ message.timestamp_display }}</td>
+                            </tr>
+                          {% endfor %}
+                        {% else %}
+                          <tr>
+                            <td colspan="5" class="text-center text-muted">No messages for this event.</td>
+                          </tr>
+                        {% endif %}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="alert alert-info">No messages available.</div>
+      {% endif %}
+    </main>
+    <script
+      src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"
+      integrity="sha384-R6RYVbkNvIDgf/mBlC9ZwTe74MkRUYw35vjpsIadB1iKsFcfoTmyaKOwQ3v1h4FJ"
+      crossorigin="anonymous"
+    ></script>
+  </body>
+</html>

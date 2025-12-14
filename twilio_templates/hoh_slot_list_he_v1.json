@@ -1,0 +1,29 @@
+{
+  "channel": "whatsapp",
+  "language": "he",
+  "category": "in_session",
+  "type": "list_picker",
+  "header": "בחירת שעה להקמות",
+  "body": "בחר/י משבצת זמן מתאימה (חצי שעה):",
+  "list_picker": {
+    "button_title": "פתיחת רשימה",
+    "sections": [
+      {
+        "title": "שעות מוצעות",
+        "rows": [
+          {"id": "SLOT_1",  "title": "{{item1}}"},
+          {"id": "SLOT_2",  "title": "{{item2}}"},
+          {"id": "SLOT_3",  "title": "{{item3}}"},
+          {"id": "SLOT_4",  "title": "{{item4}}"},
+          {"id": "SLOT_5",  "title": "{{item5}}"},
+          {"id": "SLOT_6",  "title": "{{item6}}"},
+          {"id": "SLOT_7",  "title": "{{item7}}"},
+          {"id": "SLOT_8",  "title": "{{item8}}"},
+          {"id": "SLOT_9",  "title": "{{item9}}"},
+          {"id": "SLOT_10", "title": "{{item10}}"}
+        ]
+      }
+    ]
+  },
+  "variables": ["item1","item2","item3","item4","item5","item6","item7","item8","item9","item10"]
+}

@@ -1,0 +1,13 @@
+{
+  "channel": "whatsapp",
+  "language": "he",
+  "category": "utility",
+  "type": "quick_reply",
+  "body": "היי {{1}}\nאני הבוט הטכני של היכל אומנויות הבמה הרצליה\nאני רוצה לתאם איתך שעות הגעה להיכל למופע {{2}}\nבתאריך {{3}} בשעה {{4}}\nבחר/י אחת מהאפשרויות:",
+  "variables": ["1", "2", "3", "4", "5"],
+  "actions": [
+    {"type": "quick_reply", "id": "CHOOSE_TIME", "title": "בחירת שעה לתיאום"},
+    {"type": "quick_reply", "id": "NOT_SURE", "title": "אני עוד לא יודע"},
+    {"type": "quick_reply", "id": "NOT_CONTACT_{{5}}", "title": "אני לא איש הקשר"}
+  ]
+}

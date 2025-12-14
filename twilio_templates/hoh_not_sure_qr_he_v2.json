@@ -1,0 +1,10 @@
+{
+  "channel": "whatsapp",
+  "language": "he",
+  "category": "in_session",
+  "type": "quick_reply",
+  "body": "הכל טוב! נסמן ליצור איתך קשר מחדש בעוד 72 שעות כדי לתאם. אם תרצה/י בכל זאת לבחור עכשיו — אפשר ללחוץ כאן:",
+  "actions": [
+    {"type": "quick_reply", "id": "CHOOSE_TIME", "title": "בחירת שעה"}
+  ]
+}

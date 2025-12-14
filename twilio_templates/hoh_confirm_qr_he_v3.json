@@ -1,0 +1,12 @@
+{
+  "channel": "whatsapp",
+  "language": "he",
+  "category": "in_session",
+  "type": "quick_reply",
+  "body": "לאשר הגעה בשעה {{slot}}?\n(אפשר גם לבחור מחדש)",
+  "variables": ["slot"],
+  "actions": [
+    {"type": "quick_reply", "id": "CONFIRM_SLOT", "title": "מאשר/ת"},
+    {"type": "quick_reply", "id": "CHANGE_SLOT",  "title": "בחר/י שעה אחרת"}
+  ]
+}
