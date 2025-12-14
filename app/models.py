@@ -15,11 +15,11 @@ class Message(Base):
 
     message_id = Column(BigInteger, primary_key=True)
     org_id = Column(BigInteger, nullable=False)
-    conversation_id = Column(BigInteger, ForeignKey("conversations.conversation_id"), nullable=False)
-    event_id = Column(BigInteger, ForeignKey("events.event_id"), nullable=False)
-    contact_id = Column(BigInteger, ForeignKey("contacts.contact_id"), nullable=False)
+    conversation_id = Column(BigInteger, ForeignKey("conversations(conversation_id)"), nullable=False)
+    event_id = Column(BigInteger, ForeignKey("events(event_id)"), nullable=False)
+    contact_id = Column(BigInteger, ForeignKey("contacts(contact_id)"), nullable=False)
     direction = Column(String, nullable=False)
-    template_id = Column(BigInteger, ForeignKey("message_templates.template_id"))
+    template_id = Column(BigInteger, ForeignKey("message_templates(template_id)"))
     body = Column(Text, nullable=False)
     raw_payload = Column(JSONB)
     whatsapp_msg_sid = Column(String)
@@ -32,8 +32,8 @@ class MessageDeliveryLog(Base):
     __tablename__ = "message_delivery_log"
 
     delivery_id = Column(BigInteger, primary_key=True)
-    org_id = Column(BigInteger, ForeignKey("orgs.org_id"), nullable=False)
-    message_id = Column(BigInteger, ForeignKey("messages.message_id"), nullable=False)
+    org_id = Column(BigInteger, ForeignKey("orgs(org_id)"), nullable=False)
+    message_id = Column(BigInteger, ForeignKey("messages(message_id)"), nullable=False)
     status = Column(String, nullable=False)
     error_code = Column(String)
     error_message = Column(Text)
