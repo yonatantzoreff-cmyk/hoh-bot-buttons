@@ -167,7 +167,7 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
                 direction = message.get("direction") or ""
                 delivery_status = message.get("delivery_status")
                 status_class = _status_badge_class(delivery_status)
-                status_display = delivery_status.title() if delivery_status else "N/A"
+                status_display = str(delivery_status).title() if delivery_status else "N/A"
                 
                 rows.append(
                     """
