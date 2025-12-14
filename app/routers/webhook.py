@@ -46,7 +46,10 @@ async def whatsapp_webhook(
 
 
 @router.post("/twilio-status")
-async def twilio_status_callback(request: Request):
+async def twilio_status_callback(
+    request: Request,
+    delivery_repo: MessageDeliveryLogRepository = Depends(lambda: MessageDeliveryLogRepository()),
+):
     """
     Twilio Status Callback webhook for message delivery tracking.
     
@@ -55,7 +58,6 @@ async def twilio_status_callback(request: Request):
     
     See: https://www.twilio.com/docs/sms/api/message-resource#message-status-values
     """
-    delivery_repo = MessageDeliveryLogRepository()
     
     # Parse form data from Twilio
     payload: dict = {}
@@ -106,7 +108,7 @@ async def twilio_status_callback(request: Request):
     if not org_id or not message_id:
         logger.error(
             "Message found but missing org_id or message_id",
-            extra={"message_sid": message_sid, "message": dict(message)}
+            extra={"message_sid": message_sid, "org_id": org_id, "message_id": message_id}
         )
         return Response(status_code=200)
 

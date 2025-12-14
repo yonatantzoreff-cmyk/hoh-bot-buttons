@@ -996,14 +996,25 @@ class MessageDeliveryLogRepository:
         error_code: Optional[str] = None,
         error_message: Optional[str] = None,
         provider: str = "twilio",
-        provider_payload: Optional[dict | str] = None,
+        provider_payload: Optional[dict] = None,
     ) -> int:
         """
         Insert a new delivery log entry.
         Returns the delivery_id of the newly created row.
         """
-        if isinstance(provider_payload, dict):
-            provider_payload = json.dumps(provider_payload, ensure_ascii=False)
+        payload_json = None
+        if provider_payload:
+            try:
+                payload_json = json.dumps(provider_payload, ensure_ascii=False)
+            except (TypeError, ValueError) as e:
+                # Log error but don't fail the entire operation
+                import logging
+                logging.getLogger(__name__).warning(
+                    "Failed to serialize provider_payload", exc_info=e
+                )
+                payload_json = json.dumps({"error": "serialization_failed"})
+        
+        provider_payload = payload_json
 
         query = text(
             """
