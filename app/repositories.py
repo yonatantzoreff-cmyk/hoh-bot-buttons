@@ -4,9 +4,11 @@ from typing import Optional
 
 import json
 
-from sqlalchemy import text
+from sqlalchemy import select, text
+from sqlalchemy.orm import Session
 
 from .appdb import get_session
+from .models import Message, MessageDeliveryLog
 from .utils.phone import normalize_phone_to_e164_il
 
 
@@ -983,3 +985,46 @@ class TemplateRepository:
         with get_session() as session:
             result = session.execute(query, {"org_id": org_id, "rule_id": rule_id})
             return result.mappings().first()
+
+
+class MessageStatusRepository:
+    """ORM-based helpers for message lookups and status updates."""
+
+    def get_by_whatsapp_sid(
+        self, session: Session, whatsapp_sid: str | None
+    ) -> Message | None:
+        if not whatsapp_sid:
+            return None
+
+        stmt = select(Message).where(Message.whatsapp_msg_sid == whatsapp_sid)
+        return session.execute(stmt).scalars().first()
+
+
+class MessageDeliveryLogRepository:
+    """Persist delivery status notifications for outgoing messages."""
+
+    def log_status(
+        self,
+        session: Session,
+        *,
+        org_id: int,
+        message_id: int,
+        status: str,
+        error_code: str | None = None,
+        error_message: str | None = None,
+        provider: str = "twilio",
+        provider_payload: dict | None = None,
+    ) -> MessageDeliveryLog:
+        record = MessageDeliveryLog(
+            org_id=org_id,
+            message_id=message_id,
+            status=status,
+            error_code=error_code,
+            error_message=error_message,
+            provider=provider,
+            provider_payload=provider_payload or {},
+        )
+
+        session.add(record)
+        session.flush()
+        return record

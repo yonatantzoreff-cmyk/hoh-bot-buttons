@@ -4,18 +4,60 @@ import os
 import json
 import logging
 from typing import Optional, Dict, Any
+from urllib.parse import urlparse
+
 from twilio.rest import Client
 
 # ENV (Render/Dotenv)
 ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 DEFAULT_MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")  # MGxxxxxxxx
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL")
+STATUS_CALLBACK_PATH = os.getenv("TWILIO_STATUS_CALLBACK_PATH", "/twilio-status")
+EXPLICIT_STATUS_CALLBACK_URL = os.getenv("TWILIO_STATUS_CALLBACK_URL")
 
 if not ACCOUNT_SID or not AUTH_TOKEN:
     raise RuntimeError("Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN env vars")
 
 logger = logging.getLogger(__name__)
 client = Client(ACCOUNT_SID, AUTH_TOKEN)
+
+
+def _build_status_callback_url() -> Optional[str]:
+    """Derive the status callback URL for Twilio message tracking.
+
+    Twilio requires an absolute URL. If neither ``TWILIO_STATUS_CALLBACK_URL`` nor
+    ``PUBLIC_BASE_URL`` (to build ``<base>/<path>``) is configured with a scheme and
+    host, we return ``None`` so calls proceed without a callback instead of failing
+    with ``HTTP 400``.
+    """
+
+    if EXPLICIT_STATUS_CALLBACK_URL:
+        parsed = urlparse(EXPLICIT_STATUS_CALLBACK_URL)
+        if parsed.scheme and parsed.netloc:
+            return EXPLICIT_STATUS_CALLBACK_URL
+        logger.warning(
+            "TWILIO_STATUS_CALLBACK_URL must be an absolute URL; ignoring value: %s",
+            EXPLICIT_STATUS_CALLBACK_URL,
+        )
+
+    if PUBLIC_BASE_URL:
+        parsed_base = urlparse(PUBLIC_BASE_URL)
+        if parsed_base.scheme and parsed_base.netloc:
+            base = PUBLIC_BASE_URL.rstrip("/")
+            path = STATUS_CALLBACK_PATH if STATUS_CALLBACK_PATH.startswith("/") else f"/{STATUS_CALLBACK_PATH}"
+            return f"{base}{path}"
+        logger.warning(
+            "PUBLIC_BASE_URL must be an absolute URL; ignoring value: %s", PUBLIC_BASE_URL
+        )
+
+    logger.warning(
+        "No absolute status callback URL configured; Twilio delivery status tracking will be disabled."
+    )
+    return None
+
+
+STATUS_CALLBACK_URL = _build_status_callback_url()
 
 
 def _normalize_to(to_number: str, channel: str = "whatsapp") -> str:
@@ -63,6 +105,8 @@ def send_text(
         "messaging_service_sid": msid,
         "body": body,
     }
+    if STATUS_CALLBACK_URL:
+        payload["status_callback"] = STATUS_CALLBACK_URL
     return client.messages.create(**payload)
 
 
@@ -92,6 +136,9 @@ def send_confirmation_message(to_number: str, event_date: str, setup_time: str, 
         if not from_number:
             raise RuntimeError("Missing TWILIO_WHATSAPP_FROM env var for WhatsApp session message")
         params["from_"] = from_number
+
+    if STATUS_CALLBACK_URL:
+        params["status_callback"] = STATUS_CALLBACK_URL
 
     client.messages.create(**params)
 
@@ -132,4 +179,6 @@ def send_content_message(
         "content_sid": content_sid,
         "content_variables": content_variables_json,
     }
+    if STATUS_CALLBACK_URL:
+        payload["status_callback"] = STATUS_CALLBACK_URL
     return client.messages.create(**payload)
