@@ -11,30 +11,13 @@ from app.repositories import (
     MessageDeliveryLogRepository,
     MessageStatusRepository,
 )
+from app.utils.delivery_status import normalize_delivery_status
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
 delivery_logs = MessageDeliveryLogRepository()
 message_status_repo = MessageStatusRepository()
-
-
-def _normalize_status(status: str | None) -> str:
-    if not status:
-        return "unknown"
-
-    status_lower = status.strip().lower()
-    mapping = {
-        "accepted": "queued",
-        "queued": "queued",
-        "sending": "sent",
-        "sent": "sent",
-        "delivered": "delivered",
-        "undelivered": "failed",
-        "failed": "failed",
-        "canceled": "failed",
-    }
-    return mapping.get(status_lower, status_lower)
 
 
 async def _extract_payload(request: Request) -> Dict[str, Any]:
@@ -86,7 +69,7 @@ async def twilio_status_callback(
         logger.warning("No message found for Twilio SID %s", message_sid)
         return Response(status_code=204)
 
-    normalized_status = _normalize_status(message_status)
+    normalized_status = normalize_delivery_status(message_status)
     delivery_logs.log_status(
         session,
         org_id=message.org_id,

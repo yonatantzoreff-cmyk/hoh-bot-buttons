@@ -697,6 +697,10 @@ class MessageRepository:
         sent_at=None,
         received_at=None,
         raw_payload: Optional[dict | str] = None,
+        delivery_status: Optional[str] = None,
+        delivery_error_code: Optional[str] = None,
+        delivery_error_message: Optional[str] = None,
+        delivery_provider_payload: Optional[dict] = None,
     ) -> int:
         now = datetime.utcnow()
 
@@ -746,6 +750,18 @@ class MessageRepository:
                 },
             )
             message_id = result.scalar_one()
+
+            if delivery_status:
+                delivery_log = MessageDeliveryLog(
+                    org_id=org_id,
+                    message_id=message_id,
+                    status=delivery_status,
+                    error_code=delivery_error_code,
+                    error_message=delivery_error_message,
+                    provider="twilio",
+                    provider_payload=delivery_provider_payload or {},
+                )
+                session.add(delivery_log)
 
             if conversation_id is not None:
                 update_conv_q = text(
