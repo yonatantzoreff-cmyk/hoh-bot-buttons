@@ -983,3 +983,74 @@ class TemplateRepository:
         with get_session() as session:
             result = session.execute(query, {"org_id": org_id, "rule_id": rule_id})
             return result.mappings().first()
+
+
+class MessageDeliveryLogRepository:
+    """אחראי על טבלת message_delivery_log - Twilio delivery status tracking."""
+
+    def create_delivery_log(
+        self,
+        org_id: int,
+        message_id: int,
+        status: str,
+        error_code: Optional[str] = None,
+        error_message: Optional[str] = None,
+        provider: str = "twilio",
+        provider_payload: Optional[dict | str] = None,
+    ) -> int:
+        """
+        Insert a new delivery log entry.
+        Returns the delivery_id of the newly created row.
+        """
+        if isinstance(provider_payload, dict):
+            provider_payload = json.dumps(provider_payload, ensure_ascii=False)
+
+        query = text(
+            """
+            INSERT INTO message_delivery_log (
+                org_id, message_id, status,
+                error_code, error_message,
+                provider, provider_payload, created_at
+            )
+            VALUES (
+                :org_id, :message_id, :status,
+                :error_code, :error_message,
+                :provider, :provider_payload, :now
+            )
+            RETURNING delivery_id
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(
+                query,
+                {
+                    "org_id": org_id,
+                    "message_id": message_id,
+                    "status": status,
+                    "error_code": error_code,
+                    "error_message": error_message,
+                    "provider": provider,
+                    "provider_payload": provider_payload,
+                    "now": datetime.utcnow(),
+                },
+            )
+            return result.scalar_one()
+
+    def get_message_by_whatsapp_sid(self, whatsapp_msg_sid: str):
+        """
+        Find a message by its Twilio WhatsApp Message SID.
+        Returns the message row or None.
+        """
+        query = text(
+            """
+            SELECT *
+            FROM messages
+            WHERE whatsapp_msg_sid = :whatsapp_msg_sid
+            LIMIT 1
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(query, {"whatsapp_msg_sid": whatsapp_msg_sid})
+            return result.mappings().first()

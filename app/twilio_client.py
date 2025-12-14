@@ -10,6 +10,7 @@ from twilio.rest import Client
 ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 DEFAULT_MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")  # MGxxxxxxxx
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "")  # Base URL for status callbacks
 
 if not ACCOUNT_SID or not AUTH_TOKEN:
     raise RuntimeError("Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN env vars")
@@ -63,6 +64,11 @@ def send_text(
         "messaging_service_sid": msid,
         "body": body,
     }
+    
+    # Add status callback if PUBLIC_BASE_URL is configured
+    if PUBLIC_BASE_URL:
+        payload["status_callback"] = f"{PUBLIC_BASE_URL}/twilio-status"
+    
     return client.messages.create(**payload)
 
 
@@ -92,6 +98,10 @@ def send_confirmation_message(to_number: str, event_date: str, setup_time: str, 
         if not from_number:
             raise RuntimeError("Missing TWILIO_WHATSAPP_FROM env var for WhatsApp session message")
         params["from_"] = from_number
+
+    # Add status callback if PUBLIC_BASE_URL is configured
+    if PUBLIC_BASE_URL:
+        params["status_callback"] = f"{PUBLIC_BASE_URL}/twilio-status"
 
     client.messages.create(**params)
 
@@ -132,4 +142,9 @@ def send_content_message(
         "content_sid": content_sid,
         "content_variables": content_variables_json,
     }
+    
+    # Add status callback if PUBLIC_BASE_URL is configured
+    if PUBLIC_BASE_URL:
+        payload["status_callback"] = f"{PUBLIC_BASE_URL}/twilio-status"
+    
     return client.messages.create(**payload)
