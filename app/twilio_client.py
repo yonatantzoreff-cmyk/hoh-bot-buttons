@@ -10,12 +10,32 @@ from twilio.rest import Client
 ACCOUNT_SID = os.getenv("TWILIO_ACCOUNT_SID")
 AUTH_TOKEN = os.getenv("TWILIO_AUTH_TOKEN")
 DEFAULT_MESSAGING_SERVICE_SID = os.getenv("TWILIO_MESSAGING_SERVICE_SID")  # MGxxxxxxxx
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL")
+STATUS_CALLBACK_PATH = os.getenv("TWILIO_STATUS_CALLBACK_PATH", "/twilio-status")
+EXPLICIT_STATUS_CALLBACK_URL = os.getenv("TWILIO_STATUS_CALLBACK_URL")
 
 if not ACCOUNT_SID or not AUTH_TOKEN:
     raise RuntimeError("Missing TWILIO_ACCOUNT_SID or TWILIO_AUTH_TOKEN env vars")
 
 logger = logging.getLogger(__name__)
 client = Client(ACCOUNT_SID, AUTH_TOKEN)
+
+
+def _build_status_callback_url() -> Optional[str]:
+    """Derive the status callback URL for Twilio message tracking."""
+
+    if EXPLICIT_STATUS_CALLBACK_URL:
+        return EXPLICIT_STATUS_CALLBACK_URL
+
+    if PUBLIC_BASE_URL:
+        base = PUBLIC_BASE_URL.rstrip("/")
+        path = STATUS_CALLBACK_PATH if STATUS_CALLBACK_PATH.startswith("/") else f"/{STATUS_CALLBACK_PATH}"
+        return f"{base}{path}"
+
+    return STATUS_CALLBACK_PATH
+
+
+STATUS_CALLBACK_URL = _build_status_callback_url()
 
 
 def _normalize_to(to_number: str, channel: str = "whatsapp") -> str:
@@ -63,6 +83,8 @@ def send_text(
         "messaging_service_sid": msid,
         "body": body,
     }
+    if STATUS_CALLBACK_URL:
+        payload["status_callback"] = STATUS_CALLBACK_URL
     return client.messages.create(**payload)
 
 
@@ -92,6 +114,9 @@ def send_confirmation_message(to_number: str, event_date: str, setup_time: str, 
         if not from_number:
             raise RuntimeError("Missing TWILIO_WHATSAPP_FROM env var for WhatsApp session message")
         params["from_"] = from_number
+
+    if STATUS_CALLBACK_URL:
+        params["status_callback"] = STATUS_CALLBACK_URL
 
     client.messages.create(**params)
 
@@ -132,4 +157,6 @@ def send_content_message(
         "content_sid": content_sid,
         "content_variables": content_variables_json,
     }
+    if STATUS_CALLBACK_URL:
+        payload["status_callback"] = STATUS_CALLBACK_URL
     return client.messages.create(**payload)
