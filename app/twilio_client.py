@@ -4,8 +4,6 @@ import os
 import json
 import logging
 from typing import Optional, Dict, Any
-from urllib.parse import urlparse
-
 from twilio.rest import Client
 
 # ENV (Render/Dotenv)
@@ -24,37 +22,17 @@ client = Client(ACCOUNT_SID, AUTH_TOKEN)
 
 
 def _build_status_callback_url() -> Optional[str]:
-    """Derive the status callback URL for Twilio message tracking.
-
-    Twilio requires an absolute URL. If neither ``TWILIO_STATUS_CALLBACK_URL`` nor
-    ``PUBLIC_BASE_URL`` (to build ``<base>/<path>``) is configured with a scheme and
-    host, we return ``None`` so calls proceed without a callback instead of failing
-    with ``HTTP 400``.
-    """
+    """Derive the status callback URL for Twilio message tracking."""
 
     if EXPLICIT_STATUS_CALLBACK_URL:
-        parsed = urlparse(EXPLICIT_STATUS_CALLBACK_URL)
-        if parsed.scheme and parsed.netloc:
-            return EXPLICIT_STATUS_CALLBACK_URL
-        logger.warning(
-            "TWILIO_STATUS_CALLBACK_URL must be an absolute URL; ignoring value: %s",
-            EXPLICIT_STATUS_CALLBACK_URL,
-        )
+        return EXPLICIT_STATUS_CALLBACK_URL
 
     if PUBLIC_BASE_URL:
-        parsed_base = urlparse(PUBLIC_BASE_URL)
-        if parsed_base.scheme and parsed_base.netloc:
-            base = PUBLIC_BASE_URL.rstrip("/")
-            path = STATUS_CALLBACK_PATH if STATUS_CALLBACK_PATH.startswith("/") else f"/{STATUS_CALLBACK_PATH}"
-            return f"{base}{path}"
-        logger.warning(
-            "PUBLIC_BASE_URL must be an absolute URL; ignoring value: %s", PUBLIC_BASE_URL
-        )
+        base = PUBLIC_BASE_URL.rstrip("/")
+        path = STATUS_CALLBACK_PATH if STATUS_CALLBACK_PATH.startswith("/") else f"/{STATUS_CALLBACK_PATH}"
+        return f"{base}{path}"
 
-    logger.warning(
-        "No absolute status callback URL configured; Twilio delivery status tracking will be disabled."
-    )
-    return None
+    return STATUS_CALLBACK_PATH
 
 
 STATUS_CALLBACK_URL = _build_status_callback_url()
