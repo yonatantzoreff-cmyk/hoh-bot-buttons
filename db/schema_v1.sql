@@ -144,8 +144,13 @@ CREATE TABLE messages (
     template_id      BIGINT,          -- FK ל-message_templates, ניצור אחרי הטבלה ההיא
     body             TEXT   NOT NULL,
     raw_payload      JSONB,
+    status           TEXT,
     whatsapp_msg_sid TEXT,
     sent_at          TIMESTAMPTZ,
+    delivered_at     TIMESTAMPTZ,
+    read_at          TIMESTAMPTZ,
+    failed_at        TIMESTAMPTZ,
+    last_status_at   TIMESTAMPTZ,
     received_at      TIMESTAMPTZ,
     created_at       TIMESTAMPTZ NOT NULL DEFAULT now()
 );

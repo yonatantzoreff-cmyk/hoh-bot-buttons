@@ -67,7 +67,17 @@ async def twilio_status_callback(
         payload = dict(form_data)
     except Exception as e:
         logger.warning("Failed to parse Twilio status callback form data", exc_info=e)
-        return Response(status_code=400, content="Invalid form data")
+        payload = {}
+
+    if not payload:
+        try:
+            payload = await request.json()
+        except Exception:
+            raw_body = await request.body()
+            try:
+                payload = json.loads(raw_body.decode()) if raw_body else {}
+            except Exception:
+                payload = {}
 
     # Extract key fields from Twilio's callback
     message_sid = payload.get("MessageSid") or payload.get("SmsSid")
@@ -89,18 +99,21 @@ async def twilio_status_callback(
             "Missing MessageSid or MessageStatus in Twilio callback",
             extra={"payload": payload}
         )
-        return Response(status_code=400, content="Missing required fields")
+        return Response(status_code=200)
 
     # Find the message in our DB by whatsapp_msg_sid
     message = delivery_repo.get_message_by_whatsapp_sid(message_sid)
 
+    updated = message_repo.update_message_timestamps_from_status(
+        message_sid=message_sid, status=message_status
+    )
+
     if not message:
-        logger.debug(
-            "Message not found for MessageSid",
-            extra={"message_sid": message_sid}
-        )
-        # Return 200 to acknowledge receipt even if message not found
-        # (could be a message we didn't track or from a different system)
+        if not updated:
+            logger.info(
+                "Message not found for MessageSid",
+                extra={"message_sid": message_sid},
+            )
         return Response(status_code=200)
 
     org_id = message.get("org_id")
@@ -112,10 +125,6 @@ async def twilio_status_callback(
             extra={"message_sid": message_sid, "org_id": org_id, "message_id": message_id},
         )
         return Response(status_code=200)
-
-    message_repo.update_message_timestamps_from_status(
-        message_id=message_id, status=message_status
-    )
 
     # Insert a new delivery log entry
     try:

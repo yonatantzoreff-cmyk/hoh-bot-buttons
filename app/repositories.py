@@ -1,6 +1,6 @@
 # repositories.py
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Any, Optional
 
 import json
 
@@ -1143,32 +1143,82 @@ class MessageDeliveryLogRepository:
             return result.mappings().first()
 
     def update_message_timestamps_from_status(
-        self, message_id: int, status: str, when: Optional[datetime] = None
-    ) -> None:
+        self, message_sid: str, status: str, occurred_at: Optional[datetime] = None
+    ) -> bool:
         """
-        Update message timestamps based on delivery status callbacks.
+        Update message status + timestamps based on a Twilio status callback.
 
-        For outgoing messages we only track sent_at; set it if missing when
-        receiving a status like queued/sent/delivered.
+        Returns True if a matching message was found and updated, False otherwise.
         """
 
-        if when is None:
-            when = datetime.utcnow()
+        if not message_sid:
+            return False
 
+        when = occurred_at or datetime.utcnow()
         status_lower = (status or "").lower()
-        if status_lower not in {"queued", "sending", "sent", "delivered"}:
-            return
-
-        query = text(
-            """
-            UPDATE messages
-            SET sent_at = COALESCE(sent_at, :when)
-            WHERE message_id = :message_id
-            """
-        )
 
         with get_session() as session:
-            session.execute(query, {"message_id": message_id, "when": when})
+            message = session.execute(
+                text(
+                    """
+                    SELECT message_id
+                    FROM messages
+                    WHERE whatsapp_msg_sid = :message_sid
+                    LIMIT 1
+                    """
+                ),
+                {"message_sid": message_sid},
+            ).mappings().first()
+
+            if not message:
+                return False
+
+            updates = {"status": status, "last_status_at": when}
+
+            if status_lower in {"sent", "queued", "sending"}:
+                updates["sent_at"] = when
+
+            if status_lower == "delivered":
+                updates["delivered_at"] = when
+
+            if status_lower == "read":
+                updates["read_at"] = when
+
+            if status_lower in {"failed", "undelivered"}:
+                updates["failed_at"] = when
+
+            set_parts = []
+            params: dict[str, Any] = {
+                "message_id": message.get("message_id"),
+                "status": updates.get("status"),
+                "last_status_at": updates.get("last_status_at"),
+                "sent_at": updates.get("sent_at"),
+                "delivered_at": updates.get("delivered_at"),
+                "read_at": updates.get("read_at"),
+                "failed_at": updates.get("failed_at"),
+            }
+
+            for column in ("status", "last_status_at", "sent_at", "delivered_at", "read_at", "failed_at"):
+                if updates.get(column) is not None:
+                    if column == "sent_at":
+                        set_parts.append("sent_at = COALESCE(sent_at, :sent_at)")
+                    else:
+                        set_parts.append(f"{column} = :{column}")
+
+            if not set_parts:
+                return True
+
+            query = text(
+                f"""
+                UPDATE messages
+                SET {', '.join(set_parts)}
+                WHERE message_id = :message_id
+                """
+            )
+
+            session.execute(query, params)
+
+            return True
 
 
 class EmployeeRepository:
