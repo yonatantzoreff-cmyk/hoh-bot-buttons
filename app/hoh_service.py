@@ -363,16 +363,29 @@ class HOHService:
         tech_name = event.get("technical_name") or os.getenv("TECH_CONTACT_NAME")
         support_name = tech_name or event.get("producer_name") or ""
 
+        shift_role = shift.get("shift_role") or ""
+        shift_notes = shift.get("notes") or ""
+        event_notes = event.get("notes") or ""
+
+        notes_parts = []
+        if shift_role:
+            notes_parts.append(f"תפקיד: {shift_role}")
+        if shift_notes:
+            notes_parts.append(shift_notes)
+        elif event_notes:
+            notes_parts.append(event_notes)
+
+        notes_text = "\n".join(notes_parts)
+
         variables = {
             "1": first_name,
             "2": event.get("name") or "",
             "3": event_date_display,
             "4": show_time_display,
             "5": call_time_display,
-            "6": shift.get("shift_role") or "",
-            "7": event.get("notes") or "",
+            "6": notes_text,
+            "7": support_name,
             "8": support_phone,
-            "9": support_name,
         }
 
         return variables
