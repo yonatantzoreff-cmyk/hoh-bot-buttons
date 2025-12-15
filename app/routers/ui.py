@@ -59,6 +59,7 @@ def _render_page(title: str, body: str) -> str:
               <a class=\"btn btn-outline-light btn-sm me-2\" href=\"/ui\">Add Event</a>
               <a class=\"btn btn-outline-light btn-sm\" href=\"/ui/events\">View Events</a>
               <a class=\"btn btn-outline-light btn-sm ms-2\" href=\"/ui/contacts\">Contacts</a>
+              <a class=\"btn btn-outline-light btn-sm ms-2\" href=\"/ui/employees\">Employees</a>
               <a class=\"btn btn-light btn-sm ms-2\" href=\"/ui/messages\">Messages</a>
               <a class=\"btn btn-outline-success btn-sm ms-2\" href=\"/ui/calendar-import\">Import Calendar</a>
             </div>
@@ -542,9 +543,11 @@ async def ui_send_init(
 @router.get("/ui/events", response_class=HTMLResponse)
 async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLResponse:
     events = hoh.list_events_for_org(org_id=1)
+    # Get all active employees for dropdown
+    active_employees = hoh.list_employees(org_id=1, active_only=True)
 
     table_rows = []
-    for row in events:
+    for idx, row in enumerate(events):
         event_date = row.get("event_date")
         show_time = _strip_timezone(row.get("show_time"))
         load_in_time = _strip_timezone(row.get("load_in_time"))
@@ -587,10 +590,143 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             else "<div class=\\\"small text-muted mt-1\\\">Not sent yet</div>"
         )
         notes = row["notes"] or ""
+        event_id = row.get("event_id")
+        
+        # Get shifts for this event
+        shifts = hoh.list_event_employees(org_id=1, event_id=event_id)
+        
+        # Build shifts table for collapse
+        shift_rows = []
+        for shift in shifts:
+            shift_id = shift.get("shift_id")
+            emp_name = escape(shift.get("employee_name") or "")
+            emp_phone = escape(shift.get("employee_phone") or "")
+            shift_call_time = shift.get("call_time")
+            shift_call_time_display = _to_israel_time(shift_call_time).strftime("%Y-%m-%d %H:%M") if shift_call_time else ""
+            # For edit form, we need datetime-local format (YYYY-MM-DDTHH:MM)
+            shift_call_time_edit = _to_israel_time(shift_call_time).strftime("%Y-%m-%dT%H:%M") if shift_call_time else ""
+            shift_role_val = escape(shift.get("shift_role") or "")
+            shift_notes_val = escape(shift.get("notes") or "")
+            reminder_sent = shift.get("reminder_24h_sent_at")
+            reminder_badge = (
+                '<span class="badge bg-success">תזכורת נשלחה</span>' if reminder_sent 
+                else '<span class="badge bg-secondary">לא נשלח</span>'
+            )
+            
+            shift_rows.append(f"""
+                <tr>
+                  <td>{emp_name}</td>
+                  <td>{emp_phone}</td>
+                  <td>{shift_call_time_display}</td>
+                  <td>{shift_role_val}</td>
+                  <td class="text-break">{shift_notes_val}</td>
+                  <td>{reminder_badge}</td>
+                  <td class="text-nowrap">
+                    <button class="btn btn-sm btn-outline-secondary" 
+                            onclick="showEditShiftModal({event_id}, {shift_id}, '{shift_call_time_edit}', '{shift_role_val}', '{shift_notes_val}')">
+                      Edit
+                    </button>
+                    <form method="post" action="/ui/events/{event_id}/shifts/{shift_id}/delete" class="d-inline ms-1"
+                          onsubmit="return confirm('מחק משמרת זו?');">
+                      <button class="btn btn-sm btn-outline-danger" type="submit">Delete</button>
+                    </form>
+                    <form method="post" action="/ui/events/{event_id}/shifts/{shift_id}/send-reminder" class="d-inline ms-1">
+                      <button class="btn btn-sm btn-outline-info" type="submit">Send Reminder</button>
+                    </form>
+                  </td>
+                </tr>
+            """)
+        
+        shift_table_body = "".join(shift_rows) or """
+            <tr>
+              <td colspan="7" class="text-center text-muted">אין משמרות / No shifts assigned yet.</td>
+            </tr>
+        """
+        
+        # Build employee dropdown options
+        employee_options = []
+        for emp in active_employees:
+            emp_id = emp.get("employee_id")
+            emp_name = escape(emp.get("name") or "")
+            employee_options.append(f'<option value="{emp_id}">{emp_name}</option>')
+        employee_dropdown = "".join(employee_options)
+        
+        # Build the collapse ID
+        collapse_id = f"collapseShifts{event_id}"
+        
+        # Build the shift collapse HTML
+        shifts_collapse = f"""
+        <tr class="collapse-row" id="{collapse_id}" style="display:none;">
+          <td colspan="12" class="p-0">
+            <div class="card m-2">
+              <div class="card-header bg-light">
+                <strong>משמרות עובדים / Employee Shifts</strong>
+              </div>
+              <div class="card-body">
+                <div class="table-responsive">
+                  <table class="table table-sm table-hover mb-3">
+                    <thead>
+                      <tr>
+                        <th>שם עובד / Employee</th>
+                        <th>טלפון / Phone</th>
+                        <th>שעת כניסה / Call Time</th>
+                        <th>תפקיד / Role</th>
+                        <th>הערות / Notes</th>
+                        <th>תזכורת / Reminder</th>
+                        <th>פעולות / Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {shift_table_body}
+                    </tbody>
+                  </table>
+                </div>
+                <hr>
+                <div class="card bg-light">
+                  <div class="card-body">
+                    <h6>הוסף עובד למשמרת / Add Employee to Shift</h6>
+                    <form method="post" action="/ui/events/{event_id}/shifts">
+                      <div class="row">
+                        <div class="col-md-3 mb-2">
+                          <label class="form-label" for="employee_id_{event_id}">עובד / Employee</label>
+                          <select class="form-select form-select-sm" id="employee_id_{event_id}" name="employee_id" required>
+                            <option value="">בחר עובד...</option>
+                            {employee_dropdown}
+                          </select>
+                        </div>
+                        <div class="col-md-3 mb-2">
+                          <label class="form-label" for="call_time_{event_id}">שעת כניסה / Call Time</label>
+                          <input class="form-control form-control-sm" id="call_time_{event_id}" name="call_time" type="datetime-local" required>
+                        </div>
+                        <div class="col-md-2 mb-2">
+                          <label class="form-label" for="shift_role_{event_id}">תפקיד / Role</label>
+                          <input class="form-control form-control-sm" id="shift_role_{event_id}" name="shift_role" type="text">
+                        </div>
+                        <div class="col-md-3 mb-2">
+                          <label class="form-label" for="notes_{event_id}">הערות / Notes</label>
+                          <input class="form-control form-control-sm" id="notes_{event_id}" name="notes" type="text">
+                        </div>
+                        <div class="col-md-1 mb-2 d-flex align-items-end">
+                          <button class="btn btn-sm btn-primary w-100" type="submit">הוסף / Add</button>
+                        </div>
+                      </div>
+                    </form>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </td>
+        </tr>
+        """
 
         table_rows.append(
             """
-            <tr>
+            <tr class="event-row">
+              <td>
+                <button class="btn btn-sm btn-outline-primary" type="button" onclick="toggleCollapse('{collapse_id}')">
+                  <span id="icon-{collapse_id}">▶</span> טכנאים
+                </button>
+              </td>
               <td>{name}</td>
               <td>{date}</td>
               <td>{time}</td>
@@ -601,7 +737,6 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
               <td class=\"text-break\">{notes}</td>
               <td>{producer_phone}</td>
               <td>{technical_phone}</td>
-              <td>{created_at}</td>
               <td class=\"text-nowrap\">
                 <form method=\"post\" action=\"/ui/events/{event_id}/send-init\" class=\"d-inline\">
                   <button class=\"{whatsapp_btn_class}\" type=\"submit\">Send WhatsApp</button>
@@ -613,7 +748,9 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 </form>
               </td>
             </tr>
+            {shifts_collapse}
             """.format(
+                collapse_id=collapse_id,
                 name=escape(row.get("name") or ""),
                 date=escape(date_display),
                 time=escape(time_display),
@@ -622,13 +759,15 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 status=escape(status),
                 delivery_status=escape(delivery_status_display),
                 delivery_status_class=delivery_status_class,
-                notes=escape(row.get("notes") or ""),
+                notes=escape(notes),
                 producer_phone=escape(producer_display),
                 technical_phone=escape(technical_phone),
-                created_at=escape(created_at_display),
-                event_id=row.get("event_id"),
+                event_id=event_id,
                 whatsapp_btn_class=whatsapp_btn_class,
                 sent_indicator=sent_indicator,
+                shift_table_body=shift_table_body,
+                employee_dropdown=employee_dropdown,
+                shifts_collapse=shifts_collapse,
             )
         )
 
@@ -639,6 +778,38 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
     """
 
     table_template = """
+    <!-- Edit Shift Modal -->
+    <div class="modal fade" id="editShiftModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">ערוך משמרת / Edit Shift</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <form id="editShiftForm" method="post">
+            <div class="modal-body">
+              <div class="mb-3">
+                <label class="form-label">שעת כניסה / Call Time</label>
+                <input class="form-control" id="edit_call_time" name="call_time" type="datetime-local" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">תפקיד / Role</label>
+                <input class="form-control" id="edit_shift_role" name="shift_role" type="text">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">הערות / Notes</label>
+                <textarea class="form-control" id="edit_notes" name="notes" rows="3"></textarea>
+              </div>
+            </div>
+            <div class="modal-footer">
+              <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">ביטול / Cancel</button>
+              <button type="submit" class="btn btn-primary">שמור / Save</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    
     <div class=\"card\">
       <div class=\"card-header bg-secondary text-white\">Events</div>
       <div class=\"card-body\">
@@ -646,6 +817,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
           <table id=\"events-table\" class=\"table table-striped align-middle\">
             <thead>
               <tr>
+                <th scope=\"col\">Shifts</th>
                 <th scope=\"col\">Name</th>
                 <th scope=\"col\">Date</th>
                 <th scope=\"col\">Show Time</th>
@@ -656,7 +828,6 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 <th scope=\"col\">Notes</th>
                 <th scope=\"col\">Producer Phone</th>
                 <th scope=\"col\">Technical Phone</th>
-                <th scope=\"col\">Created At</th>
                 <th scope=\"col\">Actions</th>
               </tr>
             </thead>
@@ -667,6 +838,36 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         </div>
       </div>
     </div>
+    <script>
+      function toggleCollapse(collapseId) {
+        const row = document.getElementById(collapseId);
+        const icon = document.getElementById('icon-' + collapseId);
+        if (row.style.display === 'none') {
+          row.style.display = '';
+          icon.textContent = '▼';
+        } else {
+          row.style.display = 'none';
+          icon.textContent = '▶';
+        }
+      }
+      
+      function showEditShiftModal(eventId, shiftId, callTime, role, notes) {
+        // Unescape HTML entities
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = role;
+        const unescapedRole = tempDiv.textContent;
+        tempDiv.innerHTML = notes;
+        const unescapedNotes = tempDiv.textContent;
+        
+        document.getElementById('edit_call_time').value = callTime;
+        document.getElementById('edit_shift_role').value = unescapedRole;
+        document.getElementById('edit_notes').value = unescapedNotes;
+        document.getElementById('editShiftForm').action = '/ui/events/' + eventId + '/shifts/' + shiftId + '/edit';
+        
+        const modal = new bootstrap.Modal(document.getElementById('editShiftModal'));
+        modal.show();
+      }
+    </script>
     <script>
       document.addEventListener("DOMContentLoaded", function () {
         const tableElement = document.getElementById("events-table");
@@ -863,6 +1064,171 @@ async def delete_event(event_id: int, hoh: HOHService = Depends(get_hoh_service)
         logger.exception("Failed to delete event: %s", exc)
         raise HTTPException(status_code=500, detail="Failed to delete event") from exc
 
+    return RedirectResponse(url="/ui/events", status_code=303)
+
+
+# ==========================================
+# SHIFT MANAGEMENT (Employee Shifts for Events)
+# ==========================================
+
+@router.post("/ui/events/{event_id}/shifts")
+async def create_shift(
+    event_id: int,
+    employee_id: int = Form(...),
+    call_time: str = Form(...),
+    shift_role: str | None = Form(None),
+    notes: str | None = Form(None),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """Assign an employee to an event shift."""
+    try:
+        # Parse call_time from datetime-local format
+        from datetime import datetime, timezone
+        
+        # datetime-local sends "YYYY-MM-DDTHH:MM" format
+        call_time_dt = datetime.fromisoformat(call_time)
+        # Make it timezone-aware (Israel timezone)
+        call_time_tz = call_time_dt.replace(tzinfo=ISRAEL_TZ)
+        
+        hoh.assign_employee_to_event(
+            org_id=1,
+            event_id=event_id,
+            employee_id=employee_id,
+            call_time=call_time_tz,
+            shift_role=shift_role.strip() if shift_role else None,
+            notes=notes.strip() if notes else None,
+        )
+    except Exception as exc:
+        # Check if it's a UNIQUE constraint violation (duplicate employee assignment)
+        error_str = str(exc).lower()
+        if "unique" in error_str or "duplicate" in error_str:
+            raise HTTPException(
+                status_code=400,
+                detail="עובד זה כבר משויך לאירוע / Employee is already assigned to this event"
+            ) from exc
+        logger.exception("Failed to create shift: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Failed to create shift: {exc}") from exc
+    
+    return RedirectResponse(url="/ui/events", status_code=303)
+
+
+@router.post("/ui/events/{event_id}/shifts/{shift_id}/edit")
+async def update_shift(
+    event_id: int,
+    shift_id: int,
+    call_time: str = Form(...),
+    shift_role: str | None = Form(None),
+    notes: str | None = Form(None),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """Update a shift."""
+    try:
+        from datetime import datetime
+        
+        call_time_dt = datetime.fromisoformat(call_time)
+        call_time_tz = call_time_dt.replace(tzinfo=ISRAEL_TZ)
+        
+        hoh.update_shift(
+            org_id=1,
+            shift_id=shift_id,
+            call_time=call_time_tz,
+            shift_role=shift_role.strip() if shift_role else None,
+            notes=notes.strip() if notes else None,
+        )
+    except Exception as exc:
+        logger.exception("Failed to update shift: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Failed to update shift: {exc}") from exc
+    
+    return RedirectResponse(url="/ui/events", status_code=303)
+
+
+@router.post("/ui/events/{event_id}/shifts/{shift_id}/delete")
+async def delete_shift(
+    event_id: int,
+    shift_id: int,
+    hoh: HOHService = Depends(get_hoh_service)
+):
+    """Delete a shift."""
+    try:
+        hoh.delete_shift(org_id=1, shift_id=shift_id)
+    except Exception as exc:
+        logger.exception("Failed to delete shift: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Failed to delete shift: {exc}") from exc
+    
+    return RedirectResponse(url="/ui/events", status_code=303)
+
+
+@router.post("/ui/events/{event_id}/shifts/{shift_id}/send-reminder")
+async def send_shift_reminder(
+    event_id: int,
+    shift_id: int,
+    hoh: HOHService = Depends(get_hoh_service)
+):
+    """Send a reminder to the employee for this shift."""
+    try:
+        # Get shift details
+        shift = hoh.get_shift(org_id=1, shift_id=shift_id)
+        if not shift:
+            raise HTTPException(status_code=404, detail="Shift not found")
+        
+        # Get event details
+        event = hoh.get_event_with_contacts(org_id=1, event_id=event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Prepare reminder message
+        employee_name = shift.get("employee_name", "")
+        employee_phone = shift.get("employee_phone", "")
+        event_name = event.get("name", "")
+        event_date = event.get("event_date")
+        call_time = shift.get("call_time")
+        shift_role = shift.get("shift_role", "")
+        
+        if not employee_phone:
+            raise HTTPException(status_code=400, detail="Employee phone number not found")
+        
+        # Format call time
+        call_time_display = _to_israel_time(call_time).strftime("%H:%M") if call_time else ""
+        event_date_display = event_date.strftime("%d/%m/%Y") if event_date else ""
+        
+        # Build reminder message
+        message_body = f"""
+תזכורת למשמרת / Shift Reminder
+שלום {employee_name},
+זוהי תזכורת למשמרת שלך:
+
+אירוע: {event_name}
+תאריך: {event_date_display}
+שעת כניסה: {call_time_display}
+תפקיד: {shift_role if shift_role else 'לא צוין'}
+
+נתראה שם!
+        """.strip()
+        
+        # Send via Twilio (or stub for now)
+        # For now, we'll just log it - you can uncomment the actual Twilio sending later
+        logger.info(f"Sending reminder to {employee_phone}: {message_body}")
+        
+        # Uncomment this when you want to actually send via Twilio:
+        # from app import twilio_client
+        # twilio_client.send_text(
+        #     to=employee_phone,
+        #     body=message_body,
+        #     channel="whatsapp"
+        # )
+        
+        # Mark reminder as sent
+        from datetime import datetime, timezone
+        hoh.employee_shifts.mark_24h_reminder_sent(shift_id=shift_id, when=datetime.now(timezone.utc))
+        
+        logger.info(f"Reminder sent successfully for shift {shift_id}")
+        
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to send reminder: %s", exc)
+        raise HTTPException(status_code=500, detail=f"Failed to send reminder: {exc}") from exc
+    
     return RedirectResponse(url="/ui/events", status_code=303)
 
 
@@ -1301,3 +1667,228 @@ async def calendar_import_page() -> HTMLResponse:
     
     html = _render_page("Import Calendar", page_html)
     return HTMLResponse(content=html)
+
+
+# ==========================================
+# EMPLOYEE MANAGEMENT
+# ==========================================
+
+@router.get("/ui/employees", response_class=HTMLResponse)
+async def list_employees(
+    show_inactive: bool = False,
+    hoh: HOHService = Depends(get_hoh_service)
+) -> HTMLResponse:
+    """Employee management page - list all employees with CRUD operations."""
+    employees = hoh.list_employees(org_id=1, active_only=not show_inactive)
+    
+    # Build add form
+    add_form = """
+    <div class="card mb-4 shadow-sm">
+      <div class="card-header bg-primary text-white">הוסף עובד חדש / Add Employee</div>
+      <div class="card-body">
+        <form method="post" action="/ui/employees">
+          <div class="row">
+            <div class="col-md-3 mb-3">
+              <label class="form-label" for="name">שם / Name</label>
+              <input class="form-control" id="name" name="name" type="text" required>
+            </div>
+            <div class="col-md-3 mb-3">
+              <label class="form-label" for="phone">טלפון / Phone</label>
+              <input class="form-control" id="phone" name="phone" type="text" required>
+            </div>
+            <div class="col-md-3 mb-3">
+              <label class="form-label" for="role">תפקיד / Role</label>
+              <input class="form-control" id="role" name="role" type="text">
+            </div>
+            <div class="col-md-3 mb-3">
+              <label class="form-label" for="notes">הערות / Notes</label>
+              <input class="form-control" id="notes" name="notes" type="text">
+            </div>
+          </div>
+          <div class="d-flex justify-content-end">
+            <button class="btn btn-primary" type="submit">הוסף / Add Employee</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    """
+    
+    # Build filter toggle
+    filter_toggle = f"""
+    <div class="mb-3">
+      <a class="btn btn-sm btn-outline-secondary" href="/ui/employees?show_inactive={'false' if show_inactive else 'true'}">
+        {'הסתר לא פעילים / Hide Inactive' if show_inactive else 'הצג לא פעילים / Show Inactive'}
+      </a>
+    </div>
+    """
+    
+    # Build table rows
+    table_rows = []
+    for emp in employees:
+        employee_id = emp.get("employee_id")
+        name = escape(emp.get("name") or "")
+        phone = escape(emp.get("phone") or "")
+        role = escape(emp.get("role") or "")
+        notes = escape(emp.get("notes") or "")
+        is_active = emp.get("is_active", True)
+        
+        active_badge = (
+            '<span class="badge bg-success">פעיל / Active</span>' if is_active
+            else '<span class="badge bg-secondary">לא פעיל / Inactive</span>'
+        )
+        
+        table_rows.append(f"""
+            <tr>
+              <td>{name}</td>
+              <td>{phone}</td>
+              <td>{role}</td>
+              <td class="text-break">{notes}</td>
+              <td>{active_badge}</td>
+              <td class="text-nowrap">
+                <a class="btn btn-sm btn-outline-secondary" href="/ui/employees/{employee_id}/edit">ערוך / Edit</a>
+                <form method="post" action="/ui/employees/{employee_id}/delete" class="d-inline ms-1" 
+                      onsubmit="return confirm('האם למחוק עובד זה?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">מחק / Delete</button>
+                </form>
+              </td>
+            </tr>
+        """)
+    
+    table_body = "".join(table_rows) or """
+        <tr>
+          <td colspan="6" class="text-center text-muted">אין עובדים / No employees yet.</td>
+        </tr>
+    """
+    
+    table = f"""
+    <div class="card shadow-sm">
+      <div class="card-header bg-secondary text-white">עובדים / Employees</div>
+      <div class="card-body">
+        {filter_toggle}
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead>
+              <tr>
+                <th scope="col">שם / Name</th>
+                <th scope="col">טלפון / Phone</th>
+                <th scope="col">תפקיד / Role</th>
+                <th scope="col">הערות / Notes</th>
+                <th scope="col">סטטוס / Status</th>
+                <th scope="col">פעולות / Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {table_body}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    """
+    
+    html = _render_page("Employee Management", add_form + table)
+    return HTMLResponse(content=html)
+
+
+@router.post("/ui/employees")
+async def create_employee(
+    name: str = Form(...),
+    phone: str = Form(...),
+    role: str | None = Form(None),
+    notes: str | None = Form(None),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """Create a new employee."""
+    hoh.create_employee(
+        org_id=1,
+        name=name.strip(),
+        phone=phone.strip(),
+        role=role.strip() if role else None,
+        notes=notes.strip() if notes else None,
+        is_active=True,
+    )
+    return RedirectResponse(url="/ui/employees", status_code=303)
+
+
+@router.get("/ui/employees/{employee_id}/edit", response_class=HTMLResponse)
+async def edit_employee_form(
+    employee_id: int,
+    hoh: HOHService = Depends(get_hoh_service)
+) -> HTMLResponse:
+    """Show edit form for an employee."""
+    employee = hoh.get_employee(org_id=1, employee_id=employee_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    name = escape(employee.get("name") or "")
+    phone = escape(employee.get("phone") or "")
+    role = escape(employee.get("role") or "")
+    notes = escape(employee.get("notes") or "")
+    
+    form = f"""
+    <div class="row justify-content-center">
+      <div class="col-lg-6">
+        <div class="card shadow-sm">
+          <div class="card-header bg-primary text-white">ערוך עובד / Edit Employee</div>
+          <div class="card-body">
+            <form method="post" action="/ui/employees/{employee_id}/edit">
+              <div class="mb-3">
+                <label class="form-label" for="name">שם / Name</label>
+                <input class="form-control" id="name" name="name" type="text" value="{name}" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="phone">טלפון / Phone</label>
+                <input class="form-control" id="phone" name="phone" type="text" value="{phone}" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="role">תפקיד / Role</label>
+                <input class="form-control" id="role" name="role" type="text" value="{role}">
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="notes">הערות / Notes</label>
+                <textarea class="form-control" id="notes" name="notes" rows="3">{notes}</textarea>
+              </div>
+              <div class="d-flex justify-content-end">
+                <a class="btn btn-outline-secondary me-2" href="/ui/employees">ביטול / Cancel</a>
+                <button class="btn btn-primary" type="submit">שמור / Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+    
+    html = _render_page("Edit Employee", form)
+    return HTMLResponse(content=html)
+
+
+@router.post("/ui/employees/{employee_id}/edit")
+async def update_employee(
+    employee_id: int,
+    name: str = Form(...),
+    phone: str = Form(...),
+    role: str | None = Form(None),
+    notes: str | None = Form(None),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """Update an employee."""
+    hoh.update_employee(
+        org_id=1,
+        employee_id=employee_id,
+        name=name.strip(),
+        phone=phone.strip(),
+        role=role.strip() if role else None,
+        notes=notes.strip() if notes else None,
+    )
+    return RedirectResponse(url="/ui/employees", status_code=303)
+
+
+@router.post("/ui/employees/{employee_id}/delete")
+async def delete_employee(
+    employee_id: int,
+    hoh: HOHService = Depends(get_hoh_service)
+):
+    """Soft delete an employee (set is_active=false)."""
+    hoh.soft_delete_employee(org_id=1, employee_id=employee_id)
+    return RedirectResponse(url="/ui/employees", status_code=303)

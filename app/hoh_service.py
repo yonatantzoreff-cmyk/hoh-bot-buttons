@@ -179,6 +179,78 @@ class HOHService:
             event_id=event_id,
         )
 
+    def list_employees(self, org_id: int, active_only: bool = True):
+        """
+        מחזיר רשימת עובדים.
+        """
+        return self.employees.list_employees(org_id=org_id, active_only=active_only)
+
+    def get_employee(self, org_id: int, employee_id: int):
+        """
+        מחזיר עובד בודד.
+        """
+        return self.employees.get_employee_by_id(org_id=org_id, employee_id=employee_id)
+
+    def update_employee(
+        self,
+        org_id: int,
+        employee_id: int,
+        *,
+        name: Optional[str] = None,
+        phone: Optional[str] = None,
+        role: Optional[str] = None,
+        notes: Optional[str] = None,
+    ):
+        """
+        עדכון עובד.
+        """
+        self.employees.update_employee(
+            org_id=org_id,
+            employee_id=employee_id,
+            name=name,
+            phone=phone,
+            role=role,
+            notes=notes,
+        )
+
+    def soft_delete_employee(self, org_id: int, employee_id: int):
+        """
+        מחיקה רכה של עובד (is_active=false).
+        """
+        self.employees.soft_delete_employee(org_id=org_id, employee_id=employee_id)
+
+    def get_shift(self, org_id: int, shift_id: int):
+        """
+        מחזיר משמרת בודדת.
+        """
+        return self.employee_shifts.get_shift_by_id(org_id=org_id, shift_id=shift_id)
+
+    def update_shift(
+        self,
+        org_id: int,
+        shift_id: int,
+        *,
+        call_time=None,
+        shift_role: Optional[str] = None,
+        notes: Optional[str] = None,
+    ):
+        """
+        עדכון משמרת.
+        """
+        self.employee_shifts.update_shift(
+            org_id=org_id,
+            shift_id=shift_id,
+            call_time=call_time,
+            shift_role=shift_role,
+            notes=notes,
+        )
+
+    def delete_shift(self, org_id: int, shift_id: int):
+        """
+        מחיקה של משמרת.
+        """
+        self.employee_shifts.delete_shift(org_id=org_id, shift_id=shift_id)
+
     # region Event + contact bootstrap -------------------------------------------------
     def create_event_with_producer_conversation(
         self,
