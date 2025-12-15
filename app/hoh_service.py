@@ -252,26 +252,35 @@ class HOHService:
             event_id = event_dict.get("event_id")
 
             producer_contact_id = event_dict.get("producer_contact_id")
-            if producer_contact_id:
+            producer_name = event_dict.get("producer_name")
+            producer_phone = event_dict.get("producer_phone")
+
+            if producer_contact_id and (producer_name is None or producer_phone is None):
                 producer_contact = self.contacts.get_contact_by_id(
                     org_id=org_id, contact_id=producer_contact_id
                 )
-                event_dict["producer_phone"] = self._get_contact_value(
+                event_dict["producer_name"] = producer_name or self._get_contact_value(
+                    producer_contact, "name"
+                )
+                event_dict["producer_phone"] = producer_phone or self._get_contact_value(
                     producer_contact, "phone"
                 )
             else:
-                event_dict["producer_phone"] = None
+                event_dict["producer_name"] = producer_name
+                event_dict["producer_phone"] = producer_phone
 
             technical_contact_id = event_dict.get("technical_contact_id")
-            if technical_contact_id:
+            technical_phone = event_dict.get("technical_phone")
+
+            if technical_contact_id and technical_phone is None:
                 technical_contact = self.contacts.get_contact_by_id(
                     org_id=org_id, contact_id=technical_contact_id
                 )
-                event_dict["technical_phone"] = self._get_contact_value(
+                event_dict["technical_phone"] = technical_phone or self._get_contact_value(
                     technical_contact, "phone"
                 )
             else:
-                event_dict["technical_phone"] = None
+                event_dict["technical_phone"] = technical_phone
 
             if event_id:
                 event_dict["init_sent_at"] = self.messages.get_last_sent_at_for_content(
