@@ -1,4 +1,9 @@
-"""API routes for calendar import feature."""
+"""API routes for calendar import feature.
+
+Note: org_id is hard-coded to 1 throughout this router, consistent with the rest
+of the application (see app/routers/ui.py). Multi-org authentication will be 
+implemented in a future update.
+"""
 
 import logging
 from datetime import date, time
@@ -74,7 +79,7 @@ def get_import_service():
 @router.post("/upload", response_model=UploadResponse)
 async def upload_excel(
     file: UploadFile = File(...),
-    org_id: int = Form(1),  # TODO: Get from auth context
+    org_id: int = Form(1),  # TODO: Get from auth context when multi-org auth is implemented
 ):
     """
     Upload an Excel file for calendar import.

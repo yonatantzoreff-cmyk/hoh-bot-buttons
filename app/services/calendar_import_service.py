@@ -1,10 +1,13 @@
 """Service layer for calendar import functionality."""
 
+import json
 import logging
 import tempfile
-from datetime import date, time
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
+
+from sqlalchemy import text
 
 from app.repositories import (
     ContactRepository,
@@ -196,15 +199,11 @@ class CalendarImportService:
         # Parse JSON fields
         for event in events:
             if event.get("errors_json"):
-                import json
-
                 event["errors"] = json.loads(event["errors_json"])
             else:
                 event["errors"] = []
 
             if event.get("warnings_json"):
-                import json
-
                 event["warnings"] = json.loads(event["warnings_json"])
             else:
                 event["warnings"] = []
@@ -230,8 +229,6 @@ class CalendarImportService:
         updated_event["is_valid"] = len(errors) == 0
 
         # Save to database
-        import json
-
         update_fields = {
             **fields,
             "is_valid": updated_event["is_valid"],
@@ -279,8 +276,6 @@ class CalendarImportService:
 
         for event in events:
             errors, warnings = self._validate_event(event)
-            import json
-
             self.staging_repo.update(
                 org_id,
                 event["id"],
@@ -390,9 +385,6 @@ class CalendarImportService:
         self, org_id: int, staging_event: Dict[str, Any], session: Any
     ) -> None:
         """Commit a single staging event to the official events table."""
-        from datetime import datetime
-        from sqlalchemy import text
-
         # Get or create contact if phone is provided
         producer_contact_id = None
         if staging_event.get("producer_phone"):
@@ -419,9 +411,19 @@ class CalendarImportService:
         if load_in:
             load_in_tz = datetime.combine(event_date, load_in)
 
-        # Get default hall (assume hall_id=1 exists, or adjust as needed)
-        # TODO: Make this configurable or detect from org
-        hall_id = 1
+        # Get default hall for the org
+        hall_query = text("""
+            SELECT hall_id FROM halls 
+            WHERE org_id = :org_id 
+            ORDER BY hall_id 
+            LIMIT 1
+        """)
+        hall_result = session.execute(hall_query, {"org_id": org_id}).scalar_one_or_none()
+        
+        if not hall_result:
+            raise ValueError(f"No hall found for org_id {org_id}. Please create at least one hall before importing events.")
+        
+        hall_id = hall_result
 
         # Insert event
         query = text(
