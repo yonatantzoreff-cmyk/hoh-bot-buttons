@@ -1142,6 +1142,34 @@ class MessageDeliveryLogRepository:
             result = session.execute(query, {"whatsapp_msg_sid": whatsapp_msg_sid})
             return result.mappings().first()
 
+    def update_message_timestamps_from_status(
+        self, message_id: int, status: str, when: Optional[datetime] = None
+    ) -> None:
+        """
+        Update message timestamps based on delivery status callbacks.
+
+        For outgoing messages we only track sent_at; set it if missing when
+        receiving a status like queued/sent/delivered.
+        """
+
+        if when is None:
+            when = datetime.utcnow()
+
+        status_lower = (status or "").lower()
+        if status_lower not in {"queued", "sending", "sent", "delivered"}:
+            return
+
+        query = text(
+            """
+            UPDATE messages
+            SET sent_at = COALESCE(sent_at, :when)
+            WHERE message_id = :message_id
+            """
+        )
+
+        with get_session() as session:
+            session.execute(query, {"message_id": message_id, "when": when})
+
 
 class EmployeeRepository:
     """אחראי על טבלת employees"""
