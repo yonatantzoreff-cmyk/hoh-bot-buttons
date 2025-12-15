@@ -1169,57 +1169,14 @@ async def send_shift_reminder(
 ):
     """Send a reminder to the employee for this shift."""
     try:
-        # Get shift details
         shift = hoh.get_shift(org_id=1, shift_id=shift_id)
-        if not shift:
+        if not shift or shift.get("event_id") != event_id:
             raise HTTPException(status_code=404, detail="Shift not found")
-        
-        # Get event details
-        event = hoh.get_event_with_contacts(org_id=1, event_id=event_id)
-        if not event:
-            raise HTTPException(status_code=404, detail="Event not found")
-        
-        # Prepare reminder message
-        employee_name = shift.get("employee_name", "")
-        employee_phone = shift.get("employee_phone", "")
-        event_name = event.get("name", "")
-        event_date = event.get("event_date")
-        call_time = shift.get("call_time")
-        shift_role = shift.get("shift_role", "")
 
-        if not employee_phone:
-            raise HTTPException(status_code=400, detail="Employee phone number not found")
-
-        normalized_phone = normalize_phone_to_e164_il(employee_phone)
-        if not normalized_phone:
-            raise HTTPException(status_code=400, detail="Employee phone number invalid")
-
-        # Format call time
-        call_time_display = ""
-        if call_time:
-            call_time_local = _to_israel_time(call_time)
-            call_time_display = call_time_local.strftime("%H:%M") if call_time_local else ""
-
-        event_date_display = event_date.strftime("%d/%m/%Y") if event_date else ""
-
-        twilio_client.send_content_message(
-            to=normalized_phone,
-            content_sid=CONTENT_SID_SHIFT_REMINDER,
-            content_variables={
-                "employee_name": employee_name or "",
-                "event_name": event_name or "",
-                "event_date_display": event_date_display,
-                "call_time_display": call_time_display,
-                "shift_role": shift_role or "לא צוין",
-            },
-        )
-
-        # Mark reminder as sent
-        from datetime import datetime, timezone
-        hoh.employee_shifts.mark_24h_reminder_sent(shift_id=shift_id, when=datetime.now(timezone.utc))
+        hoh.send_shift_reminder(org_id=1, shift_id=shift_id)
 
         logger.info(f"Reminder sent successfully for shift {shift_id}")
-        
+
     except HTTPException:
         raise
     except Exception as exc:

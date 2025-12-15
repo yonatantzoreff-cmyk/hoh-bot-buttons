@@ -5,7 +5,7 @@ from fastapi import APIRouter, Request, Depends, Response
 
 from app.dependencies import get_hoh_service
 from app.hoh_service import HOHService
-from app.repositories import MessageDeliveryLogRepository
+from app.repositories import MessageDeliveryLogRepository, MessageRepository
 
 logger = logging.getLogger(__name__)
 
@@ -49,16 +49,17 @@ async def whatsapp_webhook(
 async def twilio_status_callback(
     request: Request,
     delivery_repo: MessageDeliveryLogRepository = Depends(lambda: MessageDeliveryLogRepository()),
+    message_repo: MessageRepository = Depends(lambda: MessageRepository()),
 ):
     """
     Twilio Status Callback webhook for message delivery tracking.
-    
+
     Twilio sends status updates for each message (queued, sent, delivered, failed, etc.)
     as application/x-www-form-urlencoded POST requests.
-    
+
     See: https://www.twilio.com/docs/sms/api/message-resource#message-status-values
     """
-    
+
     # Parse form data from Twilio
     payload: dict = {}
     try:
@@ -92,9 +93,9 @@ async def twilio_status_callback(
 
     # Find the message in our DB by whatsapp_msg_sid
     message = delivery_repo.get_message_by_whatsapp_sid(message_sid)
-    
+
     if not message:
-        logger.warning(
+        logger.debug(
             "Message not found for MessageSid",
             extra={"message_sid": message_sid}
         )
@@ -108,9 +109,13 @@ async def twilio_status_callback(
     if not org_id or not message_id:
         logger.error(
             "Message found but missing org_id or message_id",
-            extra={"message_sid": message_sid, "org_id": org_id, "message_id": message_id}
+            extra={"message_sid": message_sid, "org_id": org_id, "message_id": message_id},
         )
         return Response(status_code=200)
+
+    message_repo.update_message_timestamps_from_status(
+        message_id=message_id, status=message_status
+    )
 
     # Insert a new delivery log entry
     try:
