@@ -259,6 +259,7 @@ class EventRepository:
                 e.load_in_time,
                 e.hall_id,
                 h.name AS hall_name,
+                e.notes,
                 e.status,
                 e.producer_contact_id,
                 e.technical_contact_id,

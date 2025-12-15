@@ -574,6 +574,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             if init_sent_display
             else "<div class=\\\"small text-muted mt-1\\\">Not sent yet</div>"
         )
+        notes = row["notes"] or ""
 
         table_rows.append(
             """
@@ -609,7 +610,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 status=escape(status),
                 delivery_status=escape(delivery_status_display),
                 delivery_status_class=delivery_status_class,
-                notes=escape(row.get("notes") or ""),
+                notes=escape(notes),
                 producer_phone=escape(producer_phone),
                 technical_phone=escape(technical_phone),
                 created_at=escape(created_at_display),
