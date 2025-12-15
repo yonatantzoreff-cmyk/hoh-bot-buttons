@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import date, datetime, time, timedelta, timezone
@@ -17,6 +18,7 @@ from app.credentials import (
     CONTENT_SID_INIT,
     CONTENT_SID_NOT_SURE,
     CONTENT_SID_RANGES,
+    CONTENT_SID_SHIFT_REMINDER,
 )
 from app.repositories import (
     ContactRepository,
@@ -250,6 +252,124 @@ class HOHService:
         מחיקה של משמרת.
         """
         self.employee_shifts.delete_shift(org_id=org_id, shift_id=shift_id)
+
+    def send_shift_reminder(self, org_id: int, shift_id: int):
+        """Send a shift reminder Content Template and log it for tracking."""
+
+        shift = self.get_shift(org_id=org_id, shift_id=shift_id)
+        if not shift:
+            raise ValueError("Shift not found")
+
+        event_id = shift.get("event_id")
+        if not event_id:
+            raise ValueError("Shift missing event_id")
+
+        event = self.get_event_with_contacts(org_id=org_id, event_id=event_id)
+        if not event:
+            raise ValueError("Event not found for shift reminder")
+
+        employee_phone = shift.get("employee_phone") or ""
+        normalized_phone = normalize_phone_to_e164_il(employee_phone)
+        if not normalized_phone:
+            raise ValueError("Employee phone number invalid")
+
+        employee_name = shift.get("employee_name") or ""
+        contact_id = self.contacts.get_or_create_by_phone(
+            org_id=org_id, phone=normalized_phone, name=employee_name, role="employee"
+        )
+
+        conversation_id = self._ensure_conversation(
+            org_id=org_id, event_id=event_id, contact_id=contact_id
+        )
+
+        variables = self.build_shift_reminder_variables(org_id=org_id, shift_id=shift_id)
+
+        twilio_resp = twilio_client.send_content_message(
+            to=normalized_phone,
+            content_sid=CONTENT_SID_SHIFT_REMINDER,
+            content_variables=json.dumps(variables, ensure_ascii=False),
+        )
+
+        whatsapp_sid = getattr(twilio_resp, "sid", None)
+        raw_payload = {
+            "content_sid": CONTENT_SID_SHIFT_REMINDER,
+            "variables": variables,
+            "twilio_message_sid": whatsapp_sid,
+            "event_id": event_id,
+            "shift_id": shift_id,
+        }
+
+        self.messages.log_message(
+            org_id=org_id,
+            conversation_id=conversation_id,
+            event_id=event_id,
+            contact_id=contact_id,
+            direction="outgoing",
+            body=f"Shift reminder sent for event {event.get('name', '')}",
+            whatsapp_msg_sid=whatsapp_sid,
+            raw_payload=raw_payload,
+        )
+
+        self.employee_shifts.mark_24h_reminder_sent(shift_id=shift_id)
+
+        return twilio_resp
+
+    def build_shift_reminder_variables(self, org_id: int, shift_id: int) -> dict:
+        """
+        Build the variables dict for the shift reminder Content Template.
+
+        Keys must be stringified integers ("1", "2", ...), matching Twilio's
+        template variable format.
+        """
+
+        shift = self.get_shift(org_id=org_id, shift_id=shift_id)
+        if not shift:
+            raise ValueError(f"Shift {shift_id} not found for org {org_id}")
+
+        event = self.get_event_with_contacts(org_id=org_id, event_id=shift["event_id"])
+        if not event:
+            raise ValueError(
+                f"Event {shift['event_id']} not found for shift {shift_id} in org {org_id}"
+            )
+
+        def _format_time(value: Any) -> str:
+            if isinstance(value, time):
+                return value.strftime("%H:%M")
+
+            if isinstance(value, datetime):
+                return value.strftime("%H:%M")
+
+            return ""
+
+        event_date = event.get("event_date")
+        event_date_display = event_date.strftime("%d/%m/%Y") if event_date else ""
+
+        show_time_display = _format_time(event.get("show_time"))
+
+        call_time = shift.get("call_time")
+        call_time_display = _format_time(call_time)
+
+        employee_name = shift.get("employee_name") or ""
+        first_name = employee_name.split()[0] if employee_name else ""
+
+        support_phone = (
+            event.get("technical_phone")
+            or event.get("producer_phone")
+            or ""
+        )
+
+        variables = {
+            "1": first_name,
+            "2": event.get("name") or "",
+            "3": event_date_display,
+            "4": show_time_display,
+            "5": call_time_display,
+            "6": shift.get("shift_role") or "",
+            "7": shift.get("notes") or "",
+            "8": support_phone,
+        }
+
+        return variables
 
     # region Event + contact bootstrap -------------------------------------------------
     def create_event_with_producer_conversation(
