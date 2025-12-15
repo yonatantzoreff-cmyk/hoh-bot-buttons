@@ -370,7 +370,7 @@ class HOHService:
             "4": show_time_display,
             "5": call_time_display,
             "6": shift.get("shift_role") or "",
-            "7": (shift.get("notes") or event.get("notes") or ""),
+            "7": event.get("notes") or ""),
             "8": support_phone,
             "9": support_name,
         }
