@@ -12,6 +12,7 @@ from app import twilio_client
 from app.credentials import CONTENT_SID_SHIFT_REMINDER
 from app.dependencies import get_hoh_service
 from app.hoh_service import HOHService
+from app.utils.phone import normalize_phone_to_e164_il
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -1189,6 +1190,10 @@ async def send_shift_reminder(
         if not employee_phone:
             raise HTTPException(status_code=400, detail="Employee phone number not found")
 
+        normalized_phone = normalize_phone_to_e164_il(employee_phone)
+        if not normalized_phone:
+            raise HTTPException(status_code=400, detail="Employee phone number invalid")
+
         # Format call time
         call_time_display = ""
         if call_time:
@@ -1198,7 +1203,7 @@ async def send_shift_reminder(
         event_date_display = event_date.strftime("%d/%m/%Y") if event_date else ""
 
         twilio_client.send_content_message(
-            to=employee_phone,
+            to=normalized_phone,
             content_sid=CONTENT_SID_SHIFT_REMINDER,
             content_variables={
                 "employee_name": employee_name or "",
