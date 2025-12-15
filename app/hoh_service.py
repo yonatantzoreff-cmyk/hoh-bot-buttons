@@ -362,17 +362,16 @@ class HOHService:
 
         tech_name = event.get("technical_name") or os.getenv("TECH_CONTACT_NAME")
         support_name = tech_name or event.get("producer_name") or ""
-
+        
         variables = {
             "1": first_name,
             "2": event.get("name") or "",
             "3": event_date_display,
             "4": show_time_display,
             "5": call_time_display,
-            "6": shift.get("shift_role") or "",
-            "7": event.get("notes") or "",
+            "6": event.get("notes") or "",
+            "7": support_name,
             "8": support_phone,
-            "9": support_name,
         }
 
         return variables
