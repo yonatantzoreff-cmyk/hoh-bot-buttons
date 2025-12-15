@@ -1356,3 +1356,248 @@ class EmployeeShiftRepository:
                 },
             )
             session.commit()
+
+
+class StagingEventRepository:
+    """Repository for staging_events table (calendar import)"""
+
+    def clear_all(self, org_id: int) -> None:
+        """Delete all staging events for an org."""
+        query = text("""
+            DELETE FROM staging_events
+            WHERE org_id = :org_id
+        """)
+        
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id})
+
+    def bulk_insert(self, org_id: int, events: list[dict]) -> None:
+        """Insert multiple staging events in a single transaction."""
+        query = text("""
+            INSERT INTO staging_events (
+                org_id, row_index, date, show_time, name, load_in,
+                event_series, producer_name, producer_phone, notes,
+                is_valid, errors_json, warnings_json, created_at, updated_at
+            )
+            VALUES (
+                :org_id, :row_index, :date, :show_time, :name, :load_in,
+                :event_series, :producer_name, :producer_phone, :notes,
+                :is_valid, :errors_json, :warnings_json, :now, :now
+            )
+        """)
+        
+        now = datetime.utcnow()
+        
+        with get_session() as session:
+            for event in events:
+                session.execute(query, {
+                    "org_id": org_id,
+                    "row_index": event.get("row_index"),
+                    "date": event.get("date"),
+                    "show_time": event.get("show_time"),
+                    "name": event.get("name"),
+                    "load_in": event.get("load_in"),
+                    "event_series": event.get("event_series"),
+                    "producer_name": event.get("producer_name"),
+                    "producer_phone": event.get("producer_phone"),
+                    "notes": event.get("notes"),
+                    "is_valid": event.get("is_valid", False),
+                    "errors_json": json.dumps(event.get("errors", []), ensure_ascii=False),
+                    "warnings_json": json.dumps(event.get("warnings", []), ensure_ascii=False),
+                    "now": now,
+                })
+
+    def list_all(self, org_id: int) -> list[dict]:
+        """Get all staging events for an org."""
+        query = text("""
+            SELECT *
+            FROM staging_events
+            WHERE org_id = :org_id
+            ORDER BY row_index ASC
+        """)
+        
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id})
+            return [dict(row) for row in result.mappings().all()]
+
+    def get_by_id(self, org_id: int, staging_id: int) -> Optional[dict]:
+        """Get a single staging event."""
+        query = text("""
+            SELECT *
+            FROM staging_events
+            WHERE org_id = :org_id AND id = :id
+        """)
+        
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "id": staging_id})
+            row = result.mappings().first()
+            return dict(row) if row else None
+
+    def update(self, org_id: int, staging_id: int, fields: dict) -> None:
+        """Update specific fields in a staging event."""
+        sets = ["updated_at = :now"]
+        params = {"org_id": org_id, "id": staging_id, "now": datetime.utcnow()}
+        
+        # Allow updating these fields
+        allowed_fields = [
+            "date", "show_time", "name", "load_in", "event_series",
+            "producer_name", "producer_phone", "notes",
+            "is_valid", "errors_json", "warnings_json"
+        ]
+        
+        for field in allowed_fields:
+            if field in fields:
+                sets.append(f"{field} = :{field}")
+                params[field] = fields[field]
+        
+        if len(sets) == 1:  # Only updated_at
+            return
+        
+        query = text(f"""
+            UPDATE staging_events
+            SET {', '.join(sets)}
+            WHERE org_id = :org_id AND id = :id
+        """)
+        
+        with get_session() as session:
+            session.execute(query, params)
+
+    def delete(self, org_id: int, staging_id: int) -> None:
+        """Delete a single staging event."""
+        query = text("""
+            DELETE FROM staging_events
+            WHERE org_id = :org_id AND id = :id
+        """)
+        
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id, "id": staging_id})
+
+    def create(self, org_id: int, event_data: dict) -> int:
+        """Create a new staging event and return its ID."""
+        query = text("""
+            INSERT INTO staging_events (
+                org_id, row_index, date, show_time, name, load_in,
+                event_series, producer_name, producer_phone, notes,
+                is_valid, errors_json, warnings_json, created_at, updated_at
+            )
+            VALUES (
+                :org_id, :row_index, :date, :show_time, :name, :load_in,
+                :event_series, :producer_name, :producer_phone, :notes,
+                :is_valid, :errors_json, :warnings_json, :now, :now
+            )
+            RETURNING id
+        """)
+        
+        now = datetime.utcnow()
+        
+        with get_session() as session:
+            result = session.execute(query, {
+                "org_id": org_id,
+                "row_index": event_data.get("row_index", 0),
+                "date": event_data.get("date"),
+                "show_time": event_data.get("show_time"),
+                "name": event_data.get("name"),
+                "load_in": event_data.get("load_in"),
+                "event_series": event_data.get("event_series"),
+                "producer_name": event_data.get("producer_name"),
+                "producer_phone": event_data.get("producer_phone"),
+                "notes": event_data.get("notes"),
+                "is_valid": event_data.get("is_valid", False),
+                "errors_json": json.dumps(event_data.get("errors", []), ensure_ascii=False),
+                "warnings_json": json.dumps(event_data.get("warnings", []), ensure_ascii=False),
+                "now": now,
+            })
+            return result.scalar_one()
+
+    def count_valid(self, org_id: int) -> int:
+        """Count valid staging events."""
+        query = text("""
+            SELECT COUNT(*) FROM staging_events
+            WHERE org_id = :org_id AND is_valid = TRUE
+        """)
+        
+        with get_session() as session:
+            return session.execute(query, {"org_id": org_id}).scalar_one()
+
+    def count_total(self, org_id: int) -> int:
+        """Count all staging events."""
+        query = text("""
+            SELECT COUNT(*) FROM staging_events
+            WHERE org_id = :org_id
+        """)
+        
+        with get_session() as session:
+            return session.execute(query, {"org_id": org_id}).scalar_one()
+
+
+class ImportJobRepository:
+    """Repository for import_jobs table"""
+
+    def create_job(
+        self,
+        org_id: int,
+        job_type: str,
+        source: str,
+        status: str = "running",
+    ) -> int:
+        """Create a new import job and return its ID."""
+        query = text("""
+            INSERT INTO import_jobs (
+                org_id, job_type, source, status, started_at
+            )
+            VALUES (
+                :org_id, :job_type, :source, :status, :now
+            )
+            RETURNING job_id
+        """)
+        
+        with get_session() as session:
+            result = session.execute(query, {
+                "org_id": org_id,
+                "job_type": job_type,
+                "source": source,
+                "status": status,
+                "now": datetime.utcnow(),
+            })
+            return result.scalar_one()
+
+    def update_job(
+        self,
+        job_id: int,
+        status: str,
+        details: Optional[dict] = None,
+        error_message: Optional[str] = None,
+    ) -> None:
+        """Update an import job status and details."""
+        query = text("""
+            UPDATE import_jobs
+            SET status = :status,
+                finished_at = :now,
+                details = :details,
+                error_message = :error_message
+            WHERE job_id = :job_id
+        """)
+        
+        with get_session() as session:
+            session.execute(query, {
+                "job_id": job_id,
+                "status": status,
+                "details": json.dumps(details, ensure_ascii=False) if details else None,
+                "error_message": error_message,
+                "now": datetime.utcnow(),
+            })
+
+    def get_latest_job(self, org_id: int, job_type: str) -> Optional[dict]:
+        """Get the most recent import job."""
+        query = text("""
+            SELECT *
+            FROM import_jobs
+            WHERE org_id = :org_id AND job_type = :job_type
+            ORDER BY started_at DESC
+            LIMIT 1
+        """)
+        
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "job_type": job_type})
+            row = result.mappings().first()
+            return dict(row) if row else None

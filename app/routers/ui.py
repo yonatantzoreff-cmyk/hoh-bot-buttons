@@ -58,6 +58,7 @@ def _render_page(title: str, body: str) -> str:
               <a class=\"btn btn-outline-light btn-sm\" href=\"/ui/events\">View Events</a>
               <a class=\"btn btn-outline-light btn-sm ms-2\" href=\"/ui/contacts\">Contacts</a>
               <a class=\"btn btn-light btn-sm ms-2\" href=\"/ui/messages\">Messages</a>
+              <a class=\"btn btn-outline-success btn-sm ms-2\" href=\"/ui/calendar-import\">Import Calendar</a>
             </div>
           </div>
         </nav>
@@ -789,3 +790,400 @@ async def delete_event(event_id: int, hoh: HOHService = Depends(get_hoh_service)
         raise HTTPException(status_code=500, detail="Failed to delete event") from exc
 
     return RedirectResponse(url="/ui/events", status_code=303)
+
+
+@router.get("/ui/calendar-import", response_class=HTMLResponse)
+async def calendar_import_page() -> HTMLResponse:
+    """Calendar import page with staging events management."""
+    page_html = """
+    <div class="row">
+      <div class="col-12">
+        <div class="card shadow-sm mb-4">
+          <div class="card-header bg-success text-white">
+            <h5 class="mb-0">Import Monthly Calendar (Excel)</h5>
+          </div>
+          <div class="card-body">
+            <div class="alert alert-info">
+              <strong>Instructions:</strong>
+              <ul class="mb-0">
+                <li>Upload an Excel (.xlsx) file with venue calendar data</li>
+                <li>Review and edit staging events in the table below</li>
+                <li>Valid events (green) can be committed to the official events table</li>
+                <li>Invalid events (red) must be fixed before commit</li>
+                <li>Warnings (orange) don't block commit but should be reviewed</li>
+              </ul>
+            </div>
+            
+            <form id="uploadForm" enctype="multipart/form-data">
+              <div class="row align-items-end">
+                <div class="col-md-8 mb-3">
+                  <label for="excelFile" class="form-label">Select Excel File (.xlsx)</label>
+                  <input type="file" class="form-control" id="excelFile" name="file" accept=".xlsx" required>
+                </div>
+                <div class="col-md-4 mb-3">
+                  <button type="submit" class="btn btn-primary w-100">
+                    <span class="spinner-border spinner-border-sm d-none" id="uploadSpinner"></span>
+                    Upload & Parse
+                  </button>
+                </div>
+              </div>
+            </form>
+            
+            <div id="uploadStatus" class="mt-3"></div>
+          </div>
+        </div>
+
+        <div class="card shadow-sm">
+          <div class="card-header bg-secondary text-white d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Staging Events</h5>
+            <div>
+              <button class="btn btn-sm btn-outline-light" onclick="revalidateAll()">
+                <span class="spinner-border spinner-border-sm d-none" id="validateSpinner"></span>
+                Revalidate All
+              </button>
+              <button class="btn btn-sm btn-success ms-2" onclick="showCommitModal()">
+                Commit to Events
+              </button>
+              <button class="btn btn-sm btn-warning ms-2" onclick="addNewRow()">
+                Add Row
+              </button>
+              <button class="btn btn-sm btn-danger ms-2" onclick="clearAll()">
+                Clear All
+              </button>
+            </div>
+          </div>
+          <div class="card-body">
+            <div id="stagingSummary" class="alert alert-secondary">
+              Loading staging events...
+            </div>
+            
+            <div class="table-responsive">
+              <table class="table table-sm table-hover" id="stagingTable">
+                <thead class="table-light">
+                  <tr>
+                    <th>Row</th>
+                    <th>Date</th>
+                    <th>Show Time</th>
+                    <th>Event Name</th>
+                    <th>Load In</th>
+                    <th>Series</th>
+                    <th>Producer</th>
+                    <th>Phone</th>
+                    <th>Notes</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="stagingTableBody">
+                  <tr>
+                    <td colspan="11" class="text-center text-muted">No staging events. Upload an Excel file to begin.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Commit Modal -->
+    <div class="modal fade" id="commitModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Commit to Official Events</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div id="commitModalContent">
+              <p><strong>Ready to commit:</strong> <span id="commitValidCount">0</span> valid events</p>
+              <div id="commitDuplicateWarning" class="alert alert-warning d-none">
+                <strong>Warning:</strong> <span id="commitDuplicateCount">0</span> potential duplicate(s) detected.
+                <div class="form-check mt-2">
+                  <input class="form-check-input" type="checkbox" id="skipDuplicatesCheck">
+                  <label class="form-check-label" for="skipDuplicatesCheck">
+                    Skip duplicates during commit
+                  </label>
+                </div>
+              </div>
+              <p class="text-muted">This will create events and contacts in the official tables. Are you sure?</p>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-success" onclick="commitEvents()">
+              <span class="spinner-border spinner-border-sm d-none" id="commitSpinner"></span>
+              Commit
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+    let currentStagingData = [];
+    let duplicateWarnings = [];
+
+    // Load staging events on page load
+    document.addEventListener('DOMContentLoaded', function() {
+      loadStagingEvents();
+    });
+
+    // Upload form handler
+    document.getElementById('uploadForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const spinner = document.getElementById('uploadSpinner');
+      const fileInput = document.getElementById('excelFile');
+      const statusDiv = document.getElementById('uploadStatus');
+      
+      if (!fileInput.files[0]) {
+        statusDiv.innerHTML = '<div class="alert alert-danger">Please select a file</div>';
+        return;
+      }
+      
+      spinner.classList.remove('d-none');
+      statusDiv.innerHTML = '';
+      
+      const formData = new FormData();
+      formData.append('file', fileInput.files[0]);
+      formData.append('org_id', '1');
+      
+      try {
+        const response = await fetch('/import/upload', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+          statusDiv.innerHTML = `
+            <div class="alert alert-success">
+              <strong>Upload successful!</strong><br>
+              Total rows: ${result.total_rows}<br>
+              Valid: ${result.valid_rows}<br>
+              Invalid: ${result.invalid_rows}<br>
+              Duplicates: ${result.duplicate_warnings.length}
+            </div>
+          `;
+          duplicateWarnings = result.duplicate_warnings;
+          loadStagingEvents();
+          fileInput.value = '';
+        } else {
+          statusDiv.innerHTML = `<div class="alert alert-danger">Error: ${result.detail}</div>`;
+        }
+      } catch (error) {
+        statusDiv.innerHTML = `<div class="alert alert-danger">Upload failed: ${error.message}</div>`;
+      } finally {
+        spinner.classList.add('d-none');
+      }
+    });
+
+    async function loadStagingEvents() {
+      try {
+        const response = await fetch('/import/staging?org_id=1');
+        const events = await response.json();
+        
+        currentStagingData = events;
+        renderStagingTable(events);
+        updateSummary(events);
+      } catch (error) {
+        console.error('Failed to load staging events:', error);
+      }
+    }
+
+    function renderStagingTable(events) {
+      const tbody = document.getElementById('stagingTableBody');
+      
+      if (events.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" class="text-center text-muted">No staging events. Upload an Excel file to begin.</td></tr>';
+        return;
+      }
+      
+      tbody.innerHTML = events.map(event => {
+        const rowClass = event.is_valid ? 'table-success' : 
+                        (event.warnings.length > 0 ? 'table-warning' : 'table-danger');
+        const statusBadge = event.is_valid ? 
+          '<span class="badge bg-success">Valid</span>' : 
+          '<span class="badge bg-danger">Invalid</span>';
+        
+        const errorsHtml = event.errors.length > 0 ? 
+          '<div class="small text-danger">' + event.errors.join('; ') + '</div>' : '';
+        const warningsHtml = event.warnings.length > 0 ? 
+          '<div class="small text-warning">' + event.warnings.join('; ') + '</div>' : '';
+        
+        return `
+          <tr class="${rowClass}">
+            <td>${event.row_index}</td>
+            <td>${event.date || '-'}</td>
+            <td>${event.show_time || '-'}</td>
+            <td>${escape(event.name || '-')}</td>
+            <td>${event.load_in || '-'}</td>
+            <td>${escape(event.event_series || '-')}</td>
+            <td>${escape(event.producer_name || '-')}</td>
+            <td>${escape(event.producer_phone || '-')}</td>
+            <td>${escape(event.notes || '-')}</td>
+            <td>${statusBadge}${errorsHtml}${warningsHtml}</td>
+            <td>
+              <button class="btn btn-sm btn-outline-danger" onclick="deleteRow(${event.id})">Delete</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    function escape(str) {
+      const div = document.createElement('div');
+      div.textContent = str;
+      return div.innerHTML;
+    }
+
+    function updateSummary(events) {
+      const validCount = events.filter(e => e.is_valid).length;
+      const invalidCount = events.length - validCount;
+      
+      document.getElementById('stagingSummary').innerHTML = `
+        <strong>Summary:</strong> 
+        ${events.length} total events | 
+        ${validCount} valid | 
+        ${invalidCount} invalid
+        ${duplicateWarnings.length > 0 ? ` | ${duplicateWarnings.length} potential duplicates` : ''}
+      `;
+    }
+
+    async function deleteRow(stagingId) {
+      if (!confirm('Delete this staging event?')) return;
+      
+      try {
+        const response = await fetch(`/import/staging/${stagingId}?org_id=1`, {
+          method: 'DELETE'
+        });
+        
+        if (response.ok) {
+          loadStagingEvents();
+        } else {
+          alert('Failed to delete event');
+        }
+      } catch (error) {
+        alert('Failed to delete event: ' + error.message);
+      }
+    }
+
+    async function addNewRow() {
+      try {
+        const response = await fetch('/import/staging?org_id=1', {
+          method: 'POST'
+        });
+        
+        if (response.ok) {
+          loadStagingEvents();
+        } else {
+          alert('Failed to add row');
+        }
+      } catch (error) {
+        alert('Failed to add row: ' + error.message);
+      }
+    }
+
+    async function revalidateAll() {
+      const spinner = document.getElementById('validateSpinner');
+      spinner.classList.remove('d-none');
+      
+      try {
+        const response = await fetch('/import/validate?org_id=1', {
+          method: 'POST'
+        });
+        
+        const result = await response.json();
+        duplicateWarnings = result.duplicate_warnings;
+        
+        if (response.ok) {
+          loadStagingEvents();
+        } else {
+          alert('Validation failed');
+        }
+      } catch (error) {
+        alert('Validation failed: ' + error.message);
+      } finally {
+        spinner.classList.add('d-none');
+      }
+    }
+
+    async function clearAll() {
+      if (!confirm('Clear all staging events? This cannot be undone.')) return;
+      
+      try {
+        const response = await fetch('/import/clear?org_id=1', {
+          method: 'POST'
+        });
+        
+        if (response.ok) {
+          duplicateWarnings = [];
+          loadStagingEvents();
+        } else {
+          alert('Failed to clear');
+        }
+      } catch (error) {
+        alert('Failed to clear: ' + error.message);
+      }
+    }
+
+    function showCommitModal() {
+      const validCount = currentStagingData.filter(e => e.is_valid).length;
+      
+      if (validCount === 0) {
+        alert('No valid events to commit. Please fix errors first.');
+        return;
+      }
+      
+      document.getElementById('commitValidCount').textContent = validCount;
+      
+      if (duplicateWarnings.length > 0) {
+        document.getElementById('commitDuplicateCount').textContent = duplicateWarnings.length;
+        document.getElementById('commitDuplicateWarning').classList.remove('d-none');
+      } else {
+        document.getElementById('commitDuplicateWarning').classList.add('d-none');
+      }
+      
+      const modal = new bootstrap.Modal(document.getElementById('commitModal'));
+      modal.show();
+    }
+
+    async function commitEvents() {
+      const spinner = document.getElementById('commitSpinner');
+      const skipDuplicates = document.getElementById('skipDuplicatesCheck').checked;
+      
+      spinner.classList.remove('d-none');
+      
+      try {
+        const formData = new FormData();
+        formData.append('skip_duplicates', skipDuplicates);
+        formData.append('org_id', '1');
+        
+        const response = await fetch('/import/commit', {
+          method: 'POST',
+          body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+          bootstrap.Modal.getInstance(document.getElementById('commitModal')).hide();
+          alert(`Success! Committed ${result.committed_count} events.${result.skipped_duplicates > 0 ? ` Skipped ${result.skipped_duplicates} duplicates.` : ''}`);
+          duplicateWarnings = [];
+          loadStagingEvents();
+        } else {
+          alert('Commit failed: ' + result.detail);
+        }
+      } catch (error) {
+        alert('Commit failed: ' + error.message);
+      } finally {
+        spinner.classList.add('d-none');
+      }
+    }
+    </script>
+    """
+    
+    html = _render_page("Import Calendar", page_html)
+    return HTMLResponse(content=html)
