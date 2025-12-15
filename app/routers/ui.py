@@ -612,8 +612,8 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             shift_notes_val = escape(shift.get("notes") or "")
             reminder_sent = shift.get("reminder_24h_sent_at")
             reminder_badge = (
-                '<span class="badge bg-success">תזכורת נשלחה</span>' if reminder_sent 
-                else '<span class="badge bg-secondary">לא נשלח</span>'
+                '<span class="badge bg-success">Sent</span>' if reminder_sent 
+                else '<span class="badge bg-secondary">Failed</span>'
             )
             
             shift_rows.append(f"""
@@ -663,20 +663,20 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
           <td colspan="12" class="p-0">
             <div class="card m-2">
               <div class="card-header bg-light">
-                <strong>משמרות עובדים / Employee Shifts</strong>
+                <strong>Employees Shifts</strong>
               </div>
               <div class="card-body">
                 <div class="table-responsive">
                   <table class="table table-sm table-hover mb-3">
                     <thead>
                       <tr>
-                        <th>שם עובד / Employee</th>
-                        <th>טלפון / Phone</th>
-                        <th>שעת כניסה / Call Time</th>
+                        <th>Employee</th>
+                        <th>Phone</th>
+                        <th>Shift Time</th>
                         <th>תפקיד / Role</th>
-                        <th>הערות / Notes</th>
+                        <th>Notes</th>
                         <th>תזכורת / Reminder</th>
-                        <th>פעולות / Actions</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -687,18 +687,18 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 <hr>
                 <div class="card bg-light">
                   <div class="card-body">
-                    <h6>הוסף עובד למשמרת / Add Employee to Shift</h6>
+                    <h6>Add Employee to Shift</h6>
                     <form method="post" action="/ui/events/{event_id}/shifts">
                       <div class="row">
                         <div class="col-md-3 mb-2">
-                          <label class="form-label" for="employee_id_{event_id}">עובד / Employee</label>
+                          <label class="form-label" for="employee_id_{event_id}">Employee</label>
                           <select class="form-select form-select-sm" id="employee_id_{event_id}" name="employee_id" required>
                             <option value="">בחר עובד...</option>
                             {employee_dropdown}
                           </select>
                         </div>
                         <div class="col-md-3 mb-2">
-                          <label class="form-label" for="call_time_{event_id}">שעת כניסה / Call Time</label>
+                          <label class="form-label" for="call_time_{event_id}">Shift Time</label>
                           <input class="form-control form-control-sm" id="call_time_{event_id}" name="call_time" type="datetime-local" required>
                         </div>
                         <div class="col-md-2 mb-2">
@@ -706,11 +706,11 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                           <input class="form-control form-control-sm" id="shift_role_{event_id}" name="shift_role" type="text">
                         </div>
                         <div class="col-md-3 mb-2">
-                          <label class="form-label" for="notes_{event_id}">הערות / Notes</label>
+                          <label class="form-label" for="notes_{event_id}">Notes</label>
                           <input class="form-control form-control-sm" id="notes_{event_id}" name="notes" type="text">
                         </div>
                         <div class="col-md-1 mb-2 d-flex align-items-end">
-                          <button class="btn btn-sm btn-primary w-100" type="submit">הוסף / Add</button>
+                          <button class="btn btn-sm btn-primary w-100" type="submit">Add</button>
                         </div>
                       </div>
                     </form>
@@ -792,7 +792,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
           <form id="editShiftForm" method="post">
             <div class="modal-body">
               <div class="mb-3">
-                <label class="form-label">שעת כניסה / Call Time</label>
+                <label class="form-label">Shift Time</label>
                 <input class="form-control" id="edit_call_time" name="call_time" type="datetime-local" required>
               </div>
               <div class="mb-3">
@@ -800,7 +800,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 <input class="form-control" id="edit_shift_role" name="shift_role" type="text">
               </div>
               <div class="mb-3">
-                <label class="form-label">הערות / Notes</label>
+                <label class="form-label">Notes</label>
                 <textarea class="form-control" id="edit_notes" name="notes" rows="3"></textarea>
               </div>
             </div>
@@ -1647,7 +1647,7 @@ async def list_employees(
               <input class="form-control" id="name" name="name" type="text" required>
             </div>
             <div class="col-md-3 mb-3">
-              <label class="form-label" for="phone">טלפון / Phone</label>
+              <label class="form-label" for="phone">Phone</label>
               <input class="form-control" id="phone" name="phone" type="text" required>
             </div>
             <div class="col-md-3 mb-3">
@@ -1655,7 +1655,7 @@ async def list_employees(
               <input class="form-control" id="role" name="role" type="text">
             </div>
             <div class="col-md-3 mb-3">
-              <label class="form-label" for="notes">הערות / Notes</label>
+              <label class="form-label" for="notes">Notes</label>
               <input class="form-control" id="notes" name="notes" type="text">
             </div>
           </div>
@@ -1724,11 +1724,11 @@ async def list_employees(
             <thead>
               <tr>
                 <th scope="col">שם / Name</th>
-                <th scope="col">טלפון / Phone</th>
+                <th scope="col">Phone</th>
                 <th scope="col">תפקיד / Role</th>
-                <th scope="col">הערות / Notes</th>
+                <th scope="col">Notes</th>
                 <th scope="col">סטטוס / Status</th>
-                <th scope="col">פעולות / Actions</th>
+                <th scope="col">Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -1791,7 +1791,7 @@ async def edit_employee_form(
                 <input class="form-control" id="name" name="name" type="text" value="{name}" required>
               </div>
               <div class="mb-3">
-                <label class="form-label" for="phone">טלפון / Phone</label>
+                <label class="form-label" for="phone">Phone</label>
                 <input class="form-control" id="phone" name="phone" type="text" value="{phone}" required>
               </div>
               <div class="mb-3">
@@ -1799,7 +1799,7 @@ async def edit_employee_form(
                 <input class="form-control" id="role" name="role" type="text" value="{role}">
               </div>
               <div class="mb-3">
-                <label class="form-label" for="notes">הערות / Notes</label>
+                <label class="form-label" for="notes">Notes</label>
                 <textarea class="form-control" id="notes" name="notes" rows="3">{notes}</textarea>
               </div>
               <div class="d-flex justify-content-end">
