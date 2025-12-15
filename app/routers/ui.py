@@ -580,6 +580,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             if init_sent_display
             else "<div class=\\\"small text-muted mt-1\\\">Not sent yet</div>"
         )
+        notes = row["notes"] or ""
 
         table_rows.append(
             """
