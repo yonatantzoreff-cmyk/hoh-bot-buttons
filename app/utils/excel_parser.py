@@ -105,6 +105,9 @@ def _parse_cell_value(field_name: str, cell_value: Any) -> Optional[Any]:
         # Date field
         if field_name == "date":
             if isinstance(cell_value, date):
+                # Handle both datetime and date objects
+                if hasattr(cell_value, 'date'):
+                    return cell_value.date()
                 return cell_value
             elif isinstance(cell_value, str):
                 # Try common date formats
