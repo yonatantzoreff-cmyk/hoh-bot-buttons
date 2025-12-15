@@ -1,6 +1,7 @@
 """Excel parser for calendar imports."""
 
 import logging
+import re
 from datetime import date, datetime, time
 from typing import Any, Dict, List, Optional
 
@@ -111,15 +112,25 @@ def _parse_cell_value(field_name: str, cell_value: Any) -> Optional[Any]:
                 return cell_value
             elif isinstance(cell_value, str):
                 # Try common date formats
-                for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y"]:
+                for fmt in [
+                    "%Y-%m-%d",
+                    "%d/%m/%Y",
+                    "%d/%m/%y",
+                    "%d-%m-%Y",
+                    "%d-%m-%y",
+                    "%d.%m.%Y",
+                    "%d.%m.%y",
+                ]:
                     try:
                         return datetime.strptime(cell_value.strip(), fmt).date()
                     except ValueError:
                         continue
             return None
-        
+
         # Time fields
         elif field_name in ("show_time", "load_in"):
+            if isinstance(cell_value, datetime):
+                return cell_value.time()
             if isinstance(cell_value, time):
                 return cell_value
             elif isinstance(cell_value, str):
@@ -138,27 +149,41 @@ def _parse_cell_value(field_name: str, cell_value: Any) -> Optional[Any]:
 def _parse_time_string(time_str: str) -> Optional[time]:
     """
     Parse time string in various formats (24h).
-    
-    Supports: HH:MM, H:MM, HHMM, H.MM, HH.MM
+
+    Supports: HH:MM, H:MM, HH:MM:SS, embedded dates with time (e.g. "31.12.1899 20:30:00"),
+    HHMM, H.MM, HH.MM
     """
     if not time_str:
         return None
-    
+
     # Remove whitespace
     time_str = time_str.strip()
-    
+
+    # Extract time component even when embedded in a date string
+    colon_match = re.search(r"(\d{1,2}):(\d{2})(?::(\d{2}))?", time_str)
+    if colon_match:
+        try:
+            hours = int(colon_match.group(1))
+            minutes = int(colon_match.group(2))
+            seconds = int(colon_match.group(3)) if colon_match.group(3) else 0
+            if 0 <= hours < 24 and 0 <= minutes < 60 and 0 <= seconds < 60:
+                return time(hours, minutes, seconds)
+        except ValueError:
+            pass
+
     # Try HH:MM or H:MM format
     if ":" in time_str:
         parts = time_str.split(":")
-        if len(parts) == 2:
+        if len(parts) in {2, 3}:
             try:
                 hours = int(parts[0])
                 minutes = int(parts[1])
-                if 0 <= hours < 24 and 0 <= minutes < 60:
-                    return time(hours, minutes)
+                seconds = int(parts[2]) if len(parts) == 3 else 0
+                if 0 <= hours < 24 and 0 <= minutes < 60 and 0 <= seconds < 60:
+                    return time(hours, minutes, seconds)
             except ValueError:
                 pass
-    
+
     # Try H.MM or HH.MM format
     elif "." in time_str:
         parts = time_str.split(".")
