@@ -11,6 +11,7 @@ os.environ.setdefault("CONTENT_SID_HALVES", "HXHALF")
 os.environ.setdefault("CONTENT_SID_CONFIRM", "HXCONFIRM")
 os.environ.setdefault("CONTENT_SID_NOT_SURE", "HXNOTSURE")
 os.environ.setdefault("CONTENT_SID_CONTACT", "HXCONTACT")
+os.environ.setdefault("CONTENT_SID_SHIFT_REMINDER", "HXSHIFT")
 
 from app.hoh_service import HOHService, _half_hour_slots_for_range
 from app.utils.actions import parse_action_id

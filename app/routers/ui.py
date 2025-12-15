@@ -8,6 +8,8 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
+from app import twilio_client
+from app.credentials import CONTENT_SID_SHIFT_REMINDER
 from app.dependencies import get_hoh_service
 from app.hoh_service import HOHService
 
@@ -1183,44 +1185,34 @@ async def send_shift_reminder(
         event_date = event.get("event_date")
         call_time = shift.get("call_time")
         shift_role = shift.get("shift_role", "")
-        
+
         if not employee_phone:
             raise HTTPException(status_code=400, detail="Employee phone number not found")
-        
+
         # Format call time
-        call_time_display = _to_israel_time(call_time).strftime("%H:%M") if call_time else ""
+        call_time_display = ""
+        if call_time:
+            call_time_local = _to_israel_time(call_time)
+            call_time_display = call_time_local.strftime("%H:%M") if call_time_local else ""
+
         event_date_display = event_date.strftime("%d/%m/%Y") if event_date else ""
-        
-        # Build reminder message
-        message_body = f"""
-תזכורת למשמרת / Shift Reminder
-שלום {employee_name},
-זוהי תזכורת למשמרת שלך:
 
-אירוע: {event_name}
-תאריך: {event_date_display}
-שעת כניסה: {call_time_display}
-תפקיד: {shift_role if shift_role else 'לא צוין'}
+        twilio_client.send_content_message(
+            to=employee_phone,
+            content_sid=CONTENT_SID_SHIFT_REMINDER,
+            content_variables={
+                "employee_name": employee_name or "",
+                "event_name": event_name or "",
+                "event_date_display": event_date_display,
+                "call_time_display": call_time_display,
+                "shift_role": shift_role or "לא צוין",
+            },
+        )
 
-נתראה שם!
-        """.strip()
-        
-        # Send via Twilio (or stub for now)
-        # For now, we'll just log it - you can uncomment the actual Twilio sending later
-        logger.info(f"Sending reminder to {employee_phone}: {message_body}")
-        
-        # Uncomment this when you want to actually send via Twilio:
-        # from app import twilio_client
-        # twilio_client.send_text(
-        #     to=employee_phone,
-        #     body=message_body,
-        #     channel="whatsapp"
-        # )
-        
         # Mark reminder as sent
         from datetime import datetime, timezone
         hoh.employee_shifts.mark_24h_reminder_sent(shift_id=shift_id, when=datetime.now(timezone.utc))
-        
+
         logger.info(f"Reminder sent successfully for shift {shift_id}")
         
     except HTTPException:
