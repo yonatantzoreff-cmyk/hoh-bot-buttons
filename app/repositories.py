@@ -1108,3 +1108,251 @@ class MessageDeliveryLogRepository:
         with get_session() as session:
             result = session.execute(query, {"whatsapp_msg_sid": whatsapp_msg_sid})
             return result.mappings().first()
+
+
+class EmployeeRepository:
+    """אחראי על טבלת employees"""
+
+    def create_employee(
+        self,
+        org_id: int,
+        name: str,
+        phone: str,
+        role: Optional[str] = None,
+        notes: Optional[str] = None,
+        is_active: bool = True,
+    ) -> int:
+        """יוצר עובד חדש ומחזיר employee_id"""
+        from .appdb import get_session
+
+        q = text("""
+            INSERT INTO employees (org_id, name, phone, role, notes, is_active)
+            VALUES (:org_id, :name, :phone, :role, :notes, :is_active)
+            RETURNING employee_id
+        """)
+
+        with get_session() as session:
+            res = session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "name": name,
+                    "phone": phone,
+                    "role": role,
+                    "notes": notes,
+                    "is_active": is_active,
+                },
+            )
+            employee_id = res.scalar_one()
+            session.commit()
+            return employee_id
+
+    def get_employee_by_id(self, org_id: int, employee_id: int):
+        """מחזיר עובד לפי employee_id, או None אם לא נמצא"""
+        from .appdb import get_session
+
+        q = text("""
+            SELECT *
+            FROM employees
+            WHERE org_id = :org_id
+              AND employee_id = :employee_id
+        """)
+
+        with get_session() as session:
+            res = session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "employee_id": employee_id,
+                },
+            )
+            row = res.mappings().first()
+            return dict(row) if row else None
+
+    def get_employee_by_phone(self, org_id: int, phone: str):
+        """מחזיר עובד לפי טלפון בתוך אותו org, או None"""
+        from .appdb import get_session
+
+        q = text("""
+            SELECT *
+            FROM employees
+            WHERE org_id = :org_id
+              AND phone = :phone
+        """)
+
+        with get_session() as session:
+            res = session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "phone": phone,
+                },
+            )
+            row = res.mappings().first()
+            return dict(row) if row else None
+
+    def list_employees(self, org_id: int, active_only: bool = True):
+        """מחזיר רשימת עובדים בארגון, עם אופציה לסנן לפי is_active"""
+        from .appdb import get_session
+
+        base_sql = """
+            SELECT *
+            FROM employees
+            WHERE org_id = :org_id
+        """
+
+        if active_only:
+            base_sql += " AND is_active = TRUE"
+
+        base_sql += " ORDER BY name"
+
+        q = text(base_sql)
+
+        with get_session() as session:
+            res = session.execute(q, {"org_id": org_id})
+            return [dict(r) for r in res.mappings().all()]
+
+    def set_active(self, org_id: int, employee_id: int, is_active: bool):
+        """הפעלה/הקפאת עובד"""
+        from .appdb import get_session
+
+        q = text("""
+            UPDATE employees
+            SET is_active = :is_active
+            WHERE org_id = :org_id
+              AND employee_id = :employee_id
+        """)
+
+        with get_session() as session:
+            session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "employee_id": employee_id,
+                    "is_active": is_active,
+                },
+            )
+            session.commit()
+
+
+class EmployeeShiftRepository:
+    """אחראי על טבלת employee_shifts (שיוך משמרות לאירועים ולעובדים)"""
+
+    def create_shift(
+        self,
+        org_id: int,
+        event_id: int,
+        employee_id: int,
+        call_time,
+        shift_role: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> int:
+        """
+        יוצר משמרת חדשה לעובד באירוע מסוים.
+        call_time = datetime (timezone-aware) לשעת כניסה.
+        """
+        from .appdb import get_session
+
+        q = text("""
+            INSERT INTO employee_shifts (
+                org_id,
+                event_id,
+                employee_id,
+                call_time,
+                shift_role,
+                notes
+            )
+            VALUES (:org_id, :event_id, :employee_id, :call_time, :shift_role, :notes)
+            RETURNING shift_id
+        """)
+
+        with get_session() as session:
+            res = session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "event_id": event_id,
+                    "employee_id": employee_id,
+                    "call_time": call_time,
+                    "shift_role": shift_role,
+                    "notes": notes,
+                },
+            )
+            shift_id = res.scalar_one()
+            session.commit()
+            return shift_id
+
+    def list_shifts_for_event(self, org_id: int, event_id: int):
+        """רשימת כל המשמרות באירוע מסוים"""
+        from .appdb import get_session
+
+        q = text("""
+            SELECT s.*, e.name AS employee_name, e.phone AS employee_phone
+            FROM employee_shifts s
+            JOIN employees e
+              ON e.employee_id = s.employee_id
+             AND e.org_id = s.org_id
+            WHERE s.org_id = :org_id
+              AND s.event_id = :event_id
+            ORDER BY s.call_time, e.name
+        """)
+
+        with get_session() as session:
+            res = session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "event_id": event_id,
+                },
+            )
+            return [dict(r) for r in res.mappings().all()]
+
+    def list_shifts_for_employee(self, org_id: int, employee_id: int):
+        """רשימת כל המשמרות של עובד מסוים (כולל פרטי האירוע)"""
+        from .appdb import get_session
+
+        q = text("""
+            SELECT s.*, ev.name AS event_name, ev.show_time, ev.event_date
+            FROM employee_shifts s
+            JOIN events ev
+              ON ev.event_id = s.event_id
+             AND ev.org_id = s.org_id
+            WHERE s.org_id = :org_id
+              AND s.employee_id = :employee_id
+            ORDER BY s.call_time DESC
+        """)
+
+        with get_session() as session:
+            res = session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "employee_id": employee_id,
+                },
+            )
+            return [dict(r) for r in res.mappings().all()]
+
+    def mark_24h_reminder_sent(self, shift_id: int, when=None):
+        """מסמן שנשלחה תזכורת 24 שעות למשמרת"""
+        from .appdb import get_session
+        from datetime import datetime, timezone
+
+        if when is None:
+            when = datetime.now(timezone.utc)
+
+        q = text("""
+            UPDATE employee_shifts
+            SET reminder_24h_sent_at = :when,
+                updated_at = :when
+            WHERE shift_id = :shift_id
+        """)
+
+        with get_session() as session:
+            session.execute(
+                q,
+                {
+                    "shift_id": shift_id,
+                    "when": when,
+                },
+            )
+            session.commit()
