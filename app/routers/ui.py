@@ -48,6 +48,8 @@ def _render_page(title: str, body: str) -> str:
         <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
         <title>{escape(title)}</title>
         <link href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css\" rel=\"stylesheet\" integrity=\"sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH\" crossorigin=\"anonymous\">
+        <link href=\"https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css\" rel=\"stylesheet\">
+        <link href=\"https://cdn.datatables.net/colreorder/1.6.3/css/colReorder.bootstrap5.min.css\" rel=\"stylesheet\">
       </head>
       <body class=\"bg-light\">
         <nav class=\"navbar navbar-expand-lg navbar-dark bg-dark\">
@@ -65,6 +67,10 @@ def _render_page(title: str, body: str) -> str:
         <main class=\"container py-4\">
           {body}
         </main>
+        <script src=\"https://code.jquery.com/jquery-3.7.1.min.js\" integrity=\"sha256-3gJwYpJPgH+U5Q5J5r3bJfFqvF8S2RkG8h6fWK3kNlc=\" crossorigin=\"anonymous\"></script>
+        <script src=\"https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js\"></script>
+        <script src=\"https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js\"></script>
+        <script src=\"https://cdn.datatables.net/colreorder/1.6.3/js/dataTables.colReorder.min.js\"></script>
         <script src=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js\" crossorigin=\"anonymous\"></script>
       </body>
     </html>
@@ -630,7 +636,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
       <div class=\"card-header bg-secondary text-white\">Events</div>
       <div class=\"card-body\">
         <div class=\"table-responsive\">
-          <table class=\"table table-striped align-middle\">
+          <table id=\"events-table\" class=\"table table-striped align-middle\">
             <thead>
               <tr>
                 <th scope=\"col\">Name</th>
@@ -654,6 +660,65 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         </div>
       </div>
     </div>
+    <script>
+      document.addEventListener("DOMContentLoaded", function () {
+        const tableElement = document.getElementById("events-table");
+        const hasJQuery = typeof window.jQuery !== "undefined";
+        const hasDataTables =
+          hasJQuery && typeof window.jQuery.fn.DataTable === "function";
+
+        if (!tableElement || !hasDataTables) {
+          console.warn("Events table could not initialize DataTables.");
+          return;
+        }
+
+        const $table = window.jQuery(tableElement);
+        const currentHeaders = Array.from(
+          tableElement.querySelectorAll("thead th")
+        ).map((th) => th.textContent.trim());
+        const stateKey = `DataTables_${tableElement.id}_${window.location.pathname}`;
+
+        $table.DataTable({
+          stateSave: true,
+          stateDuration: -1,
+          colReorder: true,
+          order: [],
+          stateSaveParams: function (_settings, data) {
+            data.columnHeaders = currentHeaders;
+          },
+          stateSaveCallback: function (_settings, data) {
+            try {
+              localStorage.setItem(stateKey, JSON.stringify(data));
+            } catch (error) {
+              console.warn("Failed to save table state", error);
+            }
+          },
+          stateLoadCallback: function (_settings) {
+            const savedState = localStorage.getItem(stateKey);
+            if (!savedState) {
+              return null;
+            }
+
+            try {
+              const parsedState = JSON.parse(savedState);
+              if (
+                Array.isArray(parsedState.columnHeaders) &&
+                parsedState.columnHeaders.join("|||") !==
+                  currentHeaders.join("|||")
+              ) {
+                localStorage.removeItem(stateKey);
+                return null;
+              }
+
+              return parsedState;
+            } catch (error) {
+              console.warn("Failed to load saved table state", error);
+              return null;
+            }
+          },
+        });
+      });
+    </script>
     """
 
     html = _render_page("Events", table)
