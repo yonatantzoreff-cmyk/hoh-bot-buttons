@@ -5,8 +5,9 @@ Flow: Opening (approved Utility) -> List Picker (in-session) -> Confirm (in-sess
 ENV (Render):
 - DATABASE_URL
 - TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN
-- TWILIO_MESSAGING_SERVICE_SID or TWILIO_WHATSAPP_FROM
+- TWILIO_MESSAGING_SERVICE_SID (required for WhatsApp template sends)
 - CONTENT_SID_INIT_QR (approved), CONTENT_SID_SLOT_LIST
+- CONTENT_SID_SHIFT_REMINDER (WhatsApp template for employee reminders)
 - Optional: CONTENT_SID_CONFIRM_QR, CONTENT_SID_NOT_SURE_QR, CONTENT_SID_CONTACT_QR
 
 Endpoints:

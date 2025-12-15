@@ -93,13 +93,14 @@ async def twilio_status_callback(request: Request):
 - `TWILIO_AUTH_TOKEN`
 - `TWILIO_MESSAGING_SERVICE_SID`
 - `DATABASE_URL`
-- `CONTENT_SID_*` (all content template SIDs)
+- `CONTENT_SID_*` (all content template SIDs, including the shift reminder template)
 
-### New Variable (Required for Feature)
+### New Variables (Required for Features)
 - `PUBLIC_BASE_URL` - Your app's public URL
   - Example: `https://hoh-bot.onrender.com`
   - Used to construct the status callback URL
   - **Required**: Without this, status tracking won't work
+- `CONTENT_SID_SHIFT_REMINDER` - Twilio Content SID for employee shift reminder template
 
 ## Deployment Checklist
 
