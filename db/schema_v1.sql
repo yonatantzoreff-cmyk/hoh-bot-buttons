@@ -237,3 +237,56 @@ CREATE TABLE import_jobs (
 );
 
 CREATE INDEX idx_import_jobs_org_status ON import_jobs(org_id, status, started_at DESC);
+
+-- ===========================
+--  EMPLOYEES
+-- ===========================
+
+CREATE TABLE employees (
+    employee_id  BIGSERIAL PRIMARY KEY,
+    org_id       BIGINT NOT NULL REFERENCES orgs(org_id) ON DELETE CASCADE,
+    name         TEXT   NOT NULL,
+    phone        TEXT   NOT NULL,
+    role         TEXT,        -- סדרן / טכנאי / קופאי / מנהל משמרת וכו'
+    notes        TEXT,
+    is_active    BOOLEAN NOT NULL DEFAULT TRUE,
+    created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- אותו טלפון לא יופיע פעמיים באותו ארגון (כמו ב-contacts)
+CREATE UNIQUE INDEX uq_employees_org_phone ON employees(org_id, phone);
+
+CREATE INDEX idx_employees_org_name ON employees(org_id, name);
+CREATE INDEX idx_employees_org_active ON employees(org_id, is_active);
+
+-- ===========================
+--  EMPLOYEE SHIFTS (משמרות עובדים)
+-- ===========================
+
+CREATE TABLE employee_shifts (
+    shift_id      BIGSERIAL PRIMARY KEY,
+    org_id        BIGINT NOT NULL REFERENCES orgs(org_id) ON DELETE CASCADE,
+    event_id      BIGINT NOT NULL REFERENCES events(event_id) ON DELETE CASCADE,
+    employee_id   BIGINT NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
+
+    shift_role    TEXT,           -- תפקיד במשמרת (סדרן ראשי / טכנאי תאורה / כרטיסן וכו')
+    call_time     TIMESTAMPTZ NOT NULL,  -- שעת כניסה למשמרת עבור העובד
+    notes         TEXT,           -- הערות ספציפיות לאירוע הזה
+
+    reminder_24h_sent_at TIMESTAMPTZ,    -- מתי נשלחה תזכורת 24 שעות (null = עוד לא נשלח)
+
+    created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+
+    UNIQUE (event_id, employee_id)
+);
+
+CREATE INDEX idx_employee_shifts_org_call_time
+    ON employee_shifts (org_id, call_time);
+
+CREATE INDEX idx_employee_shifts_event
+    ON employee_shifts (event_id);
+
+CREATE INDEX idx_employee_shifts_employee
+    ON employee_shifts (employee_id);
+
