@@ -202,22 +202,19 @@ class CalendarImportService:
         events = self.staging_repo.list_all(org_id)
 
         # Parse JSON fields
-        for event in events:
-            errors_json = event.get("errors_json")
-            if isinstance(errors_json, (str, bytes)):
-                event["errors"] = json.loads(errors_json)
-            elif isinstance(errors_json, (list, dict)):
-                event["errors"] = errors_json
-            else:
-                event["errors"] = []
+        def _parse_json_field(raw_value: Any) -> Any:
+            if isinstance(raw_value, (str, bytes)):
+                try:
+                    return json.loads(raw_value)
+                except (TypeError, json.JSONDecodeError):
+                    return []
+            if isinstance(raw_value, (list, dict)):
+                return raw_value
+            return []
 
-            warnings_json = event.get("warnings_json")
-            if isinstance(warnings_json, (str, bytes)):
-                event["warnings"] = json.loads(warnings_json)
-            elif isinstance(warnings_json, (list, dict)):
-                event["warnings"] = warnings_json
-            else:
-                event["warnings"] = []
+        for event in events:
+            event["errors"] = _parse_json_field(event.get("errors_json"))
+            event["warnings"] = _parse_json_field(event.get("warnings_json"))
 
         return events
 

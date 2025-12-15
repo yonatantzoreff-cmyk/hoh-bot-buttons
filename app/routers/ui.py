@@ -661,7 +661,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
               </tr>
             </thead>
             <tbody>
-              {table_body}
+              __TABLE_BODY__
             </tbody>
           </table>
         </div>
@@ -728,7 +728,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
     </script>
     """
 
-    table = table_template.format(table_body=table_body)
+    table = table_template.replace("__TABLE_BODY__", table_body)
 
     html = _render_page("Events", table)
     return HTMLResponse(content=html)
