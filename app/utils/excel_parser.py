@@ -1,8 +1,8 @@
 """Excel parser for calendar imports."""
 
-from datetime import date, time
-from typing import Any, Dict, List, Optional
 import logging
+from datetime import date, datetime, time
+from typing import Any, Dict, List, Optional
 
 from openpyxl import load_workbook
 from openpyxl.worksheet.worksheet import Worksheet
@@ -111,7 +111,6 @@ def _parse_cell_value(field_name: str, cell_value: Any) -> Optional[Any]:
                 return cell_value
             elif isinstance(cell_value, str):
                 # Try common date formats
-                from datetime import datetime
                 for fmt in ["%Y-%m-%d", "%d/%m/%Y", "%d-%m-%Y", "%d.%m.%Y"]:
                     try:
                         return datetime.strptime(cell_value.strip(), fmt).date()

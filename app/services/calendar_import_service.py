@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from sqlalchemy import text
 
+from app.appdb import SessionLocal
 from app.repositories import (
     ContactRepository,
     EventRepository,
@@ -336,8 +337,6 @@ class CalendarImportService:
             raise ValueError("No events to commit after removing duplicates")
 
         # Use a transaction to commit all events
-        from app.appdb import SessionLocal
-
         session = SessionLocal()
         committed_count = 0
         error_count = 0
