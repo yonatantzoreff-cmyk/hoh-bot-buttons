@@ -1028,6 +1028,124 @@ class MessageRepository:
 
         return {row["event_id"]: row.get("status") for row in result}
 
+    def get_message_by_whatsapp_sid(self, whatsapp_msg_sid: str):
+        """
+        Find a message by its Twilio WhatsApp Message SID.
+        Returns the message row or None.
+        """
+        query = text(
+            """
+            SELECT *
+            FROM messages
+            WHERE whatsapp_msg_sid = :whatsapp_msg_sid
+            LIMIT 1
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(query, {"whatsapp_msg_sid": whatsapp_msg_sid})
+            return result.mappings().first()
+
+    def update_message_timestamps_from_status(
+        self, message_sid: str, status: str, occurred_at: datetime | None = None
+    ) -> bool:
+        """
+        Update stored message status/timestamps based on Twilio status callback.
+        Returns True if a DB row was updated, False if no message row exists for message_sid.
+        Must NOT raise if message not found.
+        """
+
+        if not message_sid:
+            return False
+
+        when = occurred_at or datetime.utcnow()
+        status_lower = (status or "").lower()
+
+        with get_session() as session:
+            # Detect which column stores the Twilio SID
+            columns = set(
+                session.execute(
+                    text(
+                        """
+                        SELECT column_name
+                        FROM information_schema.columns
+                        WHERE table_name = 'messages'
+                          AND column_name IN (
+                              'twilio_message_sid', 'whatsapp_msg_sid',
+                              'status', 'sent_at', 'delivered_at', 'read_at', 'failed_at', 'last_status_at'
+                          )
+                        """
+                    )
+                ).scalars()
+            )
+
+            sid_column = None
+            if "twilio_message_sid" in columns:
+                sid_column = "twilio_message_sid"
+            elif "whatsapp_msg_sid" in columns:
+                sid_column = "whatsapp_msg_sid"
+
+            if sid_column is None:
+                return False
+
+            message = session.execute(
+                text(
+                    f"""
+                    SELECT message_id
+                    FROM messages
+                    WHERE {sid_column} = :message_sid
+                    LIMIT 1
+                    """
+                ),
+                {"message_sid": message_sid},
+            ).mappings().first()
+
+            if not message:
+                return False
+
+            updates: dict[str, Any] = {"status": status, "last_status_at": when}
+
+            if status_lower in {"queued", "accepted", "sent", "sending"}:
+                updates["sent_at"] = when
+
+            if status_lower == "delivered":
+                updates["delivered_at"] = when
+
+            if status_lower == "read":
+                updates["read_at"] = when
+
+            if status_lower in {"failed", "undelivered"}:
+                updates["failed_at"] = when
+
+            set_parts = []
+            params: dict[str, Any] = {"message_id": message.get("message_id")}
+
+            for column in ("status", "sent_at", "delivered_at", "read_at", "failed_at", "last_status_at"):
+                if column not in columns or updates.get(column) is None:
+                    continue
+
+                params[column] = updates[column]
+
+                if column == "sent_at":
+                    set_parts.append("sent_at = COALESCE(sent_at, :sent_at)")
+                else:
+                    set_parts.append(f"{column} = :{column}")
+
+            if not set_parts:
+                return True
+
+            query = text(
+                f"""
+                UPDATE messages
+                SET {', '.join(set_parts)}
+                WHERE message_id = :message_id
+                """
+            )
+
+            session.execute(query, params)
+
+            return True
+
 
 class TemplateRepository:
     """אחראי על טבלאות message_templates / followup_rules."""
@@ -1141,84 +1259,6 @@ class MessageDeliveryLogRepository:
         with get_session() as session:
             result = session.execute(query, {"whatsapp_msg_sid": whatsapp_msg_sid})
             return result.mappings().first()
-
-    def update_message_timestamps_from_status(
-        self, message_sid: str, status: str, occurred_at: Optional[datetime] = None
-    ) -> bool:
-        """
-        Update message status + timestamps based on a Twilio status callback.
-
-        Returns True if a matching message was found and updated, False otherwise.
-        """
-
-        if not message_sid:
-            return False
-
-        when = occurred_at or datetime.utcnow()
-        status_lower = (status or "").lower()
-
-        with get_session() as session:
-            message = session.execute(
-                text(
-                    """
-                    SELECT message_id
-                    FROM messages
-                    WHERE whatsapp_msg_sid = :message_sid
-                    LIMIT 1
-                    """
-                ),
-                {"message_sid": message_sid},
-            ).mappings().first()
-
-            if not message:
-                return False
-
-            updates = {"status": status, "last_status_at": when}
-
-            if status_lower in {"sent", "queued", "sending"}:
-                updates["sent_at"] = when
-
-            if status_lower == "delivered":
-                updates["delivered_at"] = when
-
-            if status_lower == "read":
-                updates["read_at"] = when
-
-            if status_lower in {"failed", "undelivered"}:
-                updates["failed_at"] = when
-
-            set_parts = []
-            params: dict[str, Any] = {
-                "message_id": message.get("message_id"),
-                "status": updates.get("status"),
-                "last_status_at": updates.get("last_status_at"),
-                "sent_at": updates.get("sent_at"),
-                "delivered_at": updates.get("delivered_at"),
-                "read_at": updates.get("read_at"),
-                "failed_at": updates.get("failed_at"),
-            }
-
-            for column in ("status", "last_status_at", "sent_at", "delivered_at", "read_at", "failed_at"):
-                if updates.get(column) is not None:
-                    if column == "sent_at":
-                        set_parts.append("sent_at = COALESCE(sent_at, :sent_at)")
-                    else:
-                        set_parts.append(f"{column} = :{column}")
-
-            if not set_parts:
-                return True
-
-            query = text(
-                f"""
-                UPDATE messages
-                SET {', '.join(set_parts)}
-                WHERE message_id = :message_id
-                """
-            )
-
-            session.execute(query, params)
-
-            return True
 
 
 class EmployeeRepository:

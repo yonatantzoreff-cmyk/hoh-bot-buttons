@@ -108,6 +108,12 @@ async def twilio_status_callback(
         message_sid=message_sid, status=message_status
     )
 
+    if not updated:
+        logger.info(
+            "No message record found to update for MessageSid",
+            extra={"message_sid": message_sid},
+        )
+
     if not message:
         if not updated:
             logger.info(
