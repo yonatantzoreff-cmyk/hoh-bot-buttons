@@ -9,9 +9,12 @@ import logging
 from datetime import date, time
 from typing import Any, Dict, List, Optional
 
+import logging
+
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
+from app.db_schema import SchemaMissingError, database_label
 from app.services.calendar_import_service import CalendarImportService
 
 router = APIRouter(prefix="/import", tags=["calendar_import"])
@@ -99,6 +102,9 @@ async def upload_excel(
             org_id=org_id, file_content=content, filename=file.filename
         )
         return result
+    except SchemaMissingError as e:
+        logger.error("Calendar upload failed; %s (DB: %s)", e, database_label())
+        raise HTTPException(status_code=500, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -114,8 +120,12 @@ async def list_staging_events(
     List all staging events.
     """
     service = get_import_service()
-    events = service.list_staging_events(org_id)
-    return events
+    try:
+        events = service.list_staging_events(org_id)
+        return events
+    except SchemaMissingError as e:
+        logger.error("List staging events failed; %s (DB: %s)", e, database_label())
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.patch("/staging/{staging_id}", response_model=StagingEventResponse)
@@ -135,6 +145,9 @@ async def update_staging_event(
     try:
         result = service.update_staging_event(org_id, staging_id, fields)
         return result
+    except SchemaMissingError as e:
+        logger.error("Update staging event failed; %s (DB: %s)", e, database_label())
+        raise HTTPException(status_code=500, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -150,8 +163,12 @@ async def add_staging_event(
     Add a new blank staging event row.
     """
     service = get_import_service()
-    result = service.add_staging_event(org_id)
-    return result
+    try:
+        result = service.add_staging_event(org_id)
+        return result
+    except SchemaMissingError as e:
+        logger.error("Add staging event failed; %s (DB: %s)", e, database_label())
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.delete("/staging/{staging_id}")
@@ -166,6 +183,9 @@ async def delete_staging_event(
     try:
         service.delete_staging_event(org_id, staging_id)
         return {"status": "deleted"}
+    except SchemaMissingError as e:
+        logger.error("Delete staging event failed; %s (DB: %s)", e, database_label())
+        raise HTTPException(status_code=500, detail=str(e))
     except Exception as e:
         logger.exception("Delete failed")
         raise HTTPException(status_code=500, detail="Delete failed")
@@ -179,8 +199,12 @@ async def validate_all(
     Revalidate all staging events and check for duplicates.
     """
     service = get_import_service()
-    result = service.revalidate_all(org_id)
-    return result
+    try:
+        result = service.revalidate_all(org_id)
+        return result
+    except SchemaMissingError as e:
+        logger.error("Validation failed; %s (DB: %s)", e, database_label())
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.post("/commit", response_model=CommitResponse)
@@ -198,6 +222,9 @@ async def commit_to_events(
     try:
         result = service.commit_to_events(org_id, skip_duplicates)
         return result
+    except SchemaMissingError as e:
+        logger.error("Commit failed; %s (DB: %s)", e, database_label())
+        raise HTTPException(status_code=500, detail=str(e))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -213,5 +240,9 @@ async def clear_staging(
     Clear all staging events immediately.
     """
     service = get_import_service()
-    service.clear_all_staging(org_id)
-    return {"status": "cleared"}
+    try:
+        service.clear_all_staging(org_id)
+        return {"status": "cleared"}
+    except SchemaMissingError as e:
+        logger.error("Clear staging failed; %s (DB: %s)", e, database_label())
+        raise HTTPException(status_code=500, detail=str(e))

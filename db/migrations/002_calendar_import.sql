@@ -30,8 +30,9 @@ CREATE TABLE staging_events (
     updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX idx_staging_events_org_id ON staging_events(org_id);
-CREATE INDEX idx_staging_events_is_valid ON staging_events(org_id, is_valid);
+CREATE INDEX IF NOT EXISTS idx_staging_events_org_id ON staging_events(org_id);
+CREATE INDEX IF NOT EXISTS idx_staging_events_is_valid ON staging_events(org_id, is_valid);
+CREATE INDEX IF NOT EXISTS idx_staging_events_org_date_show_time ON staging_events(org_id, date, show_time);
 
 -- ===========================
 --  UPDATE IMPORT JOBS TABLE

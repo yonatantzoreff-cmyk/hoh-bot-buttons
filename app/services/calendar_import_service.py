@@ -10,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from sqlalchemy import text
 
 from app.appdb import SessionLocal
+from app.db_schema import SchemaMissingError, require_staging_table
 from app.repositories import (
     ContactRepository,
     EventRepository,
@@ -38,6 +39,8 @@ class CalendarImportService:
         
         Returns summary with counts and any parse errors.
         """
+        self._ensure_staging_table()
+
         # Create import job
         job_id = self.import_job_repo.create_job(
             org_id=org_id,
@@ -195,6 +198,7 @@ class CalendarImportService:
 
     def list_staging_events(self, org_id: int) -> List[Dict[str, Any]]:
         """Get all staging events with parsed errors/warnings."""
+        self._ensure_staging_table()
         events = self.staging_repo.list_all(org_id)
 
         # Parse JSON fields
@@ -215,6 +219,7 @@ class CalendarImportService:
         self, org_id: int, staging_id: int, fields: Dict[str, Any]
     ) -> Dict[str, Any]:
         """Update a staging event and revalidate."""
+        self._ensure_staging_table()
         # Get existing event
         event = self.staging_repo.get_by_id(org_id, staging_id)
         if not event:
@@ -243,6 +248,7 @@ class CalendarImportService:
 
     def add_staging_event(self, org_id: int) -> Dict[str, Any]:
         """Add a new blank staging event."""
+        self._ensure_staging_table()
         # Find max row_index
         existing = self.staging_repo.list_all(org_id)
         max_row = max((e.get("row_index", 0) for e in existing), default=0)
@@ -269,10 +275,12 @@ class CalendarImportService:
 
     def delete_staging_event(self, org_id: int, staging_id: int) -> None:
         """Delete a staging event."""
+        self._ensure_staging_table()
         self.staging_repo.delete(org_id, staging_id)
 
     def revalidate_all(self, org_id: int) -> Dict[str, Any]:
         """Revalidate all staging events and check for duplicates."""
+        self._ensure_staging_table()
         events = self.staging_repo.list_all(org_id)
 
         for event in events:
@@ -313,6 +321,7 @@ class CalendarImportService:
         Returns:
             Summary of commit operation
         """
+        self._ensure_staging_table()
         # Get all valid staging events
         staging_events = [
             e
@@ -467,4 +476,15 @@ class CalendarImportService:
 
     def clear_all_staging(self, org_id: int) -> None:
         """Clear all staging events."""
+        self._ensure_staging_table()
         self.staging_repo.clear_all(org_id)
+
+    def _ensure_staging_table(self) -> None:
+        """Raise a descriptive error when the staging table is missing."""
+
+        try:
+            require_staging_table()
+        except SchemaMissingError:
+            # Bubble up with a predictable exception type for FastAPI handlers
+            logger.error("staging_events table is missing; migrations are required")
+            raise

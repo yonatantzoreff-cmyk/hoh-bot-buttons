@@ -239,6 +239,38 @@ CREATE TABLE import_jobs (
 CREATE INDEX idx_import_jobs_org_status ON import_jobs(org_id, status, started_at DESC);
 
 -- ===========================
+--  CALENDAR IMPORT STAGING
+-- ===========================
+
+CREATE TABLE IF NOT EXISTS staging_events (
+    id                BIGSERIAL PRIMARY KEY,
+    org_id            BIGINT NOT NULL REFERENCES orgs(org_id) ON DELETE CASCADE,
+    row_index         INTEGER NOT NULL,  -- Original row number from Excel for reference
+
+    -- Event data fields (mapped from Excel columns)
+    date              DATE,
+    show_time         TIME,
+    name              TEXT,
+    load_in           TIME,
+    event_series      TEXT,
+    producer_name     TEXT,
+    producer_phone    TEXT,
+    notes             TEXT,
+
+    -- Validation status
+    is_valid          BOOLEAN NOT NULL DEFAULT FALSE,
+    errors_json       JSONB,    -- Array of error messages that block commit
+    warnings_json     JSONB,    -- Array of warning messages (don't block commit)
+
+    created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
+    updated_at        TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_staging_events_org_id ON staging_events(org_id);
+CREATE INDEX IF NOT EXISTS idx_staging_events_is_valid ON staging_events(org_id, is_valid);
+CREATE INDEX IF NOT EXISTS idx_staging_events_org_date_show_time ON staging_events(org_id, date, show_time);
+
+-- ===========================
 --  EMPLOYEES
 -- ===========================
 

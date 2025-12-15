@@ -123,3 +123,8 @@ To enable the calendar import feature, run the migration:
 ```bash
 psql $DATABASE_URL < db/migrations/002_calendar_import.sql
 ```
+
+On startup the app now checks for the `staging_events` table and will try to
+apply the migration if it's missing. If the table still doesn't exist, the
+process will fail fast with a clear error so you know to run the command above
+against the correct database (the logs include the DB host/name).
