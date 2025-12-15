@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 import re
 from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 from typing import Any, Dict, List, Optional, Tuple
 
 import requests
@@ -37,6 +39,7 @@ logger = logging.getLogger(__name__)
 
 # TODO: tie this to the org's timezone once multi-org support is implemented.
 LOCAL_TZ = timezone(timedelta(hours=2))
+ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
 
 RANGE_BOUNDS: Dict[int, tuple[int, int]] = {
     1: (0, 4),
@@ -284,6 +287,17 @@ class HOHService:
 
         variables = self.build_shift_reminder_variables(org_id=org_id, shift_id=shift_id)
 
+        logger.info(
+            "Sending shift reminder",
+            extra={
+                "event_id": event_id,
+                "shift_id": shift_id,
+                "show_time": self._format_time_israel(event.get("show_time")),
+                "call_time": self._format_time_israel(shift.get("call_time")),
+                "contact_phone_suffix": (variables.get("8") or "")[-3:],
+            },
+        )
+
         twilio_resp = twilio_client.send_content_message(
             to=normalized_phone,
             content_sid=CONTENT_SID_SHIFT_REMINDER,
@@ -332,31 +346,22 @@ class HOHService:
                 f"Event {shift['event_id']} not found for shift {shift_id} in org {org_id}"
             )
 
-        def _format_time(value: Any) -> str:
-            if isinstance(value, time):
-                return value.strftime("%H:%M")
-
-            if isinstance(value, datetime):
-                return value.strftime("%H:%M")
-
-            return ""
-
         event_date = event.get("event_date")
         event_date_display = event_date.strftime("%d/%m/%Y") if event_date else ""
 
-        show_time_display = _format_time(event.get("show_time"))
+        show_time_display = self._format_time_israel(event.get("show_time"))
 
         call_time = shift.get("call_time")
-        call_time_display = _format_time(call_time)
+        call_time_display = self._format_time_israel(call_time)
 
         employee_name = shift.get("employee_name") or ""
         first_name = employee_name.split()[0] if employee_name else ""
 
-        support_phone = (
-            event.get("technical_phone")
-            or event.get("producer_phone")
-            or ""
-        )
+        tech_phone = event.get("technical_phone") or os.getenv("TECH_CONTACT_PHONE")
+        support_phone = tech_phone or event.get("producer_phone") or ""
+
+        tech_name = event.get("technical_name") or os.getenv("TECH_CONTACT_NAME")
+        support_name = tech_name or event.get("producer_name") or ""
 
         variables = {
             "1": first_name,
@@ -367,6 +372,7 @@ class HOHService:
             "6": shift.get("shift_role") or "",
             "7": shift.get("notes") or "",
             "8": support_phone,
+            "9": support_name,
         }
 
         return variables
@@ -417,6 +423,19 @@ class HOHService:
             "contact_id": producer_contact_id,
             "conversation_id": conv_id,
         }
+
+    @staticmethod
+    def _format_time_israel(value: Any) -> str:
+        if isinstance(value, time):
+            return value.strftime("%H:%M")
+
+        if isinstance(value, datetime):
+            value_with_tz = value
+            if value.tzinfo is None:
+                value_with_tz = value.replace(tzinfo=ISRAEL_TZ)
+            return value_with_tz.astimezone(ISRAEL_TZ).strftime("%H:%M")
+
+        return ""
 
     @staticmethod
     def _get_contact_value(contact: Any, field: str) -> Any:
