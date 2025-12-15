@@ -138,6 +138,7 @@ class HOHService:
 
     def list_events_for_org(self, org_id: int):
         events = self.events.list_events_for_org(org_id)
+        latest_status_by_event = self.messages.get_latest_status_by_event(org_id)
 
         enriched_events = []
         for event in events:
@@ -172,6 +173,9 @@ class HOHService:
                     event_id=event_id,
                     content_sid=CONTENT_SID_INIT,
                 )
+                event_dict["latest_delivery_status"] = latest_status_by_event.get(event_id)
+            else:
+                event_dict["latest_delivery_status"] = None
 
             enriched_events.append(event_dict)
 

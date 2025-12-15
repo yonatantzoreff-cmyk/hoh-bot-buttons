@@ -960,6 +960,41 @@ class MessageRepository:
             result = session.execute(query, {"org_id": org_id})
             return result.mappings().all()
 
+    def get_latest_status_by_event(self, org_id: int) -> dict[int, Optional[str]]:
+        """Return the latest delivery status for each event with messages."""
+
+        query = text(
+            """
+            WITH latest_messages AS (
+                SELECT
+                    event_id,
+                    message_id,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY event_id
+                        ORDER BY COALESCE(sent_at, received_at, created_at) DESC, message_id DESC
+                    ) AS rn
+                FROM messages
+                WHERE org_id = :org_id
+                  AND event_id IS NOT NULL
+            )
+            SELECT lm.event_id, mdl.status
+            FROM latest_messages lm
+            LEFT JOIN LATERAL (
+                SELECT status
+                FROM message_delivery_log
+                WHERE org_id = :org_id AND message_id = lm.message_id
+                ORDER BY created_at DESC, delivery_id DESC
+                LIMIT 1
+            ) mdl ON true
+            WHERE lm.rn = 1
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id}).mappings().all()
+
+        return {row["event_id"]: row.get("status") for row in result}
+
 
 class TemplateRepository:
     """אחראי על טבלאות message_templates / followup_rules."""
