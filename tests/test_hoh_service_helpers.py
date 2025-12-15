@@ -103,3 +103,55 @@ def test_download_media_text_handles_utf8_names(monkeypatch):
     text = service._download_media_text("https://example.test/media")
 
     assert "יונתן היכל" in text
+
+
+def test_list_events_includes_latest_delivery_status(monkeypatch):
+    service = HOHService()
+
+    fake_events = [
+        {
+            "event_id": 1,
+            "name": "Test Event",
+            "event_date": date(2024, 1, 1),
+            "show_time": datetime(2024, 1, 1, 18, 0, tzinfo=timezone.utc),
+            "load_in_time": datetime(2024, 1, 1, 16, 0, tzinfo=timezone.utc),
+            "hall_id": 2,
+            "hall_name": "Main Hall",
+            "status": "pending",
+            "producer_contact_id": None,
+            "technical_contact_id": None,
+            "created_at": datetime(2024, 1, 1, 12, 0, tzinfo=timezone.utc),
+            "notes": "",
+        },
+        {
+            "event_id": 2,
+            "name": "No Message Event",
+            "event_date": date(2024, 1, 2),
+            "show_time": None,
+            "load_in_time": None,
+            "hall_id": None,
+            "hall_name": None,
+            "status": "draft",
+            "producer_contact_id": None,
+            "technical_contact_id": None,
+            "created_at": datetime(2024, 1, 2, 12, 0, tzinfo=timezone.utc),
+            "notes": None,
+        },
+    ]
+
+    monkeypatch.setattr(
+        service.events, "list_events_for_org", lambda org_id: fake_events
+    )
+    monkeypatch.setattr(
+        service.messages, "get_latest_status_by_event", lambda org_id: {1: "delivered"}
+    )
+    monkeypatch.setattr(
+        service.messages,
+        "get_last_sent_at_for_content",
+        lambda org_id, event_id, content_sid: None,
+    )
+
+    events = service.list_events_for_org(org_id=1)
+
+    assert events[0]["latest_delivery_status"] == "delivered"
+    assert events[1]["latest_delivery_status"] is None

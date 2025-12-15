@@ -552,6 +552,13 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             created_at.strftime("%Y-%m-%d %H:%M") if created_at else ""
         )
         status = row.get("status") or ""
+        delivery_status = row.get("latest_delivery_status")
+        delivery_status_display = (
+            delivery_status.capitalize()
+            if delivery_status and isinstance(delivery_status, str)
+            else "N/A"
+        )
+        delivery_status_class = _status_badge_class(delivery_status)
         producer_phone = row.get("producer_phone") or ""
         technical_phone = row.get("technical_phone") or ""
         init_sent_at = _to_israel_time(row.get("init_sent_at"))
@@ -576,6 +583,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
               <td>{load_in}</td>
               <td>{hall}</td>
               <td>{status}</td>
+              <td><span class=\"badge text-bg-{delivery_status_class}\">{delivery_status}</span></td>
               <td class=\"text-break\">{notes}</td>
               <td>{producer_phone}</td>
               <td>{technical_phone}</td>
@@ -598,6 +606,8 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 load_in=escape(load_in_display),
                 hall=escape(hall_label or ""),
                 status=escape(status),
+                delivery_status=escape(delivery_status_display),
+                delivery_status_class=delivery_status_class,
                 notes=escape(row.get("notes") or ""),
                 producer_phone=escape(producer_phone),
                 technical_phone=escape(technical_phone),
@@ -610,7 +620,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
 
     table_body = "".join(table_rows) or """
         <tr>
-          <td colspan=\"11\" class=\"text-center text-muted\">No events yet.</td>
+          <td colspan=\"12\" class=\"text-center text-muted\">No events yet.</td>
         </tr>
     """
 
@@ -627,6 +637,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 <th scope=\"col\">Show Time</th>
                 <th scope=\"col\">Load In</th>
                 <th scope=\"col\">Hall</th>
+                <th scope=\"col\">Event Status</th>
                 <th scope=\"col\">Status</th>
                 <th scope=\"col\">Notes</th>
                 <th scope=\"col\">Producer Phone</th>
