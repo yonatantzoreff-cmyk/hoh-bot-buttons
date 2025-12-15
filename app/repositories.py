@@ -1123,8 +1123,6 @@ class EmployeeRepository:
         is_active: bool = True,
     ) -> int:
         """יוצר עובד חדש ומחזיר employee_id"""
-        from .appdb import get_session
-
         q = text("""
             INSERT INTO employees (org_id, name, phone, role, notes, is_active)
             VALUES (:org_id, :name, :phone, :role, :notes, :is_active)
@@ -1149,8 +1147,6 @@ class EmployeeRepository:
 
     def get_employee_by_id(self, org_id: int, employee_id: int):
         """מחזיר עובד לפי employee_id, או None אם לא נמצא"""
-        from .appdb import get_session
-
         q = text("""
             SELECT *
             FROM employees
@@ -1171,8 +1167,6 @@ class EmployeeRepository:
 
     def get_employee_by_phone(self, org_id: int, phone: str):
         """מחזיר עובד לפי טלפון בתוך אותו org, או None"""
-        from .appdb import get_session
-
         q = text("""
             SELECT *
             FROM employees
@@ -1193,8 +1187,6 @@ class EmployeeRepository:
 
     def list_employees(self, org_id: int, active_only: bool = True):
         """מחזיר רשימת עובדים בארגון, עם אופציה לסנן לפי is_active"""
-        from .appdb import get_session
-
         base_sql = """
             SELECT *
             FROM employees
@@ -1214,8 +1206,6 @@ class EmployeeRepository:
 
     def set_active(self, org_id: int, employee_id: int, is_active: bool):
         """הפעלה/הקפאת עובד"""
-        from .appdb import get_session
-
         q = text("""
             UPDATE employees
             SET is_active = :is_active
@@ -1251,8 +1241,6 @@ class EmployeeShiftRepository:
         יוצר משמרת חדשה לעובד באירוע מסוים.
         call_time = datetime (timezone-aware) לשעת כניסה.
         """
-        from .appdb import get_session
-
         q = text("""
             INSERT INTO employee_shifts (
                 org_id,
@@ -1284,8 +1272,6 @@ class EmployeeShiftRepository:
 
     def list_shifts_for_event(self, org_id: int, event_id: int):
         """רשימת כל המשמרות באירוע מסוים"""
-        from .appdb import get_session
-
         q = text("""
             SELECT s.*, e.name AS employee_name, e.phone AS employee_phone
             FROM employee_shifts s
@@ -1309,8 +1295,6 @@ class EmployeeShiftRepository:
 
     def list_shifts_for_employee(self, org_id: int, employee_id: int):
         """רשימת כל המשמרות של עובד מסוים (כולל פרטי האירוע)"""
-        from .appdb import get_session
-
         q = text("""
             SELECT s.*, ev.name AS event_name, ev.show_time, ev.event_date
             FROM employee_shifts s
@@ -1334,7 +1318,6 @@ class EmployeeShiftRepository:
 
     def mark_24h_reminder_sent(self, shift_id: int, when=None):
         """מסמן שנשלחה תזכורת 24 שעות למשמרת"""
-        from .appdb import get_session
         from datetime import datetime, timezone
 
         if when is None:

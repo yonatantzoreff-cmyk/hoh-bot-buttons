@@ -21,6 +21,8 @@ from app.credentials import (
 from app.repositories import (
     ContactRepository,
     ConversationRepository,
+    EmployeeRepository,
+    EmployeeShiftRepository,
     EventRepository,
     MessageRepository,
     OrgRepository,
@@ -72,6 +74,110 @@ class HOHService:
         self.conversations = ConversationRepository()
         self.messages = MessageRepository()
         self.templates = TemplateRepository()
+        self.employees = EmployeeRepository()
+        self.employee_shifts = EmployeeShiftRepository()
+
+    # --- EMPLOYEES ---
+
+    def create_employee(
+        self,
+        org_id: int,
+        name: str,
+        phone: str,
+        role: Optional[str] = None,
+        notes: Optional[str] = None,
+        is_active: bool = True,
+    ) -> dict:
+        """
+        יצירת עובד חדש במערכת.
+        מחזיר את רשומת העובד כ-dict.
+        """
+        employee_id = self.employees.create_employee(
+            org_id=org_id,
+            name=name,
+            phone=phone,
+            role=role,
+            notes=notes,
+            is_active=is_active,
+        )
+        employee = self.employees.get_employee_by_id(
+            org_id=org_id,
+            employee_id=employee_id,
+        )
+        return employee
+
+    def get_or_create_employee_by_phone(
+        self,
+        org_id: int,
+        name: str,
+        phone: str,
+        role: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> dict:
+        """
+        מחפש עובד לפי טלפון.
+        אם לא קיים – יוצר אחד חדש.
+        """
+        existing = self.employees.get_employee_by_phone(
+            org_id=org_id,
+            phone=phone,
+        )
+        if existing:
+            return existing
+
+        return self.create_employee(
+            org_id=org_id,
+            name=name,
+            phone=phone,
+            role=role,
+            notes=notes,
+            is_active=True,
+        )
+
+    # --- EMPLOYEE SHIFTS ---
+
+    def assign_employee_to_event(
+        self,
+        org_id: int,
+        event_id: int,
+        employee_id: int,
+        call_time: datetime,
+        shift_role: Optional[str] = None,
+        notes: Optional[str] = None,
+    ) -> dict:
+        """
+        משייך עובד לאירוע מסוים עם שעת כניסה (call_time) ותפקיד.
+        מחזיר את רשומת המשמרת שנוצרה.
+        """
+        shift_id = self.employee_shifts.create_shift(
+            org_id=org_id,
+            event_id=event_id,
+            employee_id=employee_id,
+            call_time=call_time,
+            shift_role=shift_role,
+            notes=notes,
+        )
+
+        # שולף שוב את המשמרת עם ה-join לעובד
+        shifts = self.employee_shifts.list_shifts_for_event(
+            org_id=org_id,
+            event_id=event_id,
+        )
+        for s in shifts:
+            if s["shift_id"] == shift_id:
+                return s
+
+        # fallback – אם מסיבה כלשהי לא מצאנו
+        return {"shift_id": shift_id}
+
+    def list_event_employees(self, org_id: int, event_id: int):
+        """
+        מחזיר את רשימת המשמרות באירוע כולל פרטי העובדים.
+        """
+        return self.employee_shifts.list_shifts_for_event(
+            org_id=org_id,
+            event_id=event_id,
+        )
 
     # region Event + contact bootstrap -------------------------------------------------
     def create_event_with_producer_conversation(
