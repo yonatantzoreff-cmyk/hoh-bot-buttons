@@ -259,12 +259,20 @@ class EventRepository:
                 e.load_in_time,
                 e.hall_id,
                 h.name AS hall_name,
+                e.notes,
                 e.status,
                 e.producer_contact_id,
+                prod.name AS producer_name,
+                prod.phone AS producer_phone,
                 e.technical_contact_id,
+                tech.phone AS technical_phone,
                 e.created_at
             FROM events e
             LEFT JOIN halls h ON e.hall_id = h.hall_id
+            LEFT JOIN contacts prod
+              ON e.org_id = prod.org_id AND e.producer_contact_id = prod.contact_id
+            LEFT JOIN contacts tech
+              ON e.org_id = tech.org_id AND e.technical_contact_id = tech.contact_id
             WHERE e.org_id = :org_id
             ORDER BY e.created_at ASC, e.event_id ASC
             """

@@ -566,7 +566,13 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             else "N/A"
         )
         delivery_status_class = _status_badge_class(delivery_status)
+        producer_name = row.get("producer_name") or ""
         producer_phone = row.get("producer_phone") or ""
+        producer_display = (
+            f"{producer_name} ({producer_phone})"
+            if producer_name and producer_phone
+            else producer_name or producer_phone
+        )
         technical_phone = row.get("technical_phone") or ""
         init_sent_at = _to_israel_time(row.get("init_sent_at"))
         init_sent_display = (
@@ -580,6 +586,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             if init_sent_display
             else "<div class=\\\"small text-muted mt-1\\\">Not sent yet</div>"
         )
+        notes = row["notes"] or ""
 
         table_rows.append(
             """
@@ -616,7 +623,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 delivery_status=escape(delivery_status_display),
                 delivery_status_class=delivery_status_class,
                 notes=escape(row.get("notes") or ""),
-                producer_phone=escape(producer_phone),
+                producer_phone=escape(producer_display),
                 technical_phone=escape(technical_phone),
                 created_at=escape(created_at_display),
                 event_id=row.get("event_id"),
@@ -631,7 +638,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         </tr>
     """
 
-    table = f"""
+    table_template = """
     <div class=\"card\">
       <div class=\"card-header bg-secondary text-white\">Events</div>
       <div class=\"card-body\">
@@ -720,6 +727,8 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
       });
     </script>
     """
+
+    table = table_template.format(table_body=table_body)
 
     html = _render_page("Events", table)
     return HTMLResponse(content=html)

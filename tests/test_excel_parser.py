@@ -1,7 +1,7 @@
 """Tests for Excel parser."""
 
 import tempfile
-from datetime import date, time
+from datetime import date, datetime, time
 from pathlib import Path
 
 import pytest
@@ -18,6 +18,8 @@ def test_parse_time_string():
     assert _parse_time_string("9.30") == time(9, 30)
     assert _parse_time_string("0930") == time(9, 30)
     assert _parse_time_string("930") == time(9, 30)
+    assert _parse_time_string("20:30:00") == time(20, 30)
+    assert _parse_time_string("31.12.1899 08:05:00") == time(8, 5)
     assert _parse_time_string("") is None
     assert _parse_time_string("invalid") is None
     assert _parse_time_string("25:00") is None  # Invalid hour
@@ -177,6 +179,34 @@ def test_parse_excel_file_time_strings():
         assert events[0]["date"] == date(2025, 12, 25)
         assert events[0]["show_time"] == time(20, 0)
         assert events[0]["load_in"] == time(18, 30)
-        
+
+    finally:
+        Path(tmp_path).unlink(missing_ok=True)
+
+
+def test_parse_excel_file_with_date_and_time_variants():
+    """Ensure parser handles alternate date formats and datetime time values."""
+    wb = Workbook()
+    ws = wb.active
+
+    ws.append(["תאריך", "שעה", "שם המופע", "שעה טכני"])
+    ws.append([
+        "01.06.25",  # Short year with dots
+        "20:30:00",  # Time string with seconds
+        "Event with short date",
+        datetime(1899, 12, 31, 18, 45),  # Excel-style datetime for time
+    ])
+
+    with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=False) as tmp:
+        wb.save(tmp.name)
+        tmp_path = tmp.name
+
+    try:
+        events = parse_excel_file(tmp_path)
+
+        assert len(events) == 1
+        assert events[0]["date"] == date(2025, 6, 1)
+        assert events[0]["show_time"] == time(20, 30)
+        assert events[0]["load_in"] == time(18, 45)
     finally:
         Path(tmp_path).unlink(missing_ok=True)

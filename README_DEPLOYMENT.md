@@ -12,6 +12,17 @@ In **Render Dashboard**:
    ```
 4. Click "Save Changes"
 
+### Step 1.5: Run the calendar import migration (one-time)
+In Render shell or via `psql` locally, apply the calendar import schema:
+
+```
+psql $DATABASE_URL < db/migrations/002_calendar_import.sql
+```
+
+If the table is missing at runtime the app now fails fast with a clear error
+message that includes the DB host/name, but running the command above ensures
+deployments start cleanly.
+
 ### Step 2: Deploy
 The code is already pushed to GitHub. Render will auto-deploy.
 
