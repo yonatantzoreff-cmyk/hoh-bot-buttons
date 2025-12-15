@@ -1076,28 +1076,32 @@ async def calendar_import_page() -> HTMLResponse:
       }
       
       tbody.innerHTML = events.map(event => {
-        const rowClass = event.is_valid ? 'table-success' : 
+        const rowClass = event.is_valid ? 'table-success' :
                         (event.warnings.length > 0 ? 'table-warning' : 'table-danger');
-        const statusBadge = event.is_valid ? 
-          '<span class="badge bg-success">Valid</span>' : 
+        const statusBadge = event.is_valid ?
+          '<span class="badge bg-success">Valid</span>' :
           '<span class="badge bg-danger">Invalid</span>';
-        
-        const errorsHtml = event.errors.length > 0 ? 
+
+        const errorsHtml = event.errors.length > 0 ?
           '<div class="small text-danger">' + event.errors.join('; ') + '</div>' : '';
-        const warningsHtml = event.warnings.length > 0 ? 
+        const warningsHtml = event.warnings.length > 0 ?
           '<div class="small text-warning">' + event.warnings.join('; ') + '</div>' : '';
-        
+
+        const dateValue = event.date || '';
+        const showTimeValue = toTimeValue(event.show_time);
+        const loadInValue = toTimeValue(event.load_in);
+
         return `
           <tr class="${rowClass}">
             <td>${event.row_index}</td>
-            <td>${event.date || '-'}</td>
-            <td>${event.show_time || '-'}</td>
-            <td>${escape(event.name || '-')}</td>
-            <td>${event.load_in || '-'}</td>
-            <td>${escape(event.event_series || '-')}</td>
-            <td>${escape(event.producer_name || '-')}</td>
-            <td>${escape(event.producer_phone || '-')}</td>
-            <td>${escape(event.notes || '-')}</td>
+            <td><input type="date" class="form-control form-control-sm" value="${escapeAttr(dateValue)}" onchange="updateField(${event.id}, 'date', this.value)"></td>
+            <td><input type="time" class="form-control form-control-sm" value="${escapeAttr(showTimeValue)}" onchange="updateField(${event.id}, 'show_time', this.value)"></td>
+            <td><input type="text" class="form-control form-control-sm" value="${escapeAttr(event.name || '')}" placeholder="Event name" onchange="updateField(${event.id}, 'name', this.value)"></td>
+            <td><input type="time" class="form-control form-control-sm" value="${escapeAttr(loadInValue)}" onchange="updateField(${event.id}, 'load_in', this.value)"></td>
+            <td><input type="text" class="form-control form-control-sm" value="${escapeAttr(event.event_series || '')}" placeholder="Series" onchange="updateField(${event.id}, 'event_series', this.value)"></td>
+            <td><input type="text" class="form-control form-control-sm" value="${escapeAttr(event.producer_name || '')}" placeholder="Producer" onchange="updateField(${event.id}, 'producer_name', this.value)"></td>
+            <td><input type="text" class="form-control form-control-sm" value="${escapeAttr(event.producer_phone || '')}" placeholder="Phone" onchange="updateField(${event.id}, 'producer_phone', this.value)"></td>
+            <td><input type="text" class="form-control form-control-sm" value="${escapeAttr(event.notes || '')}" placeholder="Notes" onchange="updateField(${event.id}, 'notes', this.value)"></td>
             <td>${statusBadge}${errorsHtml}${warningsHtml}</td>
             <td>
               <button class="btn btn-sm btn-outline-danger" onclick="deleteRow(${event.id})">Delete</button>
@@ -1111,6 +1115,16 @@ async def calendar_import_page() -> HTMLResponse:
       const div = document.createElement('div');
       div.textContent = str;
       return div.innerHTML;
+    }
+
+    function escapeAttr(str) {
+      if (str === undefined || str === null) return '';
+      return String(str).replace(/"/g, '&quot;');
+    }
+
+    function toTimeValue(timeValue) {
+      if (!timeValue) return '';
+      return String(timeValue).substring(0, 5);
     }
 
     function updateSummary(events) {
@@ -1141,6 +1155,32 @@ async def calendar_import_page() -> HTMLResponse:
         }
       } catch (error) {
         alert('Failed to delete event: ' + error.message);
+      }
+    }
+
+    async function updateField(stagingId, field, rawValue) {
+      const payload = {};
+      const value = rawValue === '' ? null : rawValue;
+      payload[field] = value;
+
+      try {
+        const response = await fetch(`/import/staging/${stagingId}?org_id=1`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        });
+
+        const result = await response.json();
+
+        if (response.ok) {
+          currentStagingData = currentStagingData.map(event => event.id === stagingId ? result : event);
+          renderStagingTable(currentStagingData);
+          updateSummary(currentStagingData);
+        } else {
+          alert('Update failed: ' + (result.detail || 'Unknown error'));
+        }
+      } catch (error) {
+        alert('Update failed: ' + error.message);
       }
     }
 
