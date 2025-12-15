@@ -337,7 +337,7 @@ class HOHService:
                 return value.strftime("%H:%M")
 
             if isinstance(value, datetime):
-                return value.astimezone(LOCAL_TZ).strftime("%H:%M")
+                return value.strftime("%H:%M")
 
             return ""
 
@@ -349,15 +349,24 @@ class HOHService:
         call_time = shift.get("call_time")
         call_time_display = _format_time(call_time)
 
+        employee_name = shift.get("employee_name") or ""
+        first_name = employee_name.split()[0] if employee_name else ""
+
+        support_phone = (
+            event.get("technical_phone")
+            or event.get("producer_phone")
+            or ""
+        )
+
         variables = {
-            "1": shift.get("employee_name") or "",
+            "1": first_name,
             "2": event.get("name") or "",
             "3": event_date_display,
             "4": show_time_display,
             "5": call_time_display,
             "6": shift.get("shift_role") or "",
             "7": shift.get("notes") or "",
-            "8": shift.get("employee_phone") or "",
+            "8": support_phone,
         }
 
         return variables
