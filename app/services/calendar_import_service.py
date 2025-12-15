@@ -203,13 +203,19 @@ class CalendarImportService:
 
         # Parse JSON fields
         for event in events:
-            if event.get("errors_json"):
-                event["errors"] = json.loads(event["errors_json"])
+            errors_json = event.get("errors_json")
+            if isinstance(errors_json, (str, bytes)):
+                event["errors"] = json.loads(errors_json)
+            elif isinstance(errors_json, (list, dict)):
+                event["errors"] = errors_json
             else:
                 event["errors"] = []
 
-            if event.get("warnings_json"):
-                event["warnings"] = json.loads(event["warnings_json"])
+            warnings_json = event.get("warnings_json")
+            if isinstance(warnings_json, (str, bytes)):
+                event["warnings"] = json.loads(warnings_json)
+            elif isinstance(warnings_json, (list, dict)):
+                event["warnings"] = warnings_json
             else:
                 event["warnings"] = []
 
