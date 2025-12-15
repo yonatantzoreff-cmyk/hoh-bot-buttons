@@ -668,51 +668,63 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
       </div>
     </div>
     <script>
-      document.addEventListener("DOMContentLoaded", function () {{
+      document.addEventListener("DOMContentLoaded", function () {
         const tableElement = document.getElementById("events-table");
-        if (!tableElement || !window.jQuery) {{
+        const hasJQuery = typeof window.jQuery !== "undefined";
+        const hasDataTables =
+          hasJQuery && typeof window.jQuery.fn.DataTable === "function";
+
+        if (!tableElement || !hasDataTables) {
+          console.warn("Events table could not initialize DataTables.");
           return;
-        }}
+        }
 
         const $table = window.jQuery(tableElement);
         const currentHeaders = Array.from(
           tableElement.querySelectorAll("thead th")
         ).map((th) => th.textContent.trim());
-        const stateKey = `DataTables_${{tableElement.id}}_${{window.location.pathname}}`;
+        const stateKey = `DataTables_${tableElement.id}_${window.location.pathname}`;
 
-        $table.DataTable({{
+        $table.DataTable({
           stateSave: true,
           stateDuration: -1,
           colReorder: true,
           order: [],
-          stateSaveParams: function (_settings, data) {{
+          stateSaveParams: function (_settings, data) {
             data.columnHeaders = currentHeaders;
-          }},
-          stateLoadCallback: function (_settings) {{
+          },
+          stateSaveCallback: function (_settings, data) {
+            try {
+              localStorage.setItem(stateKey, JSON.stringify(data));
+            } catch (error) {
+              console.warn("Failed to save table state", error);
+            }
+          },
+          stateLoadCallback: function (_settings) {
             const savedState = localStorage.getItem(stateKey);
-            if (!savedState) {{
+            if (!savedState) {
               return null;
-            }}
+            }
 
-            try {{
+            try {
               const parsedState = JSON.parse(savedState);
               if (
                 Array.isArray(parsedState.columnHeaders) &&
                 parsedState.columnHeaders.join("|||") !==
                   currentHeaders.join("|||")
-              ) {{
+              ) {
                 localStorage.removeItem(stateKey);
                 return null;
-              }}
+              }
 
               return parsedState;
-            }} catch (error) {{
+            } catch (error) {
               console.warn("Failed to load saved table state", error);
               return null;
-            }}
-          }},
-        }});
-      }});
+            }
+          },
+        });
+      });
     </script>
     """
 
