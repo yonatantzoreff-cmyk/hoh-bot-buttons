@@ -504,6 +504,31 @@ class ContactRepository:
         with get_session() as session:
             session.execute(query, params)
 
+    def get_contact_by_phone(self, org_id: int, phone: str):
+        """Return a contact mapping by phone (normalized or raw)."""
+
+        normalized_phone = normalize_phone_to_e164_il(phone)
+
+        base_query = text(
+            """
+            SELECT *
+            FROM contacts
+            WHERE org_id = :org_id AND phone = :phone
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(
+                base_query, {"org_id": org_id, "phone": normalized_phone}
+            ).mappings().first()
+
+            if result or phone == normalized_phone:
+                return result
+
+            return session.execute(
+                base_query, {"org_id": org_id, "phone": phone}
+            ).mappings().first()
+
 
 class ConversationRepository:
     """אחראי על טבלת conversations"""

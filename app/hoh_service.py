@@ -415,41 +415,21 @@ class HOHService:
         show_time = self._combine_time(event_date, show_time_str)
         load_in_time = self._combine_time(event_date, load_in_time_str)
 
-        producer_contact_id = event.get("producer_contact_id")
-        if producer_phone or producer_name:
-            if producer_contact_id:
-                self.contacts.update_contact(
-                    org_id=org_id,
-                    contact_id=producer_contact_id,
-                    name=producer_name if producer_name else None,
-                    phone=producer_phone if producer_phone else None,
-                    role="producer",
-                )
-            elif producer_phone:
-                producer_contact_id = self.contacts.get_or_create_by_phone(
-                    org_id=org_id,
-                    phone=producer_phone,
-                    name=producer_name or producer_phone,
-                    role="producer",
-                )
+        producer_contact_id = self._ensure_event_contact(
+            org_id=org_id,
+            existing_contact_id=event.get("producer_contact_id"),
+            name=producer_name,
+            phone=producer_phone,
+            role="producer",
+        )
 
-        technical_contact_id = event.get("technical_contact_id")
-        if technical_phone or technical_name:
-            if technical_contact_id:
-                self.contacts.update_contact(
-                    org_id=org_id,
-                    contact_id=technical_contact_id,
-                    name=technical_name if technical_name else None,
-                    phone=technical_phone if technical_phone else None,
-                    role="technical",
-                )
-            elif technical_phone:
-                technical_contact_id = self.contacts.get_or_create_by_phone(
-                    org_id=org_id,
-                    phone=technical_phone,
-                    name=technical_name or technical_phone,
-                    role="technical",
-                )
+        technical_contact_id = self._ensure_event_contact(
+            org_id=org_id,
+            existing_contact_id=event.get("technical_contact_id"),
+            name=technical_name,
+            phone=technical_phone,
+            role="technical",
+        )
 
         self.events.update_event(
             org_id=org_id,
@@ -470,6 +450,57 @@ class HOHService:
 
         time_part = datetime.strptime(time_str, "%H:%M").time()
         return datetime.combine(event_date, time_part)
+
+    def _ensure_event_contact(
+        self,
+        *,
+        org_id: int,
+        existing_contact_id: Optional[int],
+        name: Optional[str],
+        phone: Optional[str],
+        role: str,
+    ) -> Optional[int]:
+        """Resolve and update a contact for an event without breaking phone uniqueness."""
+
+        contact_id = existing_contact_id
+
+        if phone:
+            existing_by_phone = self.contacts.get_contact_by_phone(
+                org_id=org_id, phone=phone
+            )
+
+            if existing_by_phone:
+                contact_id = existing_by_phone.get("contact_id")
+                self.contacts.update_contact(
+                    org_id=org_id,
+                    contact_id=contact_id,
+                    name=name if name else None,
+                    role=role,
+                )
+            elif contact_id:
+                self.contacts.update_contact(
+                    org_id=org_id,
+                    contact_id=contact_id,
+                    name=name if name else None,
+                    phone=phone,
+                    role=role,
+                )
+            else:
+                contact_id = self.contacts.get_or_create_by_phone(
+                    org_id=org_id,
+                    phone=phone,
+                    name=name or phone,
+                    role=role,
+                )
+        elif name and contact_id:
+            self.contacts.update_contact(
+                org_id=org_id,
+                contact_id=contact_id,
+                name=name,
+                role=role,
+            )
+
+        return contact_id
 
     def delete_event(self, org_id: int, event_id: int) -> None:
         self.conversations.clear_last_message_for_event(org_id=org_id, event_id=event_id)
