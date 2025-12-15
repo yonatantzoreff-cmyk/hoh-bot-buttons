@@ -1232,6 +1232,54 @@ class EmployeeRepository:
             )
             session.commit()
 
+    def update_employee(
+        self,
+        org_id: int,
+        employee_id: int,
+        *,
+        name: Optional[str] = None,
+        phone: Optional[str] = None,
+        role: Optional[str] = None,
+        notes: Optional[str] = None,
+    ):
+        """עדכון פרטי עובד"""
+        sets = []
+        params = {"org_id": org_id, "employee_id": employee_id}
+
+        if name is not None:
+            sets.append("name = :name")
+            params["name"] = name
+
+        if phone is not None:
+            sets.append("phone = :phone")
+            params["phone"] = phone
+
+        if role is not None:
+            sets.append("role = :role")
+            params["role"] = role
+
+        if notes is not None:
+            sets.append("notes = :notes")
+            params["notes"] = notes
+
+        if not sets:
+            return
+
+        q = text(f"""
+            UPDATE employees
+            SET {', '.join(sets)}
+            WHERE org_id = :org_id
+              AND employee_id = :employee_id
+        """)
+
+        with get_session() as session:
+            session.execute(q, params)
+            session.commit()
+
+    def soft_delete_employee(self, org_id: int, employee_id: int):
+        """מחיקה רכה של עובד (is_active=false)"""
+        self.set_active(org_id=org_id, employee_id=employee_id, is_active=False)
+
 
 class EmployeeShiftRepository:
     """אחראי על טבלת employee_shifts (שיוך משמרות לאירועים ולעובדים)"""
@@ -1346,6 +1394,84 @@ class EmployeeShiftRepository:
                     "when": when,
                 },
             )
+            session.commit()
+
+    def get_shift_by_id(self, org_id: int, shift_id: int):
+        """מחזיר משמרת לפי shift_id"""
+        q = text("""
+            SELECT s.*, e.name AS employee_name, e.phone AS employee_phone
+            FROM employee_shifts s
+            JOIN employees e
+              ON e.employee_id = s.employee_id
+             AND e.org_id = s.org_id
+            WHERE s.org_id = :org_id
+              AND s.shift_id = :shift_id
+        """)
+
+        with get_session() as session:
+            res = session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "shift_id": shift_id,
+                },
+            )
+            row = res.mappings().first()
+            return dict(row) if row else None
+
+    def update_shift(
+        self,
+        org_id: int,
+        shift_id: int,
+        *,
+        call_time=None,
+        shift_role: Optional[str] = None,
+        notes: Optional[str] = None,
+    ):
+        """עדכון משמרת קיימת"""
+        sets = ["updated_at = :now"]
+        params = {
+            "org_id": org_id,
+            "shift_id": shift_id,
+            "now": datetime.utcnow(),
+        }
+
+        if call_time is not None:
+            sets.append("call_time = :call_time")
+            params["call_time"] = call_time
+
+        if shift_role is not None:
+            sets.append("shift_role = :shift_role")
+            params["shift_role"] = shift_role
+
+        if notes is not None:
+            sets.append("notes = :notes")
+            params["notes"] = notes
+
+        if len(sets) == 1:  # רק updated_at
+            return
+
+        q = text(f"""
+            UPDATE employee_shifts
+            SET {', '.join(sets)}
+            WHERE org_id = :org_id
+              AND shift_id = :shift_id
+        """)
+
+        with get_session() as session:
+            session.execute(q, params)
+            session.commit()
+
+    def delete_shift(self, org_id: int, shift_id: int):
+        """מחיקה מוחלטת של משמרת"""
+        q = text("""
+            DELETE FROM employee_shifts
+            WHERE org_id = :org_id
+              AND shift_id = :shift_id
+        """)
+
+        with get_session() as session:
+            session.execute(q, {"org_id": org_id, "shift_id": shift_id})
             session.commit()
 
 

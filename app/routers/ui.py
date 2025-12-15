@@ -59,6 +59,7 @@ def _render_page(title: str, body: str) -> str:
               <a class=\"btn btn-outline-light btn-sm me-2\" href=\"/ui\">Add Event</a>
               <a class=\"btn btn-outline-light btn-sm\" href=\"/ui/events\">View Events</a>
               <a class=\"btn btn-outline-light btn-sm ms-2\" href=\"/ui/contacts\">Contacts</a>
+              <a class=\"btn btn-outline-light btn-sm ms-2\" href=\"/ui/employees\">Employees</a>
               <a class=\"btn btn-light btn-sm ms-2\" href=\"/ui/messages\">Messages</a>
               <a class=\"btn btn-outline-success btn-sm ms-2\" href=\"/ui/calendar-import\">Import Calendar</a>
             </div>
@@ -1261,3 +1262,228 @@ async def calendar_import_page() -> HTMLResponse:
     
     html = _render_page("Import Calendar", page_html)
     return HTMLResponse(content=html)
+
+
+# ==========================================
+# EMPLOYEE MANAGEMENT
+# ==========================================
+
+@router.get("/ui/employees", response_class=HTMLResponse)
+async def list_employees(
+    show_inactive: bool = False,
+    hoh: HOHService = Depends(get_hoh_service)
+) -> HTMLResponse:
+    """Employee management page - list all employees with CRUD operations."""
+    employees = hoh.list_employees(org_id=1, active_only=not show_inactive)
+    
+    # Build add form
+    add_form = """
+    <div class="card mb-4 shadow-sm">
+      <div class="card-header bg-primary text-white">הוסף עובד חדש / Add Employee</div>
+      <div class="card-body">
+        <form method="post" action="/ui/employees">
+          <div class="row">
+            <div class="col-md-3 mb-3">
+              <label class="form-label" for="name">שם / Name</label>
+              <input class="form-control" id="name" name="name" type="text" required>
+            </div>
+            <div class="col-md-3 mb-3">
+              <label class="form-label" for="phone">טלפון / Phone</label>
+              <input class="form-control" id="phone" name="phone" type="text" required>
+            </div>
+            <div class="col-md-3 mb-3">
+              <label class="form-label" for="role">תפקיד / Role</label>
+              <input class="form-control" id="role" name="role" type="text">
+            </div>
+            <div class="col-md-3 mb-3">
+              <label class="form-label" for="notes">הערות / Notes</label>
+              <input class="form-control" id="notes" name="notes" type="text">
+            </div>
+          </div>
+          <div class="d-flex justify-content-end">
+            <button class="btn btn-primary" type="submit">הוסף / Add Employee</button>
+          </div>
+        </form>
+      </div>
+    </div>
+    """
+    
+    # Build filter toggle
+    filter_toggle = f"""
+    <div class="mb-3">
+      <a class="btn btn-sm btn-outline-secondary" href="/ui/employees?show_inactive={'false' if show_inactive else 'true'}">
+        {'הסתר לא פעילים / Hide Inactive' if show_inactive else 'הצג לא פעילים / Show Inactive'}
+      </a>
+    </div>
+    """
+    
+    # Build table rows
+    table_rows = []
+    for emp in employees:
+        employee_id = emp.get("employee_id")
+        name = escape(emp.get("name") or "")
+        phone = escape(emp.get("phone") or "")
+        role = escape(emp.get("role") or "")
+        notes = escape(emp.get("notes") or "")
+        is_active = emp.get("is_active", True)
+        
+        active_badge = (
+            '<span class="badge bg-success">פעיל / Active</span>' if is_active
+            else '<span class="badge bg-secondary">לא פעיל / Inactive</span>'
+        )
+        
+        table_rows.append(f"""
+            <tr>
+              <td>{name}</td>
+              <td>{phone}</td>
+              <td>{role}</td>
+              <td class="text-break">{notes}</td>
+              <td>{active_badge}</td>
+              <td class="text-nowrap">
+                <a class="btn btn-sm btn-outline-secondary" href="/ui/employees/{employee_id}/edit">ערוך / Edit</a>
+                <form method="post" action="/ui/employees/{employee_id}/delete" class="d-inline ms-1" 
+                      onsubmit="return confirm('האם למחוק עובד זה?');">
+                  <button class="btn btn-sm btn-outline-danger" type="submit">מחק / Delete</button>
+                </form>
+              </td>
+            </tr>
+        """)
+    
+    table_body = "".join(table_rows) or """
+        <tr>
+          <td colspan="6" class="text-center text-muted">אין עובדים / No employees yet.</td>
+        </tr>
+    """
+    
+    table = f"""
+    <div class="card shadow-sm">
+      <div class="card-header bg-secondary text-white">עובדים / Employees</div>
+      <div class="card-body">
+        {filter_toggle}
+        <div class="table-responsive">
+          <table class="table table-striped align-middle mb-0">
+            <thead>
+              <tr>
+                <th scope="col">שם / Name</th>
+                <th scope="col">טלפון / Phone</th>
+                <th scope="col">תפקיד / Role</th>
+                <th scope="col">הערות / Notes</th>
+                <th scope="col">סטטוס / Status</th>
+                <th scope="col">פעולות / Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {table_body}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    """
+    
+    html = _render_page("Employee Management", add_form + table)
+    return HTMLResponse(content=html)
+
+
+@router.post("/ui/employees")
+async def create_employee(
+    name: str = Form(...),
+    phone: str = Form(...),
+    role: str | None = Form(None),
+    notes: str | None = Form(None),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """Create a new employee."""
+    hoh.create_employee(
+        org_id=1,
+        name=name.strip(),
+        phone=phone.strip(),
+        role=role.strip() if role else None,
+        notes=notes.strip() if notes else None,
+        is_active=True,
+    )
+    return RedirectResponse(url="/ui/employees", status_code=303)
+
+
+@router.get("/ui/employees/{employee_id}/edit", response_class=HTMLResponse)
+async def edit_employee_form(
+    employee_id: int,
+    hoh: HOHService = Depends(get_hoh_service)
+) -> HTMLResponse:
+    """Show edit form for an employee."""
+    employee = hoh.get_employee(org_id=1, employee_id=employee_id)
+    if not employee:
+        raise HTTPException(status_code=404, detail="Employee not found")
+    
+    name = escape(employee.get("name") or "")
+    phone = escape(employee.get("phone") or "")
+    role = escape(employee.get("role") or "")
+    notes = escape(employee.get("notes") or "")
+    
+    form = f"""
+    <div class="row justify-content-center">
+      <div class="col-lg-6">
+        <div class="card shadow-sm">
+          <div class="card-header bg-primary text-white">ערוך עובד / Edit Employee</div>
+          <div class="card-body">
+            <form method="post" action="/ui/employees/{employee_id}/edit">
+              <div class="mb-3">
+                <label class="form-label" for="name">שם / Name</label>
+                <input class="form-control" id="name" name="name" type="text" value="{name}" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="phone">טלפון / Phone</label>
+                <input class="form-control" id="phone" name="phone" type="text" value="{phone}" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="role">תפקיד / Role</label>
+                <input class="form-control" id="role" name="role" type="text" value="{role}">
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="notes">הערות / Notes</label>
+                <textarea class="form-control" id="notes" name="notes" rows="3">{notes}</textarea>
+              </div>
+              <div class="d-flex justify-content-end">
+                <a class="btn btn-outline-secondary me-2" href="/ui/employees">ביטול / Cancel</a>
+                <button class="btn btn-primary" type="submit">שמור / Save</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </div>
+    </div>
+    """
+    
+    html = _render_page("Edit Employee", form)
+    return HTMLResponse(content=html)
+
+
+@router.post("/ui/employees/{employee_id}/edit")
+async def update_employee(
+    employee_id: int,
+    name: str = Form(...),
+    phone: str = Form(...),
+    role: str | None = Form(None),
+    notes: str | None = Form(None),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """Update an employee."""
+    hoh.update_employee(
+        org_id=1,
+        employee_id=employee_id,
+        name=name.strip(),
+        phone=phone.strip(),
+        role=role.strip() if role else None,
+        notes=notes.strip() if notes else None,
+    )
+    return RedirectResponse(url="/ui/employees", status_code=303)
+
+
+@router.post("/ui/employees/{employee_id}/delete")
+async def delete_employee(
+    employee_id: int,
+    hoh: HOHService = Depends(get_hoh_service)
+):
+    """Soft delete an employee (set is_active=false)."""
+    hoh.soft_delete_employee(org_id=1, employee_id=employee_id)
+    return RedirectResponse(url="/ui/employees", status_code=303)
