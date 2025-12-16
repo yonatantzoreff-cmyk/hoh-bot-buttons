@@ -34,12 +34,20 @@ from app.repositories import (
 )
 from app.utils.actions import ParsedAction, parse_action_id
 from app.utils.phone import normalize_phone_to_e164_il
+from app.time_utils import (
+    get_il_tz,
+    parse_local_time_to_utc,
+    utc_to_local_datetime,
+    utc_to_local_time_str,
+    ensure_aware,
+    now_utc,
+    format_datetime_for_display,
+)
 
 logger = logging.getLogger(__name__)
 
-# TODO: tie this to the org's timezone once multi-org support is implemented.
-LOCAL_TZ = timezone(timedelta(hours=2))
-ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
+# Use centralized timezone utility
+ISRAEL_TZ = get_il_tz()
 
 RANGE_BOUNDS: Dict[int, tuple[int, int]] = {
     1: (0, 4),
@@ -447,14 +455,13 @@ class HOHService:
 
     @staticmethod
     def _format_time_israel(value: Any) -> str:
+        """Format time value as HH:MM string in Israel timezone."""
         if isinstance(value, time):
             return value.strftime("%H:%M")
 
         if isinstance(value, datetime):
-            value_with_tz = value
-            if value.tzinfo is None:
-                value_with_tz = value.replace(tzinfo=ISRAEL_TZ)
-            return value_with_tz.astimezone(ISRAEL_TZ).strftime("%H:%M")
+            # Use centralized utility to convert UTC to local time string
+            return utc_to_local_time_str(value)
 
         return ""
 
@@ -677,13 +684,17 @@ class HOHService:
 
     @staticmethod
     def _combine_time(event_date: date, time_str: Optional[str]):
+        """
+        Combine date and time string (HH:MM) to create UTC datetime.
+        
+        Input time is treated as Israel local time and converted to UTC.
+        This ensures correct storage in TIMESTAMPTZ columns and handles DST automatically.
+        """
         if not time_str:
             return None
 
-        time_part = datetime.strptime(time_str, "%H:%M").time()
-        # Treat input times as occurring in Israel to avoid accidental UTC offsets
-        # when persisting to TIMESTAMPTZ columns.
-        return datetime.combine(event_date, time_part, tzinfo=ISRAEL_TZ)
+        # Use centralized utility to parse local Israel time to UTC
+        return parse_local_time_to_utc(event_date, time_str)
 
     def _ensure_event_contact(
         self,
@@ -988,7 +999,7 @@ class HOHService:
         )
 
     async def run_due_followups(self, org_id: int = 1) -> int:
-        now = datetime.now(timezone.utc)
+        now = now_utc()
         due_followups = self.messages.find_due_followups(org_id=org_id, now=now)
         processed = 0
 
@@ -1159,7 +1170,7 @@ class HOHService:
 
         conversation_id = conversation.get("conversation_id")
 
-        received_at = datetime.now(timezone.utc)
+        received_at = now_utc()
         body_text = message_body or interactive_value
         self.messages.log_message(
             org_id=org_id,
@@ -1541,7 +1552,7 @@ class HOHService:
         conversation_id: int,
         org_id: int,
     ) -> None:
-        followup_at = datetime.now(timezone.utc) + timedelta(hours=72)
+        followup_at = now_utc() + timedelta(hours=72)
         conversation = self.conversations.get_open_conversation(
             org_id=org_id, event_id=event_id, contact_id=contact_id
         )
@@ -1651,7 +1662,8 @@ class HOHService:
         event_date: Optional[date] = event.get("event_date") if event else None
         if event_date:
             hour, minute = map(int, slot_label.split(":"))
-            load_in_dt = datetime.combine(event_date, time(hour=hour, minute=minute))
+            # Parse local Israel time to UTC for storage
+            load_in_dt = parse_local_time_to_utc(event_date, f"{hour:02d}:{minute:02d}")
             self.events.update_event_fields(
                 org_id=org_id, event_id=event_id, load_in_time=load_in_dt, status="confirmed"
             )

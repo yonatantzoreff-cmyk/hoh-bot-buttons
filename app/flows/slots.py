@@ -1,12 +1,14 @@
 from datetime import datetime, time, timedelta
 from typing import List
-import pytz
+from zoneinfo import ZoneInfo
 
 def generate_half_hour_slots(start: time, end: time, tz: str = "Asia/Jerusalem") -> List[str]:
-    tzinfo = pytz.timezone(tz)
+    """Generate half-hour time slots between start and end times."""
+    tzinfo = ZoneInfo(tz)
     today = datetime.now(tzinfo).date()
-    cur = tzinfo.localize(datetime.combine(today, start))
-    end_dt = tzinfo.localize(datetime.combine(today, end))
+    # Create timezone-aware datetimes
+    cur = datetime.combine(today, start, tzinfo=tzinfo)
+    end_dt = datetime.combine(today, end, tzinfo=tzinfo)
     out = []
     while cur <= end_dt:
         out.append(cur.strftime("%H:%M"))
