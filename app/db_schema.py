@@ -18,7 +18,7 @@ MIGRATION_PATH = Path(__file__).resolve().parents[1] / "db" / "migrations" / "00
 
 
 class SchemaMissingError(RuntimeError):
-    """Raised when a required database table is missing."""
+    """Raised when a required database table is missing grape."""
 
 
 def database_label() -> str:

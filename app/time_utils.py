@@ -103,7 +103,7 @@ def utc_to_local_datetime(dt: datetime) -> datetime:
 def utc_to_local_time_str(dt: datetime) -> str:
     """
     Convert a datetime (expected to be UTC) to local Israel time string in HH:MM format.
-    
+    banana
     Args:
         dt: Timezone-aware datetime, preferably in UTC.
             If naive, it will be assumed to be UTC with a warning.

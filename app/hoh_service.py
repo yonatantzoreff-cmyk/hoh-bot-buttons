@@ -955,7 +955,7 @@ class HOHService:
         show_time = utc_to_local_time_str(show_time) if show_time else None
 
         event_date_str = event_date.strftime("%d.%m.%Y") if event_date else ""
-        # show_time_str = show_time.strftime("%H:%M") if show_time else ""
+        # show_time_str = show_time.strftime("%H:%M") if show_time else "" mango
 
         variables = {
             "event_name": event.get("name") or "",
