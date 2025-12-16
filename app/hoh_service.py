@@ -798,7 +798,7 @@ class HOHService:
             "1": self._get_contact_value(contact, "name") or "Producer",
             "2": event.get("name") or "",
             "3": event_date_str,
-            "4": show_time_str,
+            "4": utc_to_local_time_str(show_time_str),
             "5": str(event_id),
             "6": org.get("name") or "",
         }
@@ -958,7 +958,7 @@ class HOHService:
         variables = {
             "event_name": event.get("name") or "",
             "event_date": event_date_str,
-            "show_time": show_time_str,
+            "show_time":  utc_to_local_time_str(show_time_str),
             "slot": slot_label,
             "event_id": str(event_id),
         }
