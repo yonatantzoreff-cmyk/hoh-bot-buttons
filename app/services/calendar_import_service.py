@@ -18,6 +18,7 @@ from app.repositories import (
     StagingEventRepository,
 )
 from app.utils.excel_parser import parse_excel_file
+from app.time_utils import parse_local_time_to_utc, now_utc
 
 logger = logging.getLogger(__name__)
 
@@ -416,11 +417,15 @@ class CalendarImportService:
 
         show_time_tz = None
         if show_time:
-            show_time_tz = datetime.combine(event_date, show_time)
+            # Convert local Israel time to UTC
+            show_time_str = show_time.strftime("%H:%M")
+            show_time_tz = parse_local_time_to_utc(event_date, show_time_str)
 
         load_in_tz = None
         if load_in:
-            load_in_tz = datetime.combine(event_date, load_in)
+            # Convert local Israel time to UTC
+            load_in_str = load_in.strftime("%H:%M")
+            load_in_tz = parse_local_time_to_utc(event_date, load_in_str)
 
         # Get default hall for the org
         hall_query = text("""
@@ -458,7 +463,7 @@ class CalendarImportService:
             """
         )
 
-        now = datetime.utcnow()
+        now = now_utc()
 
         session.execute(
             query,

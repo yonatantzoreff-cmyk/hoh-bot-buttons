@@ -1,6 +1,6 @@
 """Minimal Bootstrap-based UI for managing events via Postgres."""
 import logging
-from datetime import timezone
+from datetime import datetime, timezone
 from html import escape
 from zoneinfo import ZoneInfo
 
@@ -13,33 +13,42 @@ from app.credentials import CONTENT_SID_SHIFT_REMINDER
 from app.dependencies import get_hoh_service
 from app.hoh_service import HOHService
 from app.utils.phone import normalize_phone_to_e164_il
+from app.time_utils import (
+    get_il_tz,
+    utc_to_local_datetime,
+    utc_to_local_time_str,
+    format_datetime_for_display,
+    parse_datetime_local_input,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 templates = Jinja2Templates(directory="templates")
 
-ISRAEL_TZ = ZoneInfo("Asia/Jerusalem")
+ISRAEL_TZ = get_il_tz()
 
 
-def _strip_timezone(dt):
-    """Drop timezone info while keeping the clock time as-is."""
-
+def _datetime_to_time_str(dt):
+    """
+    Convert a datetime from DB (UTC) to local time string for display.
+    
+    This replaces the old _strip_timezone which was causing the bug
+    where times would shift by 2 hours on edit.
+    """
     if not dt:
         return None
-
-    return dt.replace(tzinfo=None)
+    
+    # Convert UTC datetime to Israel local time string (HH:MM)
+    return utc_to_local_time_str(dt)
 
 
 def _to_israel_time(dt):
     """Convert a timestamp (assumed UTC if naive) to Israel time."""
-
     if not dt:
         return None
-
-    if dt.tzinfo is None:
-        dt = dt.replace(tzinfo=timezone.utc)
-
-    return dt.astimezone(ISRAEL_TZ)
+    
+    # Use centralized utility
+    return utc_to_local_datetime(dt)
 
 
 def _render_page(title: str, body: str) -> str:
@@ -123,12 +132,14 @@ async def list_messages(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespo
 
         if not event_group:
             event_date = message.get("event_date")
-            show_time = _strip_timezone(message.get("show_time"))
+            show_time_dt = message.get("show_time")
+            # Convert UTC datetime to local time string for display
+            show_time_str = utc_to_local_time_str(show_time_dt)
             event_group = {
                 "event_id": event_id,
                 "event_name": message.get("event_name") or "Unassigned",
                 "event_date_display": event_date.strftime("%Y-%m-%d") if event_date else "",
-                "show_time_display": show_time.strftime("%H:%M") if show_time else "",
+                "show_time_display": show_time_str,
                 "messages": [],
             }
             event_lookup[event_key] = event_group
@@ -552,15 +563,16 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
     table_rows = []
     for idx, row in enumerate(events):
         event_date = row.get("event_date")
-        show_time = _strip_timezone(row.get("show_time"))
-        load_in_time = _strip_timezone(row.get("load_in_time"))
+        # Convert UTC datetimes to local Israel time strings
+        show_time_dt = row.get("show_time")
+        load_in_time_dt = row.get("load_in_time")
         created_at = _to_israel_time(row.get("created_at"))
         hall_label = row.get("hall_name") or (
             f"Hall #{row['hall_id']}" if row.get("hall_id") is not None else ""
         )
         date_display = event_date.strftime("%Y-%m-%d") if event_date else ""
-        time_display = show_time.strftime("%H:%M") if show_time else ""
-        load_in_display = load_in_time.strftime("%H:%M") if load_in_time else ""
+        time_display = utc_to_local_time_str(show_time_dt)
+        load_in_display = utc_to_local_time_str(load_in_time_dt)
         created_at_display = (
             created_at.strftime("%Y-%m-%d %H:%M") if created_at else ""
         )
@@ -947,12 +959,14 @@ async def edit_event_form(
         raise HTTPException(status_code=404, detail="Event not found")
 
     event_date = event.get("event_date")
-    show_time = event.get("show_time")
-    load_in_time = event.get("load_in_time")
+    show_time_dt = event.get("show_time")
+    load_in_time_dt = event.get("load_in_time")
 
     event_date_str = event_date.strftime("%Y-%m-%d") if event_date else ""
-    show_time_str = show_time.strftime("%H:%M") if show_time else ""
-    load_in_time_str = load_in_time.strftime("%H:%M") if load_in_time else ""
+    # Convert UTC datetimes to local Israel time strings for display
+    # This prevents the "2 hour shift" bug on edit
+    show_time_str = utc_to_local_time_str(show_time_dt)
+    load_in_time_str = utc_to_local_time_str(load_in_time_dt)
 
     producer_name = event.get("producer_name") or ""
     producer_phone = event.get("producer_phone") or ""
@@ -1085,13 +1099,9 @@ async def create_shift(
 ):
     """Assign an employee to an event shift."""
     try:
-        # Parse call_time from datetime-local format
-        from datetime import datetime, timezone
-        
-        # datetime-local sends "YYYY-MM-DDTHH:MM" format
-        call_time_dt = datetime.fromisoformat(call_time)
-        # Make it timezone-aware (Israel timezone)
-        call_time_tz = call_time_dt.replace(tzinfo=ISRAEL_TZ)
+        # Parse call_time from datetime-local format (e.g., "2024-07-15T21:00")
+        # Treats input as Israel local time and makes it timezone-aware
+        call_time_tz = parse_datetime_local_input(call_time)
         
         hoh.assign_employee_to_event(
             org_id=1,
@@ -1126,10 +1136,9 @@ async def update_shift(
 ):
     """Update a shift."""
     try:
-        from datetime import datetime
-        
-        call_time_dt = datetime.fromisoformat(call_time)
-        call_time_tz = call_time_dt.replace(tzinfo=ISRAEL_TZ)
+        # Parse call_time from datetime-local format (e.g., "2024-07-15T21:00")
+        # Treats input as Israel local time and makes it timezone-aware
+        call_time_tz = parse_datetime_local_input(call_time)
         
         hoh.update_shift(
             org_id=1,

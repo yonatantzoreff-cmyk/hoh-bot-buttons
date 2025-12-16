@@ -1,5 +1,5 @@
 # repositories.py
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
 
 import json
@@ -8,6 +8,7 @@ from sqlalchemy import text
 
 from .appdb import get_session
 from .utils.phone import normalize_phone_to_e164_il
+from .time_utils import now_utc
 
 
 _NO_UPDATE = object()
@@ -63,7 +64,7 @@ class EventRepository:
             )
             RETURNING event_id
         """)
-        now = datetime.utcnow()
+        now = now_utc()
 
         with get_session() as session:
             result = session.execute(
@@ -127,7 +128,7 @@ class EventRepository:
         technical_contact_id: Optional[int] = None,
     ) -> None:
         sets = []
-        params = {"org_id": org_id, "event_id": event_id, "now": datetime.utcnow()}
+        params = {"org_id": org_id, "event_id": event_id, "now": now_utc()}
 
         if load_in_time is not None:
             sets.append("load_in_time = :load_in_time")
@@ -175,7 +176,7 @@ class EventRepository:
         notes: Optional[str] = _NO_UPDATE,
     ) -> None:
         sets = ["updated_at = :now"]
-        params = {"org_id": org_id, "event_id": event_id, "now": datetime.utcnow()}
+        params = {"org_id": org_id, "event_id": event_id, "now": now_utc()}
 
         if hall_id is not _NO_UPDATE:
             sets.append("hall_id = :hall_id")
@@ -244,7 +245,7 @@ class EventRepository:
                 {
                     "org_id": org_id,
                     "contact_id": contact_id,
-                    "now": datetime.utcnow(),
+                    "now": now_utc(),
                 },
             )
 
@@ -349,7 +350,7 @@ class ContactRepository:
                     "name": name,
                     "phone": normalize_phone_to_e164_il(phone),
                     "role": role,
-                    "now": datetime.utcnow(),
+                    "now": now_utc(),
                 },
             )
             return result.scalar_one()
@@ -406,7 +407,7 @@ class ContactRepository:
                 VALUES (:org_id, :name, :phone, :role, :now)
                 RETURNING contact_id
             """)
-            now = datetime.utcnow()
+            now = now_utc()
 
             result = session.execute(
                 insert_q,
@@ -600,7 +601,7 @@ class ConversationRepository:
             )
             RETURNING conversation_id
         """)
-        now = datetime.utcnow()
+        now = now_utc()
 
         with get_session() as session:
             result = session.execute(
@@ -642,7 +643,7 @@ class ConversationRepository:
             "pending_data_fields": pending_data_fields,
             "org_id": org_id,
             "conversation_id": conversation_id,
-            "now": datetime.utcnow(),
+            "now": now_utc(),
         }
         if status is not None:
             params["status"] = status
@@ -663,7 +664,7 @@ class ConversationRepository:
             "status": status,
             "org_id": org_id,
             "conversation_id": conversation_id,
-            "now": datetime.utcnow(),
+            "now": now_utc(),
         }
         with get_session() as session:
             session.execute(query, params)
@@ -707,7 +708,7 @@ class ConversationRepository:
                 {
                     "org_id": org_id,
                     "contact_id": contact_id,
-                    "now": datetime.utcnow(),
+                    "now": now_utc(),
                 },
             )
 
@@ -729,7 +730,7 @@ class MessageRepository:
         received_at=None,
         raw_payload: Optional[dict | str] = None,
     ) -> int:
-        now = datetime.utcnow()
+        now = now_utc()
 
         if isinstance(raw_payload, dict):
             raw_payload = json.dumps(raw_payload, ensure_ascii=False)
@@ -1058,7 +1059,7 @@ class MessageRepository:
         if not message_sid:
             return False
 
-        when = occurred_at or datetime.utcnow()
+        when = occurred_at or now_utc()
         status_lower = (status or "").lower()
 
         with get_session() as session:
@@ -1237,7 +1238,7 @@ class MessageDeliveryLogRepository:
                     "error_message": error_message,
                     "provider": provider,
                     "provider_payload": provider_payload,
-                    "now": datetime.utcnow(),
+                    "now": now_utc(),
                 },
             )
             return result.scalar_one()
@@ -1517,10 +1518,8 @@ class EmployeeShiftRepository:
 
     def mark_24h_reminder_sent(self, shift_id: int, when=None):
         """מסמן שנשלחה תזכורת 24 שעות למשמרת"""
-        from datetime import datetime, timezone
-
         if when is None:
-            when = datetime.now(timezone.utc)
+            when = now_utc()
 
         q = text("""
             UPDATE employee_shifts
@@ -1576,7 +1575,7 @@ class EmployeeShiftRepository:
         params = {
             "org_id": org_id,
             "shift_id": shift_id,
-            "now": datetime.utcnow(),
+            "now": now_utc(),
         }
 
         if call_time is not None:
@@ -1646,7 +1645,7 @@ class StagingEventRepository:
             )
         """)
         
-        now = datetime.utcnow()
+        now = now_utc()
         
         with get_session() as session:
             for event in events:
@@ -1696,7 +1695,7 @@ class StagingEventRepository:
     def update(self, org_id: int, staging_id: int, fields: dict) -> None:
         """Update specific fields in a staging event."""
         sets = ["updated_at = :now"]
-        params = {"org_id": org_id, "id": staging_id, "now": datetime.utcnow()}
+        params = {"org_id": org_id, "id": staging_id, "now": now_utc()}
         
         # Allow updating these fields
         allowed_fields = [
@@ -1748,7 +1747,7 @@ class StagingEventRepository:
             RETURNING id
         """)
         
-        now = datetime.utcnow()
+        now = now_utc()
         
         with get_session() as session:
             result = session.execute(query, {
@@ -1817,7 +1816,7 @@ class ImportJobRepository:
                 "job_type": job_type,
                 "source": source,
                 "status": status,
-                "now": datetime.utcnow(),
+                "now": now_utc(),
             })
             return result.scalar_one()
 
@@ -1844,7 +1843,7 @@ class ImportJobRepository:
                 "status": status,
                 "details": json.dumps(details, ensure_ascii=False) if details else None,
                 "error_message": error_message,
-                "now": datetime.utcnow(),
+                "now": now_utc(),
             })
 
     def get_latest_job(self, org_id: int, job_type: str) -> Optional[dict]:

@@ -10,6 +10,65 @@ ENV (Render):
 - CONTENT_SID_SHIFT_REMINDER (WhatsApp template for employee reminders)
 - Optional: CONTENT_SID_CONFIRM_QR, CONTENT_SID_NOT_SURE_QR, CONTENT_SID_CONTACT_QR
 
+## Timezone Handling
+
+The system uses a **centralized timezone approach** to ensure consistent time handling across all components:
+
+### Standards
+- **Database**: All timestamps are stored in **UTC** using PostgreSQL's `TIMESTAMPTZ` type
+- **UI**: Times are displayed and accepted in **Israel local time** (Asia/Jerusalem)
+- **Twilio Messages**: All times in WhatsApp messages are displayed in **Israel local time**
+- **DST**: Daylight Saving Time transitions are handled automatically by the `zoneinfo` library
+
+### Key Principles
+1. **No manual hour offsets**: Never add or subtract hours manually (e.g., +2, -2)
+2. **Always timezone-aware**: All datetime objects should include timezone information
+3. **Single source of truth**: Use `app/time_utils.py` for all timezone conversions
+4. **DB stores UTC**: Always convert local times to UTC before storing in the database
+5. **Display shows local**: Always convert UTC from DB to Israel local time for display
+
+### Example: Adding an Event with Time 21:00
+```python
+from app.time_utils import parse_local_time_to_utc, utc_to_local_time_str
+from datetime import date
+
+# User enters "21:00" in the UI for July 15, 2024
+event_date = date(2024, 7, 15)
+show_time_str = "21:00"
+
+# Convert to UTC for storage (handles DST automatically)
+show_time_utc = parse_local_time_to_utc(event_date, show_time_str)
+# Result: 2024-07-15 18:00:00 UTC (21:00 Israel time - 3 hours in summer)
+
+# Store show_time_utc in database...
+
+# Later, when displaying:
+display_time = utc_to_local_time_str(show_time_utc)
+# Result: "21:00" (back to Israel local time)
+```
+
+### Before/After Fix
+**Before (Bug):**
+- User creates event with time 21:00
+- Time stored incorrectly as 21:00 UTC (should have been 19:00 or 18:00 UTC)
+- Display shows 23:00 or 00:00 (wrong!)
+- Each edit shifted time by 2 hours
+
+**After (Fixed):**
+- User creates event with time 21:00
+- Time stored correctly as 18:00 UTC (summer) or 19:00 UTC (winter)
+- Display always shows 21:00 (correct!)
+- Edit operations preserve the exact time
+
+### Testing
+Comprehensive timezone tests are in `tests/test_timezone_fixes.py`:
+- Round-trip conversions (UI → DB → UI)
+- Edit operations don't cause time drift
+- DST transitions handled correctly
+- Multiple edits don't accumulate errors
+
+Run tests with: `pytest tests/test_timezone_fixes.py -v`
+
 Endpoints:
 - POST /whatsapp-webhook
 - POST /run_followups
