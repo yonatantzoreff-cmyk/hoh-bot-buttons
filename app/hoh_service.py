@@ -391,7 +391,7 @@ class HOHService:
             "3": _clean(event_date_display),
             "4": _clean(show_time_display),
             "5": _clean(call_time_display),
-            "6": _clean(notes_text, or "אין"),
+            "6": _clean(notes_text, fallback="-"),
             "7": _clean(support_name),
             "8": _clean(support_phone),
         }
