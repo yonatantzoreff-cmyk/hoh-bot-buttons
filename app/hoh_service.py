@@ -362,16 +362,38 @@ class HOHService:
 
         tech_name = event.get("technical_name") or os.getenv("TECH_CONTACT_NAME")
         support_name = tech_name or event.get("producer_name") or ""
-        
+
+        shift_role = shift.get("shift_role") or ""
+        shift_notes = shift.get("notes") or ""
+        event_notes = event.get("notes") or ""
+
+        notes_parts = []
+        if shift_role:
+            notes_parts.append(f"תפקיד: {shift_role}")
+        if shift_notes:
+            notes_parts.append(shift_notes)
+        elif event_notes:
+            notes_parts.append(event_notes)
+
+        notes_text = "\n".join(notes_parts)
+
+        def _clean(value: Any, *, fallback: str = "—") -> str:
+            if value is None:
+                return fallback
+            if isinstance(value, str):
+                stripped = value.strip()
+                return stripped if stripped else fallback
+            return str(value)
+
         variables = {
-            "1": first_name,
-            "2": event.get("name") or "",
-            "3": event_date_display,
-            "4": show_time_display,
-            "5": call_time_display,
-            "6": event.get("notes") or "",
-            "7": support_name,
-            "8": support_phone,
+            "1": _clean(first_name),
+            "2": _clean(event.get("name")),
+            "3": _clean(event_date_display),
+            "4": _clean(show_time_display),
+            "5": _clean(call_time_display),
+            "6": _clean(notes_text, fallback=""),
+            "7": _clean(support_name),
+            "8": _clean(support_phone),
         }
 
         return variables
