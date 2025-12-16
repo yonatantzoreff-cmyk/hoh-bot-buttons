@@ -18,6 +18,7 @@ from app.time_utils import (
     utc_to_local_datetime,
     utc_to_local_time_str,
     format_datetime_for_display,
+    parse_datetime_local_input,
 )
 
 router = APIRouter()
@@ -1098,12 +1099,9 @@ async def create_shift(
 ):
     """Assign an employee to an event shift."""
     try:
-        # Parse call_time from datetime-local format
-        # datetime-local sends "YYYY-MM-DDTHH:MM" format
-        call_time_dt = datetime.fromisoformat(call_time)
-        # Treat as Israel local time and convert to UTC
-        # Use replace to attach timezone (input is local, not UTC)
-        call_time_tz = call_time_dt.replace(tzinfo=ISRAEL_TZ)
+        # Parse call_time from datetime-local format (e.g., "2024-07-15T21:00")
+        # Treats input as Israel local time and makes it timezone-aware
+        call_time_tz = parse_datetime_local_input(call_time)
         
         hoh.assign_employee_to_event(
             org_id=1,
@@ -1138,9 +1136,9 @@ async def update_shift(
 ):
     """Update a shift."""
     try:
-        call_time_dt = datetime.fromisoformat(call_time)
-        # Treat as Israel local time and convert to UTC
-        call_time_tz = call_time_dt.replace(tzinfo=ISRAEL_TZ)
+        # Parse call_time from datetime-local format (e.g., "2024-07-15T21:00")
+        # Treats input as Israel local time and makes it timezone-aware
+        call_time_tz = parse_datetime_local_input(call_time)
         
         hoh.update_shift(
             org_id=1,

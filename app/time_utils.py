@@ -39,7 +39,7 @@ def parse_local_time_to_utc(event_date: date, hhmm: str) -> datetime:
     
     This function takes a date and a time string in HH:MM format (local Israel time),
     combines them into a timezone-aware datetime in Asia/Jerusalem, then converts
-    to UTC.
+    to UTC. Automatically handles DST transitions.
     
     Args:
         event_date: The date for the event
@@ -56,11 +56,9 @@ def parse_local_time_to_utc(event_date: date, hhmm: str) -> datetime:
     """
     time_part = datetime.strptime(hhmm, "%H:%M").time()
     
-    # Create a naive datetime first
-    local_naive = datetime.combine(event_date, time_part)
-    
-    # Localize to Israel timezone (handles DST correctly)
-    local_aware = local_naive.replace(tzinfo=ISRAEL_TZ)
+    # Combine date and time with timezone in one step
+    # This is safe with zoneinfo (unlike pytz) and handles DST correctly
+    local_aware = datetime.combine(event_date, time_part, tzinfo=ISRAEL_TZ)
     
     # Convert to UTC
     utc_aware = local_aware.astimezone(timezone.utc)
@@ -75,64 +73,67 @@ def parse_local_time_to_utc(event_date: date, hhmm: str) -> datetime:
     return utc_aware
 
 
-def utc_to_local_datetime(dt_utc: datetime) -> datetime:
+def utc_to_local_datetime(dt: datetime) -> datetime:
     """
-    Convert a UTC datetime to Israel local timezone.
+    Convert a datetime (expected to be UTC) to Israel local timezone.
     
     Args:
-        dt_utc: Timezone-aware datetime in UTC (or naive assumed to be UTC)
+        dt: Timezone-aware datetime, preferably in UTC. 
+            If naive, it will be assumed to be UTC with a warning.
         
     Returns:
-        Timezone-aware datetime in Asia/Jerusalem
+        Timezone-aware datetime in Asia/Jerusalem, or None if input is None
     """
-    if dt_utc is None:
+    if dt is None:
         return None
         
     # Ensure it's aware - if naive, assume UTC
-    if dt_utc.tzinfo is None:
+    if dt.tzinfo is None:
         logger.warning(
             "Received naive datetime %s, assuming UTC. "
             "This should be fixed at the source.",
-            dt_utc
+            dt
         )
-        dt_utc = dt_utc.replace(tzinfo=timezone.utc)
+        dt = dt.replace(tzinfo=timezone.utc)
     
     # Convert to Israel time
-    return dt_utc.astimezone(ISRAEL_TZ)
+    return dt.astimezone(ISRAEL_TZ)
 
 
-def utc_to_local_time_str(dt_utc: datetime) -> str:
+def utc_to_local_time_str(dt: datetime) -> str:
     """
-    Convert a UTC datetime to local Israel time string in HH:MM format.
+    Convert a datetime (expected to be UTC) to local Israel time string in HH:MM format.
     
     Args:
-        dt_utc: Timezone-aware datetime in UTC (or naive assumed to be UTC)
+        dt: Timezone-aware datetime, preferably in UTC.
+            If naive, it will be assumed to be UTC with a warning.
         
     Returns:
-        Time string in "HH:MM" format (Israel local time)
+        Time string in "HH:MM" format (Israel local time), or empty string if input is None
     """
-    if dt_utc is None:
+    if dt is None:
         return ""
     
-    local_dt = utc_to_local_datetime(dt_utc)
+    local_dt = utc_to_local_datetime(dt)
     return local_dt.strftime("%H:%M")
 
 
-def utc_to_local_date_str(dt_utc: datetime, format: str = "%d.%m.%Y") -> str:
+def utc_to_local_date_str(dt: datetime, format: str = "%d.%m.%Y") -> str:
     """
-    Convert a UTC datetime to local Israel date string.
+    Convert a datetime (expected to be UTC) to local Israel date string.
     
     Args:
-        dt_utc: Timezone-aware datetime in UTC (or naive assumed to be UTC)
+        dt: Timezone-aware datetime, preferably in UTC.
+            If naive, it will be assumed to be UTC with a warning.
         format: Date format string (default: DD.MM.YYYY)
         
     Returns:
-        Date string in specified format (Israel local date)
+        Date string in specified format (Israel local date), or empty string if input is None
     """
-    if dt_utc is None:
+    if dt is None:
         return ""
     
-    local_dt = utc_to_local_datetime(dt_utc)
+    local_dt = utc_to_local_datetime(dt)
     return local_dt.strftime(format)
 
 
@@ -190,6 +191,34 @@ def now_israel() -> datetime:
         Current datetime in Asia/Jerusalem timezone
     """
     return datetime.now(ISRAEL_TZ)
+
+
+def parse_datetime_local_input(datetime_local_str: str) -> datetime:
+    """
+    Parse a datetime-local input from HTML form and convert to timezone-aware datetime.
+    
+    HTML datetime-local inputs send strings in format "YYYY-MM-DDTHH:MM" which
+    represent the local time in the user's timezone. We treat these as Israel
+    local times and convert to UTC-aware datetimes.
+    
+    Args:
+        datetime_local_str: String in format "YYYY-MM-DDTHH:MM" (e.g., "2024-07-15T21:00")
+        
+    Returns:
+        Timezone-aware datetime in Israel timezone, ready to be stored as UTC in DB
+        
+    Example:
+        >>> parse_datetime_local_input("2024-07-15T21:00")
+        # Returns 2024-07-15 21:00:00+03:00 (Israel time in summer)
+    """
+    # Parse the ISO format datetime (this creates a naive datetime)
+    dt_naive = datetime.fromisoformat(datetime_local_str)
+    
+    # Treat as Israel local time by attaching the timezone
+    # This is safe with zoneinfo and handles DST correctly
+    dt_aware = dt_naive.replace(tzinfo=ISRAEL_TZ)
+    
+    return dt_aware
 
 
 def format_datetime_for_display(dt: datetime, include_date: bool = True) -> str:

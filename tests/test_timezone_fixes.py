@@ -204,23 +204,33 @@ def test_dst_transition_handling():
     Test that times near DST transitions are handled correctly.
     
     In Israel, DST typically starts in late March and ends in late October.
+    Test specific dates to ensure proper handling.
     """
-    # Day before DST starts (still UTC+2)
-    date_before = date(2024, 3, 28)
-    utc_before = parse_local_time_to_utc(date_before, "21:00")
+    # February (standard time, UTC+2)
+    date_winter = date(2024, 2, 15)
+    utc_winter = parse_local_time_to_utc(date_winter, "21:00")
     
-    # Day after DST starts (now UTC+3)
-    date_after = date(2024, 3, 30)
-    utc_after = parse_local_time_to_utc(date_after, "21:00")
+    # August (daylight saving time, UTC+3)
+    date_summer = date(2024, 8, 15)
+    utc_summer = parse_local_time_to_utc(date_summer, "21:00")
     
-    # Both should display as "21:00" locally, but UTC times should differ by 1 hour
-    assert utc_to_local_time_str(utc_before) == "21:00"
-    assert utc_to_local_time_str(utc_after) == "21:00"
+    # Both should display as "21:00" locally
+    assert utc_to_local_time_str(utc_winter) == "21:00"
+    assert utc_to_local_time_str(utc_summer) == "21:00"
     
-    # The UTC times should be different (1 hour apart)
-    time_diff = utc_before.hour - utc_after.hour
-    # Could be 1 or -23 depending on date handling, but absolute diff is 1
-    assert abs(time_diff) == 1 or abs(time_diff) == 23
+    # The UTC times should differ by exactly 1 hour
+    # Winter: 21:00 Israel time = 19:00 UTC
+    # Summer: 21:00 Israel time = 18:00 UTC
+    assert utc_winter.hour == 19
+    assert utc_summer.hour == 18
+    
+    # Verify the difference
+    from datetime import timedelta
+    time_diff = utc_winter - utc_summer
+    # Should be approximately 1 hour different (ignoring date differences)
+    # We compare just hours since dates are different
+    hour_diff = abs(utc_winter.hour - utc_summer.hour)
+    assert hour_diff == 1
 
 
 def test_ensure_aware_with_utc():
