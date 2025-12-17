@@ -2,6 +2,7 @@
 import logging
 from datetime import datetime, timezone
 from html import escape
+from string import Template
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
@@ -52,42 +53,82 @@ def _to_israel_time(dt):
 
 
 def _render_page(title: str, body: str) -> str:
-    return f"""
+    page = Template(
+        """
     <!doctype html>
-    <html lang=\"en\">
+    <html lang="en">
       <head>
-        <meta charset=\"utf-8\">
-        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-        <title>{escape(title)}</title>
-        <link href=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css\" rel=\"stylesheet\" integrity=\"sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH\" crossorigin=\"anonymous\">
-        <link href=\"https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css\" rel=\"stylesheet\">
-        <link href=\"https://cdn.datatables.net/colreorder/1.6.3/css/colReorder.bootstrap5.min.css\" rel=\"stylesheet\">
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>$title</title>
+        <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-QWTKZyjpPEjISv5WaRU9OFeRpok6YctnYmDr5pNlyT2bRjXh0JMhjY6hW+ALEwIH" crossorigin="anonymous">
+        <link href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" rel="stylesheet">
+        <link href="https://cdn.datatables.net/colreorder/1.6.3/css/colReorder.bootstrap5.min.css" rel="stylesheet">
       </head>
-      <body class=\"bg-light\">
-        <nav class=\"navbar navbar-expand-lg navbar-dark bg-dark\">
-          <div class=\"container-fluid\">
-            <a class=\"navbar-brand\" href=\"/ui\">HOH BOT – Events</a>
+      <body class="bg-light">
+        <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+          <div class="container-fluid">
+            <a class="navbar-brand" href="/ui">HOH BOT – Events</a>
             <div>
-              <a class=\"btn btn-outline-light btn-sm me-2\" href=\"/ui\">Add Event</a>
-              <a class=\"btn btn-outline-light btn-sm\" href=\"/ui/events\">View Events</a>
-              <a class=\"btn btn-outline-light btn-sm ms-2\" href=\"/ui/contacts\">Contacts</a>
-              <a class=\"btn btn-outline-light btn-sm ms-2\" href=\"/ui/employees\">Employees</a>
-              <a class=\"btn btn-light btn-sm ms-2\" href=\"/ui/messages\">Messages</a>
-              <a class=\"btn btn-outline-success btn-sm ms-2\" href=\"/ui/calendar-import\">Import Calendar</a>
+              <a class="btn btn-outline-light btn-sm me-2" href="/ui">Add Event</a>
+              <a class="btn btn-outline-light btn-sm" href="/ui/events">View Events</a>
+              <a class="btn btn-outline-light btn-sm ms-2" href="/ui/contacts">Contacts</a>
+              <a class="btn btn-outline-light btn-sm ms-2" href="/ui/employees">Employees</a>
+              <a class="btn btn-light btn-sm ms-2" href="/ui/messages">Messages</a>
+              <a class="btn btn-outline-success btn-sm ms-2" href="/ui/calendar-import">Import Calendar</a>
             </div>
           </div>
         </nav>
-        <main class=\"container py-4\">
-          {body}
+        <main class="container py-4">
+          $body
         </main>
-        <script src=\"https://code.jquery.com/jquery-3.7.1.min.js\" integrity=\"sha256-3gJwYpJPgH+U5Q5J5r3bJfFqvF8S2RkG8h6fWK3kNlc=\" crossorigin=\"anonymous\"></script>
-        <script src=\"https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js\"></script>
-        <script src=\"https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js\"></script>
-        <script src=\"https://cdn.datatables.net/colreorder/1.6.3/js/dataTables.colReorder.min.js\"></script>
-        <script src=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js\" crossorigin=\"anonymous\"></script>
+        <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-3gJwYpJPgH+U5Q5J5r3bJfFqvF8S2RkG8h6fWK3knlc=" crossorigin="anonymous"></script>
+        <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+        <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
+        <script src="https://cdn.datatables.net/colreorder/1.6.3/js/dataTables.colReorder.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js" crossorigin="anonymous"></script>
+        <script>
+          (() => {
+            const storageKey = 'scroll-pos:' + window.location.pathname;
+
+            const saveScroll = () => {
+              try {
+                sessionStorage.setItem(storageKey, String(window.scrollY || window.pageYOffset || 0));
+              } catch (error) {
+                console.warn('Failed to save scroll position', error);
+              }
+            };
+
+            const restoreScroll = () => {
+              try {
+                const saved = sessionStorage.getItem(storageKey);
+                if (saved !== null) {
+                  const y = Number.parseFloat(saved);
+                  if (!Number.isNaN(y)) {
+                    window.scrollTo({ top: y, behavior: 'auto' });
+                  }
+                }
+              } catch (error) {
+                console.warn('Failed to restore scroll position', error);
+              }
+            };
+
+            document.addEventListener('DOMContentLoaded', () => {
+              restoreScroll();
+              document.querySelectorAll('form').forEach((form) => {
+                form.addEventListener('submit', saveScroll);
+              });
+            });
+
+            window.addEventListener('beforeunload', saveScroll);
+          })();
+        </script>
       </body>
     </html>
     """
+    )
+
+    return page.substitute(title=escape(title), body=body)
 
 
 def _contact_label(name: str | None, phone: str | None) -> str:
