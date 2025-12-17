@@ -85,6 +85,42 @@ def _render_page(title: str, body: str) -> str:
         <script src=\"https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js\"></script>
         <script src=\"https://cdn.datatables.net/colreorder/1.6.3/js/dataTables.colReorder.min.js\"></script>
         <script src=\"https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js\" crossorigin=\"anonymous\"></script>
+        <script>
+          (() => {
+            const storageKey = 'scroll-pos:' + window.location.pathname;
+
+            const saveScroll = () => {
+              try {
+                sessionStorage.setItem(storageKey, String(window.scrollY || window.pageYOffset || 0));
+              } catch (error) {
+                console.warn('Failed to save scroll position', error);
+              }
+            };
+
+            const restoreScroll = () => {
+              try {
+                const saved = sessionStorage.getItem(storageKey);
+                if (saved !== null) {
+                  const y = Number.parseFloat(saved);
+                  if (!Number.isNaN(y)) {
+                    window.scrollTo({ top: y, behavior: 'auto' });
+                  }
+                }
+              } catch (error) {
+                console.warn('Failed to restore scroll position', error);
+              }
+            };
+
+            document.addEventListener('DOMContentLoaded', () => {
+              restoreScroll();
+              document.querySelectorAll('form').forEach((form) => {
+                form.addEventListener('submit', saveScroll);
+              });
+            });
+
+            window.addEventListener('beforeunload', saveScroll);
+          })();
+        </script>
       </body>
     </html>
     """
