@@ -10,6 +10,17 @@ ENV (Render):
 - CONTENT_SID_SHIFT_REMINDER (WhatsApp template for employee reminders)
 - Optional: CONTENT_SID_CONFIRM_QR, CONTENT_SID_NOT_SURE_QR, CONTENT_SID_CONTACT_QR
 
+## Docker Deployment
+
+Build and run locally (or in Render's Docker deploys):
+
+```
+docker build -t hohbot .
+docker run --rm -p 8000:8000 -e PORT=8000 -e DATABASE_URL="..." hohbot
+```
+
+On Render, choose **Deploy: Docker** and set `DATABASE_URL` plus the other secrets as Environment Variables.
+
 ## Timezone Handling
 
 The system uses a **centralized timezone approach** to ensure consistent time handling across all components:
