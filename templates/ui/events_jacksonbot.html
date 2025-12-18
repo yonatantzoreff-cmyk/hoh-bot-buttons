@@ -637,6 +637,87 @@
             margin-top: 1rem;
         }
 
+        /* Modal System */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        .modal-dialog {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            box-shadow: var(--shadow-hover);
+            min-width: 400px;
+            max-width: 90%;
+            animation: modalSlideIn 0.3s;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.3rem;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+            color: var(--text-primary);
+        }
+
+        .modal-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c93a4a;
+            box-shadow: var(--shadow-hover);
+        }
+
         /* Save Button */
         .save-btn {
             position: fixed;
@@ -879,6 +960,39 @@
 
     <div class="toast" id="toast">
         <div id="toastMessage"></div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal-overlay" id="confirmModal" onclick="closeConfirmModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="confirmTitle">Confirm Action</h3>
+            </div>
+            <div class="modal-body">
+                <p id="confirmMessage">Are you sure?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+                <button class="btn btn-danger" id="confirmBtn" onclick="confirmAction()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Input Modal -->
+    <div class="modal-overlay" id="inputModal" onclick="closeInputModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="inputTitle">Input Required</h3>
+            </div>
+            <div class="modal-body">
+                <label id="inputLabel" style="display: block; margin-bottom: 0.5rem; color: var(--text-primary);">Name:</label>
+                <input type="text" id="inputField" class="inline-edit" style="width: 100%;" placeholder="Enter value...">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeInputModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitInput()">Submit</button>
+            </div>
+        </div>
     </div>
 
     <script>
@@ -1535,8 +1649,17 @@
         }
 
         async function addShift(eventId, defaultDate, defaultTime) {
-            const employeeName = prompt('Enter employee name:');
-            if (!employeeName) return;
+            showInputModal(
+                'Add Shift',
+                'Employee Name:',
+                'Enter employee name...',
+                async (employeeName) => {
+                    await createShiftAPI(eventId, employeeName, defaultDate, defaultTime);
+                }
+            );
+        }
+
+        async function createShiftAPI(eventId, employeeName, defaultDate, defaultTime) {
 
             try {
                 const response = await fetch(`/api/events/${eventId}/shifts?org_id=${ORG_ID}`, {
@@ -1565,9 +1688,16 @@
         }
 
         async function deleteShift(eventId, shiftId) {
-            if (!confirm('Are you sure you want to delete this shift?')) {
-                return;
-            }
+            showConfirmModal(
+                'Delete Shift',
+                'Are you sure you want to delete this shift? This action cannot be undone.',
+                async () => {
+                    await deleteShiftAPI(eventId, shiftId);
+                }
+            );
+        }
+
+        async function deleteShiftAPI(eventId, shiftId) {
 
             try {
                 const response = await fetch(`/api/shifts/${shiftId}?org_id=${ORG_ID}`, {
@@ -1615,9 +1745,16 @@
 
         // Delete Event (PHASE 3 - Task 5A)
         async function deleteEvent(eventId) {
-            if (!confirm('Are you sure you want to delete this event? This action cannot be undone.')) {
-                return;
-            }
+            showConfirmModal(
+                'Delete Event',
+                'Are you sure you want to delete this event? This action cannot be undone.',
+                async () => {
+                    await deleteEventAPI(eventId);
+                }
+            );
+        }
+
+        async function deleteEventAPI(eventId) {
 
             try {
                 const response = await fetch(`/api/events/${eventId}?org_id=${ORG_ID}`, {
@@ -1764,6 +1901,62 @@
             setTimeout(() => {
                 toast.classList.remove('visible');
             }, 3000);
+        }
+
+        // Modal System
+        let confirmCallback = null;
+        let inputCallback = null;
+
+        function showConfirmModal(title, message, onConfirm) {
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmMessage').textContent = message;
+            confirmCallback = onConfirm;
+            document.getElementById('confirmModal').classList.add('visible');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.remove('visible');
+            confirmCallback = null;
+        }
+
+        function confirmAction() {
+            if (confirmCallback) {
+                confirmCallback();
+            }
+            closeConfirmModal();
+        }
+
+        function showInputModal(title, label, placeholder, onSubmit) {
+            document.getElementById('inputTitle').textContent = title;
+            document.getElementById('inputLabel').textContent = label;
+            const inputField = document.getElementById('inputField');
+            inputField.placeholder = placeholder;
+            inputField.value = '';
+            inputCallback = onSubmit;
+            
+            // Add Enter key handler
+            inputField.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    submitInput();
+                }
+            };
+            
+            document.getElementById('inputModal').classList.add('visible');
+            // Focus on input
+            setTimeout(() => inputField.focus(), 100);
+        }
+
+        function closeInputModal() {
+            document.getElementById('inputModal').classList.remove('visible');
+            inputCallback = null;
+        }
+
+        function submitInput() {
+            const value = document.getElementById('inputField').value;
+            if (inputCallback && value) {
+                inputCallback(value);
+            }
+            closeInputModal();
         }
 
         // Utility

@@ -534,8 +534,11 @@ async def send_shift_reminder(
             raise HTTPException(status_code=404, detail="Shift not found")
         
         employee_phone = shift.get("employee_phone")
-        if not employee_phone:
-            raise HTTPException(status_code=400, detail="Employee has no phone number")
+        if not employee_phone or employee_phone.strip() == "":
+            raise HTTPException(
+                status_code=400, 
+                detail="Employee has no phone number. Please add a phone number before sending reminders."
+            )
         
         # Get event details
         event = hoh.get_event_with_contacts(org_id=org_id, event_id=shift["event_id"])
