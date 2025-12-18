@@ -228,9 +228,9 @@ async def send_shift_reminder(...)
 
 ### PHASE 5 — Advanced Table Fixes
 
-#### 8. Drag & Drop Columns
-**Status:** Not implemented (low priority)
-**Reason:** Sorting already works well. Column reordering is nice-to-have but not essential.
+#### 8. Drag & Drop Columns ✅
+**Status:** Fully implemented
+**Implementation:** Native HTML5 drag and drop API (no external library needed)
 
 #### 9. Column Sorting ✅
 **Status:** Already working correctly
@@ -365,6 +365,22 @@ No schema changes required. Uses existing tables:
 - [x] Phone validation prevents empty values
 - [x] Proper authentication checks (org_id required)
 
+**Features:**
+- Drag column headers to reorder
+- Visual drag handle (⋮⋮) on each header
+- Drag-over highlight shows drop target
+- Persists to localStorage (`events.columnOrder`)
+- Restores saved order on page load
+- Updates shifts row colspan automatically
+- Sorting continues to work after reordering
+- Applies consistently across all hall tables
+
+**Technical Details:**
+- Uses native HTML5 drag events (dragstart, dragover, drop, etc.)
+- No external libraries required
+- Performance optimized with index mapping
+- Graceful handling of edge cases
+
 ## Known Limitations
 
 1. **Employee Phone Numbers:**
@@ -372,12 +388,7 @@ No schema changes required. Uses existing tables:
    - Workaround: Validation prevents sending reminders without phone
    - Future: Add phone field to shift creation/editing
 
-2. **Column Drag & Drop:**
-   - Not implemented (low priority)
-   - Sorting works well as alternative
-   - Could be added later with SortableJS library
-
-3. **Bulk Operations:**
+2. **Bulk Operations:**
    - No bulk delete or bulk actions
    - Each action is individual
    - Future: Add checkbox selection and bulk actions
@@ -454,9 +465,9 @@ The implementation follows best practices:
 3. Export shifts to CSV/Excel
 
 ### Medium Term
-1. Drag & drop column reordering
-2. Advanced filtering (by producer, status, etc.)
-3. Keyboard shortcuts (Ctrl+S for save, etc.)
+1. Advanced filtering (by producer, status, etc.)
+2. Keyboard shortcuts (Ctrl+S for save, etc.)
+3. Custom column visibility (show/hide columns)
 
 ### Long Term
 1. Real-time collaboration indicators

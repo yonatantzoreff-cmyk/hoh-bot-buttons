@@ -1683,7 +1683,6 @@
         }
 
         async function createShiftAPI(eventId, employeeName, defaultDate, defaultTime) {
-
             try {
                 const response = await fetch(`/api/events/${eventId}/shifts?org_id=${ORG_ID}`, {
                     method: 'POST',
@@ -1721,7 +1720,6 @@
         }
 
         async function deleteShiftAPI(eventId, shiftId) {
-
             try {
                 const response = await fetch(`/api/shifts/${shiftId}?org_id=${ORG_ID}`, {
                     method: 'DELETE',
@@ -1778,7 +1776,6 @@
         }
 
         async function deleteEventAPI(eventId) {
-
             try {
                 const response = await fetch(`/api/events/${eventId}?org_id=${ORG_ID}`, {
                     method: 'DELETE',
@@ -2055,10 +2052,16 @@
                                 return;
                             }
 
+                            // Create index map once before sorting (performance optimization)
+                            const cellIndexMap = new Map();
+                            cells.forEach((cell, idx) => {
+                                cellIndexMap.set(cell, idx);
+                            });
+
                             // Sort cells by header order
                             cells.sort((a, b) => {
-                                const aIdx = Array.from(row.children).indexOf(a);
-                                const bIdx = Array.from(row.children).indexOf(b);
+                                const aIdx = cellIndexMap.get(a);
+                                const bIdx = cellIndexMap.get(b);
                                 
                                 // Map cell index to header column name
                                 const aHeader = currentOrder[aIdx];
