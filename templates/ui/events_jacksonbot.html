@@ -363,7 +363,7 @@
             font-size: 0.85rem;
             text-transform: uppercase;
             color: var(--text-secondary);
-            cursor: pointer;
+            cursor: move;
             user-select: none;
             position: relative;
             border-bottom: 2px solid var(--border-color);
@@ -373,10 +373,31 @@
             background: var(--bg-tertiary);
         }
 
+        .events-table th.dragging {
+            opacity: 0.4;
+        }
+
+        .events-table th.drag-over {
+            border-left: 3px solid var(--accent-color);
+        }
+
+        .events-table th::before {
+            content: '⋮⋮';
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-right: 0.5rem;
+            opacity: 0.5;
+        }
+
+        .events-table th:hover::before {
+            opacity: 1;
+        }
+
         .events-table th.sortable::after {
             content: ' ↕';
             color: var(--text-muted);
             font-size: 0.8rem;
+            margin-left: 0.3rem;
         }
 
         .events-table th.sorted-asc::after {
@@ -1183,16 +1204,16 @@
                     <div class="hall-body">
                         <table class="events-table" data-hall="${hallName}">
                             <thead>
-                                <tr>
-                                    <th class="sortable" onclick="sortTable(this, 'name')">Name</th>
-                                    <th class="sortable sorted-asc" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date</th>
-                                    <th class="sortable" onclick="sortTable(this, 'show_time')">Show Time</th>
-                                    <th class="sortable" onclick="sortTable(this, 'load_in_time')">Load In</th>
-                                    <th>Status</th>
-                                    <th>Producer</th>
-                                    <th>Technical</th>
-                                    <th>Notes</th>
-                                    <th>Actions</th>
+                                <tr id="header-row-${hallName.replace(/\s+/g, '-')}">
+                                    <th class="sortable" draggable="true" data-col="name" onclick="sortTable(this, 'name')">Name</th>
+                                    <th class="sortable sorted-asc" draggable="true" data-col="event_date" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date</th>
+                                    <th class="sortable" draggable="true" data-col="show_time" onclick="sortTable(this, 'show_time')">Show Time</th>
+                                    <th class="sortable" draggable="true" data-col="load_in_time" onclick="sortTable(this, 'load_in_time')">Load In</th>
+                                    <th draggable="true" data-col="status">Status</th>
+                                    <th draggable="true" data-col="producer">Producer</th>
+                                    <th draggable="true" data-col="technical">Technical</th>
+                                    <th draggable="true" data-col="notes">Notes</th>
+                                    <th draggable="true" data-col="actions">Actions</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -1289,9 +1310,11 @@
         }
 
         function renderShiftsRow(event) {
+            // Count columns dynamically (will be 9 by default)
+            const colCount = 9;
             return `
                 <tr class="shifts-row" data-event-id="${event.event_id}">
-                    <td colspan="9" style="padding: 0;">
+                    <td colspan="${colCount}" style="padding: 0;">
                         <div class="shifts-section">
                             <div class="shifts-header" onclick="toggleShifts(${event.event_id})">
                                 <div class="shifts-title">
@@ -1884,10 +1907,181 @@
             th.classList.add(direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
         }
 
-        // Column Order (placeholder - would need drag & drop library)
+        // Column Order Management (PHASE 5 - Task 8)
+        let draggedColumn = null;
+        let draggedColumnIndex = -1;
+
+        function initColumnDragDrop() {
+            // Apply to all tables
+            document.querySelectorAll('.events-table thead th').forEach((th, index) => {
+                th.addEventListener('dragstart', handleDragStart);
+                th.addEventListener('dragover', handleDragOver);
+                th.addEventListener('drop', handleDrop);
+                th.addEventListener('dragend', handleDragEnd);
+                th.addEventListener('dragenter', handleDragEnter);
+                th.addEventListener('dragleave', handleDragLeave);
+            });
+        }
+
+        function handleDragStart(e) {
+            draggedColumn = this;
+            draggedColumnIndex = Array.from(this.parentNode.children).indexOf(this);
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', this.innerHTML);
+        }
+
+        function handleDragOver(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            e.dataTransfer.dropEffect = 'move';
+            return false;
+        }
+
+        function handleDragEnter(e) {
+            if (this !== draggedColumn) {
+                this.classList.add('drag-over');
+            }
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            if (e.stopPropagation) {
+                e.stopPropagation();
+            }
+
+            if (draggedColumn !== this) {
+                const targetIndex = Array.from(this.parentNode.children).indexOf(this);
+                const table = this.closest('table');
+                
+                // Reorder columns in this table
+                reorderTableColumns(table, draggedColumnIndex, targetIndex);
+                
+                // Save column order to localStorage
+                saveColumnOrder(table);
+            }
+
+            return false;
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+            document.querySelectorAll('.events-table thead th').forEach(th => {
+                th.classList.remove('drag-over');
+            });
+        }
+
+        function reorderTableColumns(table, fromIndex, toIndex) {
+            const headerRow = table.querySelector('thead tr');
+            const headers = Array.from(headerRow.children);
+            const bodyRows = Array.from(table.querySelectorAll('tbody tr'));
+
+            // Move header
+            const header = headers[fromIndex];
+            if (toIndex < fromIndex) {
+                headerRow.insertBefore(header, headers[toIndex]);
+            } else {
+                headerRow.insertBefore(header, headers[toIndex].nextSibling);
+            }
+
+            // Move cells in each body row
+            bodyRows.forEach(row => {
+                const cells = Array.from(row.children);
+                const cell = cells[fromIndex];
+                if (toIndex < fromIndex) {
+                    row.insertBefore(cell, cells[toIndex]);
+                } else {
+                    row.insertBefore(cell, cells[toIndex].nextSibling);
+                }
+            });
+        }
+
+        function saveColumnOrder(table) {
+            const headerRow = table.querySelector('thead tr');
+            const order = Array.from(headerRow.children).map(th => th.getAttribute('data-col'));
+            localStorage.setItem('events.columnOrder', JSON.stringify(order));
+        }
+
         function restoreColumnOrder() {
-            // Future: Implement drag & drop with a library like SortableJS
-            // and save/restore column order from localStorage
+            const savedOrder = localStorage.getItem('events.columnOrder');
+            if (!savedOrder) {
+                initColumnDragDrop();
+                return;
+            }
+
+            try {
+                const order = JSON.parse(savedOrder);
+                
+                // Apply to all tables
+                document.querySelectorAll('.events-table').forEach(table => {
+                    const headerRow = table.querySelector('thead tr');
+                    const headers = Array.from(headerRow.children);
+                    const currentOrder = headers.map(th => th.getAttribute('data-col'));
+
+                    // Only reorder if order is different
+                    if (JSON.stringify(currentOrder) !== JSON.stringify(order)) {
+                        // Create mapping of column names to indices in saved order
+                        const orderMap = {};
+                        order.forEach((col, idx) => {
+                            orderMap[col] = idx;
+                        });
+
+                        // Sort headers by saved order
+                        headers.sort((a, b) => {
+                            const aCol = a.getAttribute('data-col');
+                            const bCol = b.getAttribute('data-col');
+                            const aIdx = orderMap[aCol] !== undefined ? orderMap[aCol] : 999;
+                            const bIdx = orderMap[bCol] !== undefined ? orderMap[bCol] : 999;
+                            return aIdx - bIdx;
+                        });
+
+                        // Clear and re-append in correct order
+                        headerRow.innerHTML = '';
+                        headers.forEach(th => headerRow.appendChild(th));
+
+                        // Reorder body rows to match
+                        const bodyRows = Array.from(table.querySelectorAll('tbody tr'));
+                        bodyRows.forEach(row => {
+                            const cells = Array.from(row.children);
+                            
+                            // Skip shifts rows (they have colspan)
+                            if (cells.length === 1 && cells[0].colSpan > 1) {
+                                // Update colspan to match current column count
+                                cells[0].colSpan = headers.length;
+                                return;
+                            }
+
+                            // Sort cells by header order
+                            cells.sort((a, b) => {
+                                const aIdx = Array.from(row.children).indexOf(a);
+                                const bIdx = Array.from(row.children).indexOf(b);
+                                
+                                // Map cell index to header column name
+                                const aHeader = currentOrder[aIdx];
+                                const bHeader = currentOrder[bIdx];
+                                
+                                const aSortIdx = orderMap[aHeader] !== undefined ? orderMap[aHeader] : 999;
+                                const bSortIdx = orderMap[bHeader] !== undefined ? orderMap[bHeader] : 999;
+                                
+                                return aSortIdx - bSortIdx;
+                            });
+
+                            // Clear and re-append
+                            row.innerHTML = '';
+                            cells.forEach(cell => row.appendChild(cell));
+                        });
+                    }
+                });
+            } catch (e) {
+                console.error('Failed to restore column order:', e);
+            }
+
+            // Initialize drag and drop after restoring
+            initColumnDragDrop();
         }
 
         // Toast Notifications
