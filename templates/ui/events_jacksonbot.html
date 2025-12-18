@@ -729,6 +729,15 @@
                 return;
             }
 
+            // Sort events by date (ascending - earliest first) for each hall
+            Object.keys(data.halls).forEach(hallName => {
+                data.halls[hallName].sort((a, b) => {
+                    const dateA = a.event_date ? new Date(a.event_date).getTime() : 0;
+                    const dateB = b.event_date ? new Date(b.event_date).getTime() : 0;
+                    return dateA - dateB;
+                });
+            });
+
             container.innerHTML = Object.entries(data.halls).map(([hallName, events]) => `
                 <div class="hall-section">
                     <div class="hall-header" onclick="toggleHall(this)">
@@ -739,11 +748,11 @@
                         <div class="collapse-icon">▼</div>
                     </div>
                     <div class="hall-body">
-                        <table class="events-table">
+                        <table class="events-table" data-hall="${hallName}">
                             <thead>
                                 <tr>
                                     <th class="sortable" onclick="sortTable(this, 'name')">Name</th>
-                                    <th class="sortable" onclick="sortTable(this, 'event_date')">Date</th>
+                                    <th class="sortable sorted-asc" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date</th>
                                     <th class="sortable" onclick="sortTable(this, 'show_time')">Show Time</th>
                                     <th class="sortable" onclick="sortTable(this, 'load_in_time')">Load In</th>
                                     <th>Status</th>
@@ -980,18 +989,20 @@
         }
 
         // Sorting
+        // Note: Sort state is NOT saved to localStorage, so on page refresh,
+        // the default sort (by date, ascending) is always applied
         function sortTable(th, field) {
             const table = th.closest('table');
             const tbody = table.querySelector('tbody');
             const rows = Array.from(tbody.querySelectorAll('tr'));
 
-            // Determine sort direction
+            // Determine sort direction (toggle between asc/desc)
             let direction = 'asc';
             if (th.classList.contains('sorted-asc')) {
                 direction = 'desc';
             }
 
-            // Clear all sort indicators
+            // Clear all sort indicators in this table
             table.querySelectorAll('th').forEach(h => {
                 h.classList.remove('sorted-asc', 'sorted-desc');
             });
@@ -1001,7 +1012,7 @@
                 let aVal = a.querySelector(`input[onchange*="${field}"]`)?.value || '';
                 let bVal = b.querySelector(`input[onchange*="${field}"]`)?.value || '';
 
-                // Handle date/time fields
+                // Handle date/time fields - convert to timestamps for proper sorting
                 if (field === 'event_date' || field === 'show_time' || field === 'load_in_time') {
                     aVal = aVal ? new Date(aVal).getTime() : 0;
                     bVal = bVal ? new Date(bVal).getTime() : 0;
@@ -1014,10 +1025,10 @@
                 }
             });
 
-            // Re-append sorted rows
+            // Re-append sorted rows to DOM
             rows.forEach(row => tbody.appendChild(row));
 
-            // Update sort indicator
+            // Update sort indicator on clicked column
             th.classList.add(direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
         }
 

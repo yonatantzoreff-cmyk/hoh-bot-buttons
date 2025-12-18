@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request, Depends, Response
 from app.dependencies import get_hoh_service
 from app.hoh_service import HOHService
 from app.repositories import MessageDeliveryLogRepository, MessageRepository
+from app.pubsub import get_pubsub
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,20 @@ async def whatsapp_webhook(
             body = contact_summary
     logger.info("Incoming WhatsApp body: %s", body)
 
-    await hoh.handle_whatsapp_webhook(payload, org_id=1)
+    # Handle webhook and get event_id if available
+    result = await hoh.handle_whatsapp_webhook(payload, org_id=1)
+    
+    # Broadcast SSE update if we have an event_id
+    # Note: handle_whatsapp_webhook doesn't currently return event_id,
+    # but the logic is here for future enhancement
+    if result and isinstance(result, dict) and result.get("event_id"):
+        pubsub = get_pubsub()
+        await pubsub.publish("events", {
+            "type": "event_updated",
+            "event_id": result["event_id"],
+            "org_id": 1,
+        })
+    
     return Response(status_code=204)
 
 
