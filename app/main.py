@@ -5,6 +5,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import webhook, followups
 from app.routers import ui
 from app.routers import calendar_import
+from app.routers import shift_organizer
+from app.routers import availability
 from app.db_schema import SchemaMissingError, ensure_calendar_schema
 
 logger = logging.getLogger(__name__)
@@ -30,6 +32,8 @@ app.include_router(webhook.router)
 app.include_router(followups.router)
 app.include_router(ui.router)
 app.include_router(calendar_import.router)
+app.include_router(shift_organizer.router)
+app.include_router(availability.router)
 
 @app.get("/health")
 def health():
