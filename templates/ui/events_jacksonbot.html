@@ -559,6 +559,84 @@
             align-items: center;
         }
 
+        /* Employees Shifts Section (PHASE 4 - Task 7) */
+        .shifts-section {
+            padding: 1rem 1.5rem;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .shifts-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.75rem 0;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .shifts-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .shifts-collapse-icon {
+            font-size: 1rem;
+            color: var(--text-muted);
+            transition: transform 0.3s;
+        }
+
+        .shifts-collapse-icon.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .shifts-body {
+            margin-top: 1rem;
+        }
+
+        .shifts-body.hidden {
+            display: none;
+        }
+
+        .shifts-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-primary);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .shifts-table th {
+            padding: 0.75rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.85rem;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .shifts-table td {
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .shifts-table tr.dirty {
+            background: #fff9e6;
+        }
+
+        [data-theme="dark"] .shifts-table tr.dirty {
+            background: #3d3420;
+        }
+
+        .add-shift-btn {
+            margin-top: 1rem;
+        }
+
         /* Save Button */
         .save-btn {
             position: fixed;
@@ -1004,7 +1082,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${events.map(event => renderEventRow(event)).join('')}
+                                ${events.map(event => renderEventWithShifts(event)).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -1013,6 +1091,15 @@
 
             // Restore column order from localStorage
             restoreColumnOrder();
+
+            // Load shifts for all events (in background)
+            Object.values(data.halls).flat().forEach(event => {
+                loadShiftsForEvent(event.event_id);
+            });
+        }
+
+        function renderEventWithShifts(event) {
+            return renderEventRow(event) + renderShiftsRow(event);
         }
 
         function renderEventRow(event) {
@@ -1081,6 +1168,35 @@
                                     title="${event.init_sent_at ? 'נשלח בעבר – שלח שוב' : 'שלח וואצאפ'}">
                                 📱
                             </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        function renderShiftsRow(event) {
+            return `
+                <tr class="shifts-row" data-event-id="${event.event_id}">
+                    <td colspan="9" style="padding: 0;">
+                        <div class="shifts-section">
+                            <div class="shifts-header" onclick="toggleShifts(${event.event_id})">
+                                <div class="shifts-title">
+                                    👷 Employees Shifts
+                                </div>
+                                <div class="shifts-collapse-icon" id="shifts-icon-${event.event_id}">▼</div>
+                            </div>
+                            <div class="shifts-body" id="shifts-body-${event.event_id}">
+                                <div id="shifts-container-${event.event_id}">
+                                    <div style="text-align: center; padding: 1rem; color: var(--text-muted);">
+                                        <div class="spinner" style="width: 24px; height: 24px;"></div>
+                                        <p style="margin-top: 0.5rem;">Loading shifts...</p>
+                                    </div>
+                                </div>
+                                <button class="btn btn-sm btn-primary add-shift-btn" 
+                                        onclick="addShift(${event.event_id}, '${event.event_date || ''}', '${event.load_in_time ? event.load_in_time.substring(11, 16) : ''}')">
+                                    + Add Shift
+                                </button>
+                            </div>
                         </div>
                     </td>
                 </tr>
@@ -1225,6 +1341,276 @@
 
             document.querySelector('.suggestions-popover')?.remove();
             showToast(`Suggestion applied: ${name}. Remember to save!`, 'success');
+        }
+
+        // Shifts Management (PHASE 4 - Task 7)
+        let dirtyShifts = new Map();
+        let loadedShifts = new Map(); // Cache shifts per event
+
+        function toggleShifts(eventId) {
+            const body = document.getElementById(`shifts-body-${eventId}`);
+            const icon = document.getElementById(`shifts-icon-${eventId}`);
+            
+            if (body.classList.contains('hidden')) {
+                body.classList.remove('hidden');
+                icon.classList.remove('collapsed');
+                // Load shifts if not already loaded
+                if (!loadedShifts.has(eventId)) {
+                    loadShiftsForEvent(eventId);
+                }
+            } else {
+                body.classList.add('hidden');
+                icon.classList.add('collapsed');
+            }
+        }
+
+        async function loadShiftsForEvent(eventId) {
+            try {
+                const response = await fetch(`/api/events/${eventId}/shifts?org_id=${ORG_ID}`);
+                const data = await response.json();
+                
+                loadedShifts.set(eventId, data.shifts || []);
+                renderShiftsTable(eventId, data.shifts || []);
+            } catch (error) {
+                console.error(`Failed to load shifts for event ${eventId}:`, error);
+                document.getElementById(`shifts-container-${eventId}`).innerHTML = `
+                    <div style="text-align: center; padding: 1rem; color: var(--danger-color);">
+                        Failed to load shifts
+                    </div>
+                `;
+            }
+        }
+
+        function renderShiftsTable(eventId, shifts) {
+            const container = document.getElementById(`shifts-container-${eventId}`);
+            
+            if (shifts.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 1rem; color: var(--text-muted);">
+                        No shifts yet. Click "+ Add Shift" to create one.
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <table class="shifts-table">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Notes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${shifts.map(shift => renderShiftRow(eventId, shift)).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function renderShiftRow(eventId, shift) {
+            const callTime = shift.call_time ? new Date(shift.call_time) : null;
+            const shiftDate = callTime ? callTime.toISOString().split('T')[0] : '';
+            const shiftTime = callTime ? callTime.toTimeString().substring(0, 5) : '';
+            const reminderSent = shift.reminder_24h_sent_at ? true : false;
+
+            return `
+                <tr data-shift-id="${shift.shift_id}">
+                    <td>
+                        <input type="text" class="inline-edit" 
+                               value="${escapeHtml(shift.employee_name || '')}" 
+                               onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'employee_name', this.value)"
+                               placeholder="Employee name">
+                    </td>
+                    <td>
+                        <input type="date" class="inline-edit" 
+                               value="${shiftDate}" 
+                               onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'shift_date', this.value)">
+                    </td>
+                    <td>
+                        <input type="time" class="inline-edit" 
+                               value="${shiftTime}" 
+                               onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'shift_time', this.value)">
+                    </td>
+                    <td>
+                        <input type="text" class="inline-edit" 
+                               value="${escapeHtml(shift.notes || '')}" 
+                               onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'notes', this.value)"
+                               placeholder="Notes">
+                    </td>
+                    <td>
+                        <div class="actions-container">
+                            <button class="btn btn-sm btn-success" 
+                                    id="save-shift-${shift.shift_id}"
+                                    onclick="saveShift(${eventId}, ${shift.shift_id})"
+                                    style="display: none;"
+                                    title="Save changes">
+                                💾
+                            </button>
+                            <button class="action-icon delete" 
+                                    onclick="deleteShift(${eventId}, ${shift.shift_id})"
+                                    title="Delete shift">
+                                🗑️
+                            </button>
+                            <button class="action-icon whatsapp ${reminderSent ? 'sent' : ''}" 
+                                    onclick="sendShiftReminder(${eventId}, ${shift.shift_id})"
+                                    title="${reminderSent ? 'נשלח בעבר – שלח שוב' : 'שלח תזכורת'}">
+                                🔔
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        function markShiftDirty(eventId, shiftId, field, value) {
+            const key = `${eventId}-${shiftId}`;
+            if (!dirtyShifts.has(key)) {
+                dirtyShifts.set(key, { eventId, shiftId });
+            }
+            dirtyShifts.get(key)[field] = value;
+
+            // Show save button for this shift
+            const saveBtn = document.getElementById(`save-shift-${shiftId}`);
+            if (saveBtn) {
+                saveBtn.style.display = 'inline-flex';
+            }
+
+            // Mark row visually
+            const row = document.querySelector(`tr[data-shift-id="${shiftId}"]`);
+            if (row) row.classList.add('dirty');
+        }
+
+        async function saveShift(eventId, shiftId) {
+            const key = `${eventId}-${shiftId}`;
+            const changes = dirtyShifts.get(key);
+            if (!changes) return;
+
+            const saveBtn = document.getElementById(`save-shift-${shiftId}`);
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<span class="spinner" style="width: 12px; height: 12px;"></span>';
+            }
+
+            try {
+                const response = await fetch(`/api/shifts/${shiftId}?org_id=${ORG_ID}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(changes)
+                });
+
+                if (response.ok) {
+                    dirtyShifts.delete(key);
+                    const row = document.querySelector(`tr[data-shift-id="${shiftId}"]`);
+                    if (row) row.classList.remove('dirty');
+                    
+                    if (saveBtn) {
+                        saveBtn.style.display = 'none';
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = '💾';
+                    }
+                    
+                    showToast('Shift saved successfully', 'success');
+                    // Reload shifts
+                    loadShiftsForEvent(eventId);
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to save shift: ${error.detail || 'Unknown error'}`, 'error');
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = '💾';
+                    }
+                }
+            } catch (error) {
+                console.error('Error saving shift:', error);
+                showToast('Failed to save shift', 'error');
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '💾';
+                }
+            }
+        }
+
+        async function addShift(eventId, defaultDate, defaultTime) {
+            const employeeName = prompt('Enter employee name:');
+            if (!employeeName) return;
+
+            try {
+                const response = await fetch(`/api/events/${eventId}/shifts?org_id=${ORG_ID}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        employee_name: employeeName,
+                        shift_date: defaultDate || null,
+                        shift_time: defaultTime || null,
+                        notes: ''
+                    })
+                });
+
+                if (response.ok) {
+                    showToast('Shift created successfully', 'success');
+                    // Reload shifts
+                    loadShiftsForEvent(eventId);
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to create shift: ${error.detail || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error creating shift:', error);
+                showToast('Failed to create shift', 'error');
+            }
+        }
+
+        async function deleteShift(eventId, shiftId) {
+            if (!confirm('Are you sure you want to delete this shift?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/shifts/${shiftId}?org_id=${ORG_ID}`, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    showToast('Shift deleted successfully', 'success');
+                    // Reload shifts
+                    loadShiftsForEvent(eventId);
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to delete shift: ${error.detail || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting shift:', error);
+                showToast('Failed to delete shift', 'error');
+            }
+        }
+
+        async function sendShiftReminder(eventId, shiftId) {
+            try {
+                const response = await fetch(`/api/shifts/${shiftId}/send-reminder?org_id=${ORG_ID}`, {
+                    method: 'POST',
+                });
+
+                if (response.ok) {
+                    // Optimistic update - change icon to blue (sent)
+                    const btn = document.querySelector(`tr[data-shift-id="${shiftId}"] .action-icon.whatsapp`);
+                    if (btn) {
+                        btn.classList.add('sent');
+                        btn.title = 'נשלח בעבר – שלח שוב';
+                    }
+                    
+                    showToast('Reminder sent successfully', 'success');
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to send reminder: ${error.detail || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error sending reminder:', error);
+                showToast('Failed to send reminder', 'error');
+            }
         }
 
         // Delete Event (PHASE 3 - Task 5A)
