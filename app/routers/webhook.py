@@ -42,11 +42,51 @@ async def whatsapp_webhook(
             body = contact_summary
     logger.info("Incoming WhatsApp body: %s", body)
 
+    # Get message repo to broadcast after handling
+    message_repo = MessageRepository()
+    
+    # Get the current max message_id before handling
+    from app.appdb import get_session
+    from sqlalchemy import text
+    with get_session() as session:
+        result = session.execute(text("SELECT COALESCE(MAX(message_id), 0) as max_id FROM messages WHERE org_id = :org_id"), {"org_id": 1})
+        max_id_before = result.scalar_one()
+
     # Handle webhook
     await hoh.handle_whatsapp_webhook(payload, org_id=1)
     
-    # TODO: Add SSE broadcasting when handle_whatsapp_webhook is refactored to return event_id
-    # This will enable real-time updates when events are modified via WhatsApp
+    # Get the new message that was just created (if any)
+    with get_session() as session:
+        result = session.execute(
+            text("""
+                SELECT m.message_id, m.event_id, m.body, m.received_at,
+                       e.name as event_name, e.event_date
+                FROM messages m
+                LEFT JOIN events e ON m.event_id = e.event_id
+                WHERE m.org_id = :org_id 
+                  AND m.message_id > :max_id_before
+                  AND m.direction = 'incoming'
+                ORDER BY m.message_id DESC
+                LIMIT 1
+            """),
+            {"org_id": 1, "max_id_before": max_id_before}
+        )
+        new_message = result.mappings().first()
+    
+    # Broadcast the new message via SSE
+    if new_message:
+        pubsub = get_pubsub()
+        await pubsub.publish("notifications", {
+            "type": "incoming_message",
+            "org_id": 1,
+            "message_id": new_message["message_id"],
+            "event_id": new_message["event_id"],
+            "event_name": new_message["event_name"],
+            "event_date": new_message["event_date"].isoformat() if new_message["event_date"] else None,
+            "snippet": new_message["body"][:100] if new_message["body"] else "",
+            "received_at": new_message["received_at"].isoformat() if new_message["received_at"] else None,
+        })
+        logger.info(f"Broadcast incoming message notification for event {new_message['event_id']}")
     
     return Response(status_code=204)
 
