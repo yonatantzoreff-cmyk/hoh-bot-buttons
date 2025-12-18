@@ -45,8 +45,42 @@ async def whatsapp_webhook(
     # Handle webhook
     await hoh.handle_whatsapp_webhook(payload, org_id=1)
     
-    # TODO: Add SSE broadcasting when handle_whatsapp_webhook is refactored to return event_id
-    # This will enable real-time updates when events are modified via WhatsApp
+    # Get the most recent incoming message that was just created
+    # Note: We query after webhook handling to avoid race conditions
+    # The webhook handler creates the message, so we fetch the latest one
+    from app.appdb import get_session
+    from sqlalchemy import text
+    with get_session() as session:
+        result = session.execute(
+            text("""
+                SELECT m.message_id, m.event_id, m.body, m.received_at,
+                       e.name as event_name, e.event_date
+                FROM messages m
+                LEFT JOIN events e ON m.event_id = e.event_id
+                WHERE m.org_id = :org_id 
+                  AND m.direction = 'incoming'
+                ORDER BY m.received_at DESC, m.message_id DESC
+                LIMIT 1
+            """),
+            {"org_id": 1}
+        )
+        new_message = result.mappings().first()
+    
+    # Broadcast the new message via SSE
+    # Only broadcast if we have a valid incoming message with recent timestamp
+    if new_message and new_message.get("received_at"):
+        pubsub = get_pubsub()
+        await pubsub.publish("notifications", {
+            "type": "incoming_message",
+            "org_id": 1,
+            "message_id": new_message["message_id"],
+            "event_id": new_message["event_id"],
+            "event_name": new_message["event_name"],
+            "event_date": new_message["event_date"].isoformat() if new_message["event_date"] else None,
+            "snippet": new_message["body"][:100] if new_message["body"] else "",
+            "received_at": new_message["received_at"].isoformat() if new_message["received_at"] else None,
+        })
+        logger.info(f"Broadcast incoming message notification for event {new_message['event_id']}")
     
     return Response(status_code=204)
 

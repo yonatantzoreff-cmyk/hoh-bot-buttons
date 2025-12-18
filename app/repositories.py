@@ -1148,6 +1148,145 @@ class MessageRepository:
 
             return True
 
+    def get_unread_summary(self, org_id: int, user_id: str = "admin", limit: int = 5) -> dict:
+        """
+        Get notification summary with unread count and recent events with new messages.
+        Returns up to `limit` events with their latest message info.
+        """
+        query = text(
+            """
+            WITH user_state AS (
+                SELECT COALESCE(last_seen_message_id, 0) AS last_seen_id,
+                       COALESCE(last_seen_at, '1970-01-01'::timestamptz) AS last_seen_time
+                FROM user_notification_state
+                WHERE org_id = :org_id AND user_id = :user_id
+            ),
+            unread_messages AS (
+                SELECT m.message_id, m.event_id, m.received_at, m.body
+                FROM messages m
+                CROSS JOIN user_state us
+                WHERE m.org_id = :org_id
+                  AND m.direction = 'incoming'
+                  AND (m.message_id > us.last_seen_id OR m.received_at > us.last_seen_time)
+            ),
+            latest_incoming_messages AS (
+                SELECT DISTINCT ON (event_id)
+                    event_id,
+                    body AS last_message_snippet
+                FROM messages
+                WHERE org_id = :org_id AND direction = 'incoming'
+                ORDER BY event_id, received_at DESC
+            ),
+            event_summary AS (
+                SELECT 
+                    e.event_id,
+                    e.name AS event_name,
+                    e.event_date,
+                    h.name AS hall_name,
+                    h.hall_id,
+                    COUNT(um.message_id) AS unread_count,
+                    MAX(um.received_at) AS last_message_at,
+                    lim.last_message_snippet
+                FROM unread_messages um
+                JOIN events e ON um.event_id = e.event_id
+                LEFT JOIN halls h ON e.hall_id = h.hall_id
+                LEFT JOIN latest_incoming_messages lim ON e.event_id = lim.event_id
+                GROUP BY e.event_id, e.name, e.event_date, h.name, h.hall_id, lim.last_message_snippet
+                ORDER BY MAX(um.received_at) DESC
+                LIMIT :limit
+            )
+            SELECT 
+                (SELECT COUNT(*) FROM unread_messages) AS unread_count_total,
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'event_id', es.event_id,
+                            'event_name', es.event_name,
+                            'event_date', es.event_date,
+                            'hall_id', es.hall_id,
+                            'hall_name', es.hall_name,
+                            'unread_count_for_event', es.unread_count,
+                            'last_message_snippet', LEFT(es.last_message_snippet, 100),
+                            'last_message_at', es.last_message_at
+                        )
+                    ) FILTER (WHERE es.event_id IS NOT NULL),
+                    '[]'::json
+                ) AS items
+            FROM event_summary es
+            """
+        )
+        
+        with get_session() as session:
+            result = session.execute(query, {
+                "org_id": org_id,
+                "user_id": user_id,
+                "limit": limit
+            }).mappings().first()
+            
+            if result:
+                return {
+                    "unread_count_total": result["unread_count_total"] or 0,
+                    "items": result["items"] if result["items"] else []
+                }
+            return {"unread_count_total": 0, "items": []}
+
+    def get_recent_messages_with_events(self, org_id: int, limit: int = 200) -> list[dict]:
+        """
+        Get recent messages with event details for the full messages view.
+        """
+        query = text(
+            """
+            SELECT
+                m.message_id,
+                m.event_id,
+                e.name AS event_name,
+                e.event_date,
+                e.show_time,
+                h.name AS hall_name,
+                m.direction,
+                m.body,
+                m.sent_at,
+                m.received_at,
+                m.created_at,
+                c.name AS contact_name,
+                c.phone AS contact_phone
+            FROM messages m
+            LEFT JOIN events e ON m.event_id = e.event_id
+            LEFT JOIN halls h ON e.hall_id = h.hall_id
+            LEFT JOIN contacts c ON m.contact_id = c.contact_id
+            WHERE m.org_id = :org_id
+            ORDER BY COALESCE(m.received_at, m.sent_at, m.created_at) DESC
+            LIMIT :limit
+            """
+        )
+        
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "limit": limit})
+            return result.mappings().all()
+
+    def mark_all_as_read(self, org_id: int, user_id: str = "admin") -> None:
+        """
+        Mark all messages as read by updating the user's last_seen state.
+        """
+        # Use a CTE to compute max_message_id once
+        query = text(
+            """
+            WITH max_msg AS (
+                SELECT COALESCE(MAX(message_id), 0) AS max_id FROM messages WHERE org_id = :org_id
+            )
+            INSERT INTO user_notification_state (org_id, user_id, last_seen_message_id, last_seen_at, updated_at)
+            SELECT :org_id, :user_id, max_id, NOW(), NOW() FROM max_msg
+            ON CONFLICT (org_id, user_id)
+            DO UPDATE SET 
+                last_seen_message_id = (SELECT max_id FROM max_msg),
+                last_seen_at = NOW(),
+                updated_at = NOW()
+            """
+        )
+        
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id, "user_id": user_id})
+
 
 class TemplateRepository:
     """אחראי על טבלאות message_templates / followup_rules."""
