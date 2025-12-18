@@ -1723,3 +1723,53 @@ class HOHService:
             channel="whatsapp",
             status="open",
         )
+
+    def get_technical_suggestions_for_producer(
+        self, org_id: int, producer_contact_id: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Get suggested technical contacts based on producer history.
+        Returns contacts who have worked with this producer before,
+        sorted by frequency and recency.
+        """
+        from sqlalchemy import text
+        from app.appdb import get_session
+
+        query = text("""
+            WITH producer_events AS (
+                SELECT 
+                    e.event_id,
+                    e.name as event_name,
+                    e.event_date,
+                    e.technical_contact_id,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY e.technical_contact_id 
+                        ORDER BY e.event_date DESC
+                    ) as rn
+                FROM events e
+                WHERE e.org_id = :org_id
+                  AND e.producer_contact_id = :producer_contact_id
+                  AND e.technical_contact_id IS NOT NULL
+            )
+            SELECT 
+                c.contact_id,
+                c.name,
+                c.phone,
+                pe.event_name as last_event_name,
+                pe.event_date as last_event_date,
+                COUNT(*) as times_worked
+            FROM producer_events pe
+            JOIN contacts c ON c.contact_id = pe.technical_contact_id
+            WHERE pe.rn = 1  -- Only get the most recent event per technical contact
+            GROUP BY c.contact_id, c.name, c.phone, pe.event_name, pe.event_date
+            ORDER BY times_worked DESC, pe.event_date DESC
+            LIMIT 10
+        """)
+
+        with get_session() as session:
+            result = session.execute(
+                query,
+                {"org_id": org_id, "producer_contact_id": producer_contact_id},
+            )
+            rows = result.mappings().all()
+            return [dict(row) for row in rows]
