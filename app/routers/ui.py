@@ -77,6 +77,7 @@ def _render_page(title: str, body: str) -> str:
               <a class="btn btn-light btn-sm ms-2" href="/ui/messages">Messages</a>
               <a class="btn btn-outline-success btn-sm ms-2" href="/ui/calendar-import">Import Calendar</a>
               <a class="btn btn-outline-warning btn-sm ms-2" href="/ui/shift-organizer">Shift Organizer</a>
+              <a class="btn btn-outline-info btn-sm ms-2" href="/ui/availability">Availability</a>
             </div>
           </div>
         </nav>
@@ -2299,3 +2300,249 @@ async def shift_organizer_page(
     """
     
     return HTMLResponse(_render_page("Shift Organizer", body))
+
+
+@router.get("/ui/availability")
+async def availability_page(
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+):
+    """Employee Availability Management UI."""
+    from datetime import date
+    import calendar
+    
+    # Default to next month
+    today = date.today()
+    if year is None or month is None:
+        # Default to next month
+        next_month = today.month + 1 if today.month < 12 else 1
+        next_year = today.year if today.month < 12 else today.year + 1
+        year = next_year
+        month = next_month
+    
+    month_name = calendar.month_name[month]
+    
+    # Calculate prev/next month
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    next_month = month + 1 if month < 12 else 1
+    next_year = year if month < 12 else year + 1
+    
+    body = f"""
+    <div class="row mb-3">
+      <div class="col">
+        <h2>Employee Availability - {month_name} {year}</h2>
+        <p class="text-muted">Mark periods when employees are unavailable for shifts</p>
+      </div>
+    </div>
+    
+    <div class="row mb-3">
+      <div class="col">
+        <div class="btn-group" role="group">
+          <a href="/ui/availability?year={prev_year}&month={prev_month}" class="btn btn-outline-secondary">← Previous Month</a>
+          <a href="/ui/availability" class="btn btn-outline-secondary">Next Month (Default)</a>
+          <a href="/ui/availability?year={next_year}&month={next_month}" class="btn btn-outline-secondary">Following Month →</a>
+        </div>
+      </div>
+      <div class="col text-end">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUnavailabilityModal">
+          + Add Unavailability
+        </button>
+      </div>
+    </div>
+    
+    <!-- Unavailability List -->
+    <div id="unavailabilityContainer">
+      <div class="text-center py-5">
+        <div class="spinner-border" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Add Unavailability Modal -->
+    <div class="modal fade" id="addUnavailabilityModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Add Unavailability</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <form id="unavailabilityForm">
+              <div class="mb-3">
+                <label class="form-label">Employee</label>
+                <select class="form-select" id="employeeSelect" required>
+                  <option value="">-- Select Employee --</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Start Date & Time</label>
+                <input type="datetime-local" class="form-control" id="startAt" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">End Date & Time</label>
+                <input type="datetime-local" class="form-control" id="endAt" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Reason (Optional)</label>
+                <textarea class="form-control" id="note" rows="2"></textarea>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="saveUnavailabilityBtn">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script>
+    const ORG_ID = 1;
+    const YEAR = {year};
+    const MONTH = {month};
+    
+    let employees = [];
+    let unavailability = [];
+    
+    async function loadEmployees() {{
+      try {{
+        // Use the shift-organizer endpoint to get employees
+        const response = await fetch(`/shift-organizer/month?org_id=${{ORG_ID}}&year=${{YEAR}}&month=${{MONTH}}`);
+        const data = await response.json();
+        employees = data.employees;
+        
+        // Populate employee dropdown
+        const select = document.getElementById('employeeSelect');
+        select.innerHTML = '<option value="">-- Select Employee --</option>' +
+          employees.map(emp => `<option value="${{emp.employee_id}}">${{emp.name}}</option>`).join('');
+      }} catch (error) {{
+        console.error('Error loading employees:', error);
+      }}
+    }}
+    
+    async function loadUnavailability() {{
+      try {{
+        const response = await fetch(`/availability/month?org_id=${{ORG_ID}}&year=${{YEAR}}&month=${{MONTH}}`);
+        const data = await response.json();
+        unavailability = data.unavailability || [];
+        renderUnavailability();
+      }} catch (error) {{
+        console.error('Error loading unavailability:', error);
+        document.getElementById('unavailabilityContainer').innerHTML = `
+          <div class="alert alert-danger">
+            Failed to load unavailability data: ${{error.message}}
+          </div>
+        `;
+      }}
+    }}
+    
+    function renderUnavailability() {{
+      const container = document.getElementById('unavailabilityContainer');
+      
+      if (unavailability.length === 0) {{
+        container.innerHTML = `
+          <div class="alert alert-info">
+            No unavailability blocks for this month. Employees are available for all shifts.
+          </div>
+        `;
+        return;
+      }}
+      
+      // Group by employee
+      const byEmployee = {{}};
+      unavailability.forEach(u => {{
+        const empName = u.employee_name || 'Unknown';
+        if (!byEmployee[empName]) {{
+          byEmployee[empName] = [];
+        }}
+        byEmployee[empName].push(u);
+      }});
+      
+      container.innerHTML = `
+        <div class="list-group">
+          ${{Object.entries(byEmployee).map(([empName, blocks]) => `
+            <div class="list-group-item">
+              <h6>${{empName}}</h6>
+              ${{blocks.map(block => {{
+                const startDate = new Date(block.start_at);
+                const endDate = new Date(block.end_at);
+                const startStr = startDate.toLocaleString('en-GB', {{dateStyle: 'short', timeStyle: 'short'}});
+                const endStr = endDate.toLocaleString('en-GB', {{dateStyle: 'short', timeStyle: 'short'}});
+                
+                return `
+                  <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                      <strong>${{startStr}}</strong> → <strong>${{endStr}}</strong>
+                      ${{block.note ? `<br><small class="text-muted">${{block.note}}</small>` : ''}}
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteUnavailability(${{block.unavailability_id}})">
+                      Delete
+                    </button>
+                  </div>
+                `;
+              }}).join('')}}
+            </div>
+          `).join('')}}
+        </div>
+      `;
+    }}
+    
+    async function deleteUnavailability(id) {{
+      if (!confirm('Delete this unavailability block?')) return;
+      
+      try {{
+        await fetch(`/availability/${{id}}?org_id=${{ORG_ID}}`, {{
+          method: 'DELETE'
+        }});
+        await loadUnavailability();
+      }} catch (error) {{
+        console.error('Error deleting:', error);
+        alert('Failed to delete: ' + error.message);
+      }}
+    }}
+    
+    document.getElementById('saveUnavailabilityBtn').addEventListener('click', async () => {{
+      const form = document.getElementById('unavailabilityForm');
+      if (!form.checkValidity()) {{
+        form.reportValidity();
+        return;
+      }}
+      
+      const employeeId = parseInt(document.getElementById('employeeSelect').value);
+      const startAt = document.getElementById('startAt').value;
+      const endAt = document.getElementById('endAt').value;
+      const note = document.getElementById('note').value;
+      
+      try {{
+        await fetch('/availability', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{
+            org_id: ORG_ID,
+            employee_id: employeeId,
+            start_at: startAt,
+            end_at: endAt,
+            note: note || null
+          }})
+        }});
+        
+        // Close modal and reload
+        const modal = bootstrap.Modal.getInstance(document.getElementById('addUnavailabilityModal'));
+        modal.hide();
+        form.reset();
+        await loadUnavailability();
+      }} catch (error) {{
+        console.error('Error saving:', error);
+        alert('Failed to save: ' + error.message);
+      }}
+    }});
+    
+    // Initial load
+    loadEmployees();
+    loadUnavailability();
+    </script>
+    """
+    
+    return HTMLResponse(_render_page("Employee Availability", body))
