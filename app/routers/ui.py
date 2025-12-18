@@ -646,8 +646,9 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         )
         technical_contact_id = row.get("technical_contact_id")
         technical_name = row.get("technical_name") or ""
+        technical_phone = row.get("technical_phone") or ""
         technical_display = (
-            technical_name or "—"
+            _contact_label(technical_name, technical_phone)
             if technical_contact_id
             else "—"
         )
@@ -679,11 +680,10 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             shift_call_time_display = _to_israel_time(shift_call_time).strftime("%Y-%m-%d %H:%M") if shift_call_time else ""
             # For edit form, we need datetime-local format (YYYY-MM-DDTHH:MM)
             shift_call_time_edit = _to_israel_time(shift_call_time).strftime("%Y-%m-%dT%H:%M") if shift_call_time else ""
-            shift_role_val = escape(shift.get("shift_role") or "")
             shift_notes_val = escape(shift.get("notes") or "")
             reminder_sent = shift.get("reminder_24h_sent_at")
             reminder_badge = (
-                '<span class="badge bg-success">Sent</span>' if reminder_sent 
+                '<span class="badge bg-success">Sent</span>' if reminder_sent
                 else '<span class="badge bg-secondary">Failed</span>'
             )
             
@@ -692,7 +692,6 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                   <td>{emp_name}</td>
                   <td>{emp_phone}</td>
                   <td>{shift_call_time_display}</td>
-                  <td>{shift_role_val}</td>
                   <td class="text-break">{shift_notes_val}</td>
                   <td>{reminder_badge}</td>
                   <td class="text-nowrap">
@@ -713,7 +712,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         
         shift_table_body = "".join(shift_rows) or """
             <tr>
-              <td colspan="7" class="text-center text-muted">אין משמרות / No shifts assigned yet.</td>
+              <td colspan="6" class="text-center text-muted">אין משמרות / No shifts assigned yet.</td>
             </tr>
         """
         
@@ -744,7 +743,6 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                         <th>Employee</th>
                         <th>Phone</th>
                         <th>Shift Time</th>
-                        <th>תפקיד / Role</th>
                         <th>Notes</th>
                         <th>תזכורת / Reminder</th>
                         <th>Actions</th>
