@@ -74,6 +74,12 @@
             z-index: 100;
         }
 
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
         .header h1 {
             font-size: 1.8rem;
             font-weight: 700;
@@ -84,6 +90,89 @@
             display: flex;
             gap: 1rem;
             align-items: center;
+        }
+
+        /* Hamburger Menu */
+        .hamburger-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            transition: all 0.3s;
+        }
+
+        .hamburger-btn span {
+            display: block;
+            width: 24px;
+            height: 3px;
+            background: var(--text-primary);
+            border-radius: 2px;
+            transition: all 0.3s;
+        }
+
+        .hamburger-btn.open span:nth-child(1) {
+            transform: rotate(45deg) translate(5px, 5px);
+        }
+
+        .hamburger-btn.open span:nth-child(2) {
+            opacity: 0;
+        }
+
+        .hamburger-btn.open span:nth-child(3) {
+            transform: rotate(-45deg) translate(7px, -6px);
+        }
+
+        .hamburger-menu {
+            position: fixed;
+            top: 80px;
+            left: -300px;
+            width: 280px;
+            background: var(--bg-primary);
+            border-right: 1px solid var(--border-color);
+            box-shadow: var(--shadow-hover);
+            transition: left 0.3s ease;
+            z-index: 99;
+            max-height: calc(100vh - 80px);
+            overflow-y: auto;
+        }
+
+        .hamburger-menu.open {
+            left: 0;
+        }
+
+        .hamburger-menu-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 98;
+            display: none;
+        }
+
+        .hamburger-menu-overlay.visible {
+            display: block;
+        }
+
+        .hamburger-menu-item {
+            display: block;
+            padding: 1rem 1.5rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.2s;
+        }
+
+        .hamburger-menu-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .hamburger-menu-item:last-child {
+            border-bottom: none;
         }
 
         /* Theme Toggle */
@@ -147,11 +236,41 @@
             cursor: pointer;
         }
 
-        .month-circle.active {
-            background: var(--accent-color);
+        /* Month colors: past/current/future (PHASE 2 - Task 4) */
+        .month-circle.past {
+            background: #d1d5db;
+            color: #6b7280;
+        }
+
+        .month-circle.current {
+            background: var(--success-color);
             color: white;
-            border-color: var(--accent-color);
-            box-shadow: 0 0 0 4px rgba(0, 133, 255, 0.1);
+        }
+
+        .month-circle.future {
+            background: #ffffff;
+            color: var(--text-primary);
+        }
+
+        [data-theme="dark"] .month-circle.past {
+            background: #4b5563;
+            color: #9ca3af;
+        }
+
+        [data-theme="dark"] .month-circle.current {
+            background: #10b981;
+            color: white;
+        }
+
+        [data-theme="dark"] .month-circle.future {
+            background: #6b7280;
+            color: #e5e7eb;
+        }
+
+        .month-circle.selected {
+            outline: 3px solid var(--accent-color);
+            outline-offset: 2px;
+            box-shadow: var(--shadow-hover);
         }
 
         .month-label {
@@ -405,6 +524,41 @@
             cursor: not-allowed;
         }
 
+        /* Action Icons (PHASE 3 - Task 5) */
+        .action-icon {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0.3rem;
+            transition: transform 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .action-icon:hover {
+            transform: scale(1.2);
+        }
+
+        .action-icon.delete {
+            color: var(--danger-color);
+        }
+
+        .action-icon.whatsapp {
+            color: #25D366;
+        }
+
+        .action-icon.whatsapp.sent {
+            color: #0088cc;
+        }
+
+        .actions-container {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
         /* Save Button */
         .save-btn {
             position: fixed;
@@ -561,8 +715,21 @@
         /* Responsive */
         @media (max-width: 768px) {
             .header {
-                flex-direction: column;
-                gap: 1rem;
+                padding: 1rem;
+            }
+
+            .header h1 {
+                font-size: 1.3rem;
+            }
+
+            .header-actions {
+                gap: 0.5rem;
+            }
+
+            .hamburger-menu {
+                width: 240px;
+                top: 70px;
+                max-height: calc(100vh - 70px);
             }
 
             .month-scale {
@@ -587,7 +754,14 @@
 </head>
 <body>
     <div class="header">
-        <h1>JacksonBot 🤖</h1>
+        <div class="header-left">
+            <button class="hamburger-btn" onclick="toggleHamburgerMenu()" aria-label="Menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+            <h1>JacksonBot 🤖</h1>
+        </div>
         <div class="header-actions">
             <button class="theme-toggle" onclick="toggleTheme()">
                 <span id="theme-icon">🌙</span> Dark Mode
@@ -595,6 +769,18 @@
             <a href="/ui" class="btn btn-primary">+ Add Event</a>
         </div>
     </div>
+
+    <!-- Hamburger Menu -->
+    <div class="hamburger-menu-overlay" id="hamburgerOverlay" onclick="closeHamburgerMenu()"></div>
+    <nav class="hamburger-menu" id="hamburgerMenu">
+        <a href="/ui/events" class="hamburger-menu-item" onclick="closeHamburgerMenu()">📅 View Events</a>
+        <a href="/ui/contacts" class="hamburger-menu-item" onclick="closeHamburgerMenu()">👥 Contacts</a>
+        <a href="/ui/employees" class="hamburger-menu-item" onclick="closeHamburgerMenu()">👷 Employees</a>
+        <a href="/ui/messages" class="hamburger-menu-item" onclick="closeHamburgerMenu()">💬 Messages</a>
+        <a href="/ui/calendar-import" class="hamburger-menu-item" onclick="closeHamburgerMenu()">📥 Import Calendar</a>
+        <a href="/ui/shift-organizer" class="hamburger-menu-item" onclick="closeHamburgerMenu()">🗓️ Shift Organizer</a>
+        <a href="/ui/availability" class="hamburger-menu-item" onclick="closeHamburgerMenu()">✅ Availability</a>
+    </nav>
 
     <div class="month-selector">
         <div class="month-scale" id="monthScale">
@@ -629,8 +815,13 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadTheme();
             generateMonthSelector();
+            
+            // Load saved month or default to current
+            const saved = localStorage.getItem('events.selectedMonth');
             const today = new Date();
-            const defaultMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            const currentMonthValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            const defaultMonth = saved || currentMonthValue;
+            
             selectMonth(defaultMonth);
             connectSSE();
         });
@@ -655,34 +846,81 @@
             const toggle = document.querySelector('.theme-toggle');
             if (currentTheme === 'dark') {
                 icon.textContent = '☀️';
-                toggle.childNodes[1].textContent = ' Light Mode';
+                // Find the text node and update it
+                for (let i = 0; i < toggle.childNodes.length; i++) {
+                    if (toggle.childNodes[i].nodeType === Node.TEXT_NODE) {
+                        toggle.childNodes[i].textContent = ' Light Mode';
+                        break;
+                    }
+                }
             } else {
                 icon.textContent = '🌙';
-                toggle.childNodes[1].textContent = ' Dark Mode';
+                for (let i = 0; i < toggle.childNodes.length; i++) {
+                    if (toggle.childNodes[i].nodeType === Node.TEXT_NODE) {
+                        toggle.childNodes[i].textContent = ' Dark Mode';
+                        break;
+                    }
+                }
             }
+        }
+
+        // Hamburger Menu Functions
+        function toggleHamburgerMenu() {
+            const menu = document.getElementById('hamburgerMenu');
+            const overlay = document.getElementById('hamburgerOverlay');
+            const btn = document.querySelector('.hamburger-btn');
+            
+            menu.classList.toggle('open');
+            overlay.classList.toggle('visible');
+            btn.classList.toggle('open');
+        }
+
+        function closeHamburgerMenu() {
+            const menu = document.getElementById('hamburgerMenu');
+            const overlay = document.getElementById('hamburgerOverlay');
+            const btn = document.querySelector('.hamburger-btn');
+            
+            menu.classList.remove('open');
+            overlay.classList.remove('visible');
+            btn.classList.remove('open');
         }
 
         // Month Selector
         function generateMonthSelector() {
             const scale = document.getElementById('monthScale');
             const today = new Date();
+            const currentYear = today.getFullYear();
+            const currentMonth = today.getMonth() + 1;
             const months = [];
 
             // Generate 12 months: 6 before, current, 5 after
             for (let i = -6; i <= 5; i++) {
                 const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+                const monthYear = date.getFullYear();
+                const monthNum = date.getMonth() + 1;
+                
+                // Determine if past, current, or future
+                let timeClass = '';
+                if (monthYear < currentYear || (monthYear === currentYear && monthNum < currentMonth)) {
+                    timeClass = 'past';
+                } else if (monthYear === currentYear && monthNum === currentMonth) {
+                    timeClass = 'current';
+                } else {
+                    timeClass = 'future';
+                }
+                
                 months.push({
-                    year: date.getFullYear(),
-                    month: date.getMonth() + 1,
+                    year: monthYear,
+                    month: monthNum,
                     label: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).replace(' ', '/'),
-                    value: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
-                    isCurrent: i === 0
+                    value: `${monthYear}-${String(monthNum).padStart(2, '0')}`,
+                    timeClass: timeClass
                 });
             }
 
             scale.innerHTML = months.map(m => `
                 <div class="month-item" onclick="selectMonth('${m.value}')">
-                    <div class="month-circle ${m.isCurrent ? 'active' : ''}" data-month="${m.value}">
+                    <div class="month-circle ${m.timeClass}" data-month="${m.value}">
                         ${m.month}
                     </div>
                     <div class="month-label">${m.label}</div>
@@ -693,9 +931,12 @@
         function selectMonth(month) {
             currentMonth = month;
             
-            // Update UI
+            // Save to localStorage (PHASE 2 - Task 3)
+            localStorage.setItem('events.selectedMonth', month);
+            
+            // Update UI - add selected class (PHASE 2 - Task 4)
             document.querySelectorAll('.month-circle').forEach(circle => {
-                circle.classList.toggle('active', circle.dataset.month === month);
+                circle.classList.toggle('selected', circle.dataset.month === month);
             });
 
             // Load events
@@ -802,18 +1043,26 @@
                         <span class="status-chip ${statusClass}">${event.status || 'draft'}</span>
                     </td>
                     <td>
-                        <input type="text" class="inline-edit" value="${escapeHtml(event.producer_name || '')}" 
-                               onchange="markDirty(${event.event_id}, 'producer_name', this.value)">
+                        <div>
+                            <input type="text" class="inline-edit" value="${escapeHtml(event.producer_name || '')}" 
+                                   onchange="markDirty(${event.event_id}, 'producer_name', this.value)"
+                                   placeholder="Name">
+                            ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">${escapeHtml(event.producer_phone)}</div>` : ''}
+                        </div>
                     </td>
                     <td>
-                        <div style="display: flex; gap: 0.5rem; align-items: center;">
-                            <input type="text" class="inline-edit" value="${escapeHtml(event.technical_name || '')}" 
-                                   onchange="markDirty(${event.event_id}, 'technical_name', this.value)"
-                                   style="flex: 1;">
-                            <button class="btn btn-sm btn-primary" onclick="showSuggestions(${event.event_id}, this)"
-                                    title="Suggested technical contacts">
-                                💡
-                            </button>
+                        <div>
+                            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                                <input type="text" class="inline-edit" value="${escapeHtml(event.technical_name || '')}" 
+                                       onchange="markDirty(${event.event_id}, 'technical_name', this.value)"
+                                       style="flex: 1;"
+                                       placeholder="Name">
+                                <button class="btn btn-sm btn-primary" onclick="showSuggestions(${event.event_id}, this)"
+                                        title="Suggested technical contacts">
+                                    💡
+                                </button>
+                            </div>
+                            ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">${escapeHtml(event.technical_phone)}</div>` : ''}
                         </div>
                     </td>
                     <td>
@@ -821,7 +1070,18 @@
                                onchange="markDirty(${event.event_id}, 'notes', this.value)">
                     </td>
                     <td>
-                        <a href="/ui/events/${event.event_id}/edit" class="btn btn-sm">Edit</a>
+                        <div class="actions-container">
+                            <button class="action-icon delete" 
+                                    onclick="deleteEvent(${event.event_id})"
+                                    title="Delete event">
+                                🗑️
+                            </button>
+                            <button class="action-icon whatsapp ${event.init_sent_at ? 'sent' : ''}" 
+                                    onclick="sendWhatsApp(${event.event_id})"
+                                    title="${event.init_sent_at ? 'נשלח בעבר – שלח שוב' : 'שלח וואצאפ'}">
+                                📱
+                            </button>
+                        </div>
                     </td>
                 </tr>
             `;
@@ -965,6 +1225,66 @@
 
             document.querySelector('.suggestions-popover')?.remove();
             showToast(`Suggestion applied: ${name}. Remember to save!`, 'success');
+        }
+
+        // Delete Event (PHASE 3 - Task 5A)
+        async function deleteEvent(eventId) {
+            if (!confirm('Are you sure you want to delete this event? This action cannot be undone.')) {
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/events/${eventId}?org_id=${ORG_ID}`, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    // Remove row from table
+                    const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
+                    if (row) {
+                        row.style.transition = 'opacity 0.3s';
+                        row.style.opacity = '0';
+                        setTimeout(() => row.remove(), 300);
+                    }
+                    
+                    showToast('Event deleted successfully', 'success');
+                    
+                    // Reload events after a short delay
+                    setTimeout(() => loadEvents(currentMonth), 500);
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to delete event: ${error.detail || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting event:', error);
+                showToast('Failed to delete event', 'error');
+            }
+        }
+
+        // Send WhatsApp (PHASE 3 - Task 5B)
+        async function sendWhatsApp(eventId) {
+            try {
+                const response = await fetch(`/api/events/${eventId}/send-whatsapp?org_id=${ORG_ID}`, {
+                    method: 'POST',
+                });
+
+                if (response.ok) {
+                    // Optimistic update - change icon to blue (sent)
+                    const btn = document.querySelector(`tr[data-event-id="${eventId}"] .action-icon.whatsapp`);
+                    if (btn) {
+                        btn.classList.add('sent');
+                        btn.title = 'נשלח בעבר – שלח שוב';
+                    }
+                    
+                    showToast('WhatsApp message sent successfully', 'success');
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to send WhatsApp: ${error.detail || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error sending WhatsApp:', error);
+                showToast('Failed to send WhatsApp message', 'error');
+            }
         }
 
         // SSE Connection

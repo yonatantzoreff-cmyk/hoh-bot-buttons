@@ -221,6 +221,68 @@ async def get_technical_suggestions(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/events/{event_id}")
+async def delete_event(
+    event_id: int,
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """
+    Delete an event (PHASE 3 - Task 5A).
+    """
+    try:
+        # Check if event exists
+        event = hoh.get_event_with_contacts(org_id=org_id, event_id=event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Delete the event
+        hoh.delete_event(org_id=org_id, event_id=event_id)
+        
+        # Broadcast deletion via SSE
+        pubsub = get_pubsub()
+        await pubsub.publish("events", {
+            "type": "event_deleted",
+            "event_id": event_id,
+            "org_id": org_id,
+        })
+        
+        return {"success": True, "message": "Event deleted successfully"}
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Failed to delete event {event_id}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/events/{event_id}/send-whatsapp")
+async def send_whatsapp_for_event(
+    event_id: int,
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """
+    Send WhatsApp INIT message for an event (PHASE 3 - Task 5B).
+    """
+    try:
+        # Check if event exists
+        event = hoh.get_event_with_contacts(org_id=org_id, event_id=event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Send INIT message
+        await hoh.send_init_for_event(org_id=org_id, event_id=event_id)
+        
+        return {"success": True, "message": "WhatsApp message sent successfully"}
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Failed to send WhatsApp for event {event_id}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/sse/events")
 async def sse_events(org_id: int = Query(1)):
     """
