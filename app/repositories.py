@@ -266,6 +266,7 @@ class EventRepository:
                 prod.name AS producer_name,
                 prod.phone AS producer_phone,
                 e.technical_contact_id,
+                tech.name AS technical_name,
                 tech.phone AS technical_phone,
                 e.created_at
             FROM events e

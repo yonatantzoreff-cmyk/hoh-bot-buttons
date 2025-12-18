@@ -509,16 +509,21 @@ class HOHService:
                 event_dict["producer_phone"] = producer_phone
 
             technical_contact_id = event_dict.get("technical_contact_id")
+            technical_name = event_dict.get("technical_name")
             technical_phone = event_dict.get("technical_phone")
 
-            if technical_contact_id and technical_phone is None:
+            if technical_contact_id and (technical_name is None or technical_phone is None):
                 technical_contact = self.contacts.get_contact_by_id(
                     org_id=org_id, contact_id=technical_contact_id
+                )
+                event_dict["technical_name"] = technical_name or self._get_contact_value(
+                    technical_contact, "name"
                 )
                 event_dict["technical_phone"] = technical_phone or self._get_contact_value(
                     technical_contact, "phone"
                 )
             else:
+                event_dict["technical_name"] = technical_name
                 event_dict["technical_phone"] = technical_phone
 
             if event_id:

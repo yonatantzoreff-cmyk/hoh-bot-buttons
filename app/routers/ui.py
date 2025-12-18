@@ -607,13 +607,20 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         # Convert UTC datetimes to local Israel time strings
         show_time_dt = row.get("show_time")
         load_in_time_dt = row.get("load_in_time")
+        load_in_time_local = _to_israel_time(load_in_time_dt)
         created_at = _to_israel_time(row.get("created_at"))
         hall_label = row.get("hall_name") or (
             f"Hall #{row['hall_id']}" if row.get("hall_id") is not None else ""
         )
         date_display = event_date.strftime("%Y-%m-%d") if event_date else ""
         time_display = utc_to_local_time_str(show_time_dt)
-        load_in_display = utc_to_local_time_str(load_in_time_dt)
+        load_in_display = (
+            load_in_time_local.strftime("%H:%M") if load_in_time_local else ""
+        )
+        event_date_str_for_call = event_date.strftime("%Y-%m-%d") if event_date else ""
+        load_in_time_str_for_call = (
+            load_in_time_local.strftime("%H:%M") if load_in_time_local else ""
+        )
         created_at_display = (
             created_at.strftime("%Y-%m-%d %H:%M") if created_at else ""
         )
@@ -632,7 +639,14 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
             if producer_name and producer_phone
             else producer_name or producer_phone
         )
+        technical_contact_id = row.get("technical_contact_id")
+        technical_name = row.get("technical_name") or ""
         technical_phone = row.get("technical_phone") or ""
+        technical_display = (
+            _contact_label(technical_name, technical_phone)
+            if technical_contact_id
+            else "—"
+        )
         init_sent_at = _to_israel_time(row.get("init_sent_at"))
         init_sent_display = (
             init_sent_at.strftime("%Y-%m-%d %H:%M") if init_sent_at else ""
@@ -656,30 +670,27 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         for shift in shifts:
             shift_id = shift.get("shift_id")
             emp_name = escape(shift.get("employee_name") or "")
-            emp_phone = escape(shift.get("employee_phone") or "")
             shift_call_time = shift.get("call_time")
             shift_call_time_display = _to_israel_time(shift_call_time).strftime("%Y-%m-%d %H:%M") if shift_call_time else ""
             # For edit form, we need datetime-local format (YYYY-MM-DDTHH:MM)
             shift_call_time_edit = _to_israel_time(shift_call_time).strftime("%Y-%m-%dT%H:%M") if shift_call_time else ""
-            shift_role_val = escape(shift.get("shift_role") or "")
             shift_notes_val = escape(shift.get("notes") or "")
             reminder_sent = shift.get("reminder_24h_sent_at")
             reminder_badge = (
-                '<span class="badge bg-success">Sent</span>' if reminder_sent 
-                else '<span class="badge bg-secondary">Failed</span>'
+                '<span class="badge bg-success">Delivered</span>'
+                if reminder_sent
+                else '<span class="badge bg-secondary">Not sent</span>'
             )
             
             shift_rows.append(f"""
                 <tr>
                   <td>{emp_name}</td>
-                  <td>{emp_phone}</td>
                   <td>{shift_call_time_display}</td>
-                  <td>{shift_role_val}</td>
                   <td class="text-break">{shift_notes_val}</td>
                   <td>{reminder_badge}</td>
                   <td class="text-nowrap">
-                    <button class="btn btn-sm btn-outline-secondary" 
-                            onclick="showEditShiftModal({event_id}, {shift_id}, '{shift_call_time_edit}', '{shift_role_val}', '{shift_notes_val}')">
+                    <button class="btn btn-sm btn-outline-secondary"
+                            onclick="showEditShiftModal({event_id}, {shift_id}, '{shift_call_time_edit}', '{shift_notes_val}')">
                       Edit
                     </button>
                     <form method="post" action="/ui/events/{event_id}/shifts/{shift_id}/delete" class="d-inline ms-1"
@@ -695,7 +706,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
         
         shift_table_body = "".join(shift_rows) or """
             <tr>
-              <td colspan="7" class="text-center text-muted">אין משמרות / No shifts assigned yet.</td>
+              <td colspan="5" class="text-center text-muted">אין משמרות / No shifts assigned yet.</td>
             </tr>
         """
         
@@ -724,11 +735,9 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                     <thead>
                       <tr>
                         <th>Employee</th>
-                        <th>Phone</th>
                         <th>Shift Time</th>
-                        <th>תפקיד / Role</th>
                         <th>Notes</th>
-                        <th>תזכורת / Reminder</th>
+                        <th>Message Status</th>
                         <th>Actions</th>
                       </tr>
                     </thead>
@@ -741,7 +750,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 <div class="card bg-light">
                   <div class="card-body">
                     <h6>Add Employee to Shift</h6>
-                    <form method="post" action="/ui/events/{event_id}/shifts">
+                    <form method="post" action="/ui/events/{event_id}/shifts" class="shift-create-form" data-event-id="{event_id}">
                       <div class="row">
                         <div class="col-md-3 mb-2">
                           <label class="form-label" for="employee_id_{event_id}">Employee</label>
@@ -751,17 +760,18 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                           </select>
                         </div>
                         <div class="col-md-3 mb-2">
-                          <label class="form-label" for="call_time_{event_id}">Shift Time</label>
-                          <input class="form-control form-control-sm" id="call_time_{event_id}" name="call_time" type="datetime-local" required>
-                        </div>
-                        <div class="col-md-2 mb-2">
-                          <label class="form-label" for="shift_role_{event_id}">תפקיד / Role</label>
-                          <input class="form-control form-control-sm" id="shift_role_{event_id}" name="shift_role" type="text">
+                          <label class="form-label" for="call_date_{event_id}">Shift Date</label>
+                          <input class="form-control form-control-sm" id="call_date_{event_id}" type="date" value="{event_date_str_for_call}" required>
                         </div>
                         <div class="col-md-3 mb-2">
+                          <label class="form-label" for="call_time_{event_id}">Shift Time</label>
+                          <input class="form-control form-control-sm" id="call_time_{event_id}" type="time" value="{load_in_time_str_for_call}" required>
+                        </div>
+                        <div class="col-md-4 mb-2">
                           <label class="form-label" for="notes_{event_id}">Notes</label>
                           <input class="form-control form-control-sm" id="notes_{event_id}" name="notes" type="text">
                         </div>
+                        <input type="hidden" name="call_time" id="call_time_hidden_{event_id}">
                         <div class="col-md-1 mb-2 d-flex align-items-end">
                           <button class="btn btn-sm btn-primary w-100" type="submit">Add</button>
                         </div>
@@ -792,7 +802,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
               <td><span class=\"badge text-bg-{delivery_status_class}\">{delivery_status}</span></td>
               <td class=\"text-break\">{notes}</td>
               <td>{producer_phone}</td>
-              <td>{technical_phone}</td>
+              <td>{technical_contact}</td>
               <td class=\"text-nowrap\">
                 <form method=\"post\" action=\"/ui/events/{event_id}/send-init\" class=\"d-inline\">
                   <button class=\"{whatsapp_btn_class}\" type=\"submit\">Send WhatsApp</button>
@@ -817,7 +827,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 delivery_status_class=delivery_status_class,
                 notes=escape(notes),
                 producer_phone=escape(producer_display),
-                technical_phone=escape(technical_phone),
+                technical_contact=escape(technical_display),
                 event_id=event_id,
                 whatsapp_btn_class=whatsapp_btn_class,
                 sent_indicator=sent_indicator,
@@ -847,10 +857,6 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
               <div class="mb-3">
                 <label class="form-label">Shift Time</label>
                 <input class="form-control" id="edit_call_time" name="call_time" type="datetime-local" required>
-              </div>
-              <div class="mb-3">
-                <label class="form-label">תפקיד / Role</label>
-                <input class="form-control" id="edit_shift_role" name="shift_role" type="text">
               </div>
               <div class="mb-3">
                 <label class="form-label">Notes</label>
@@ -883,7 +889,7 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
                 <th scope=\"col\">Status</th>
                 <th scope=\"col\">Notes</th>
                 <th scope=\"col\">Producer Phone</th>
-                <th scope=\"col\">Technical Phone</th>
+                <th scope=\"col\">Technical Contact</th>
                 <th scope=\"col\">Actions</th>
               </tr>
             </thead>
@@ -906,23 +912,46 @@ async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLRespons
           icon.textContent = '▶';
         }
       }
+
+      function setupShiftForms() {
+        document.querySelectorAll('.shift-create-form').forEach((form) => {
+          form.addEventListener('submit', (event) => {
+            const eventId = form.dataset.eventId;
+            const dateInput = document.getElementById(`call_date_${eventId}`);
+            const timeInput = document.getElementById(`call_time_${eventId}`);
+            const hiddenInput = document.getElementById(`call_time_hidden_${eventId}`);
+
+            if (!dateInput || !hiddenInput) {
+              return;
+            }
+
+            const dateVal = dateInput.value;
+            const timeVal = timeInput ? timeInput.value : '';
+
+            if (!dateVal || !timeVal) {
+              return;
+            }
+
+            hiddenInput.value = `${dateVal}T${timeVal}`;
+          });
+        });
+      }
       
-      function showEditShiftModal(eventId, shiftId, callTime, role, notes) {
+      function showEditShiftModal(eventId, shiftId, callTime, notes) {
         // Unescape HTML entities
         const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = role;
-        const unescapedRole = tempDiv.textContent;
         tempDiv.innerHTML = notes;
         const unescapedNotes = tempDiv.textContent;
-        
+
         document.getElementById('edit_call_time').value = callTime;
-        document.getElementById('edit_shift_role').value = unescapedRole;
         document.getElementById('edit_notes').value = unescapedNotes;
         document.getElementById('editShiftForm').action = '/ui/events/' + eventId + '/shifts/' + shiftId + '/edit';
-        
+
         const modal = new bootstrap.Modal(document.getElementById('editShiftModal'));
         modal.show();
       }
+
+      document.addEventListener('DOMContentLoaded', setupShiftForms);
     </script>
     <script>
       document.addEventListener("DOMContentLoaded", function () {
