@@ -856,7 +856,12 @@
         let notificationEventSource = null;
         const ORG_ID = 1;
         let notificationSound = null;
+        let audioContext = null;
         let isMuted = false;
+        
+        // Constants
+        const EVENT_LOAD_TIMEOUT = 1000; // ms to wait for events to load before scrolling
+        const NAVIGATION_SCROLL_DELAY = 500; // ms to wait before scrolling after navigation
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -1331,10 +1336,20 @@
         
         function initNotificationSound() {
             // Create a simple pleasant notification sound using Web Audio API
+            // AudioContext is created lazily and reused globally
             try {
-                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-                notificationSound = () => {
+                notificationSound = async () => {
                     if (isMuted) return;
+                    
+                    // Create AudioContext on first use (lazy initialization)
+                    if (!audioContext) {
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    
+                    // Resume AudioContext if suspended (required after user interaction in modern browsers)
+                    if (audioContext.state === 'suspended') {
+                        await audioContext.resume();
+                    }
                     
                     const oscillator = audioContext.createOscillator();
                     const gainNode = audioContext.createGain();
@@ -1513,7 +1528,7 @@
                 // Wait for events to load, then navigate to the specific event
                 setTimeout(() => {
                     scrollAndHighlightEvent(parseInt(eventId));
-                }, 1000);
+                }, EVENT_LOAD_TIMEOUT);
             }
         }
         
@@ -1542,7 +1557,7 @@
             // Wait for events to load, then scroll and highlight
             setTimeout(() => {
                 scrollAndHighlightEvent(eventId);
-            }, 500);
+            }, NAVIGATION_SCROLL_DELAY);
         }
         
         function scrollAndHighlightEvent(eventId) {

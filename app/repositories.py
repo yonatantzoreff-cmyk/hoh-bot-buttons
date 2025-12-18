@@ -1261,19 +1261,17 @@ class MessageRepository:
         """
         Mark all messages as read by updating the user's last_seen state.
         """
+        # Use a CTE to compute max_message_id once
         query = text(
             """
-            INSERT INTO user_notification_state (org_id, user_id, last_seen_message_id, last_seen_at, updated_at)
-            VALUES (
-                :org_id, 
-                :user_id, 
-                (SELECT COALESCE(MAX(message_id), 0) FROM messages WHERE org_id = :org_id),
-                NOW(),
-                NOW()
+            WITH max_msg AS (
+                SELECT COALESCE(MAX(message_id), 0) AS max_id FROM messages WHERE org_id = :org_id
             )
+            INSERT INTO user_notification_state (org_id, user_id, last_seen_message_id, last_seen_at, updated_at)
+            SELECT :org_id, :user_id, max_id, NOW(), NOW() FROM max_msg
             ON CONFLICT (org_id, user_id)
             DO UPDATE SET 
-                last_seen_message_id = (SELECT COALESCE(MAX(message_id), 0) FROM messages WHERE org_id = :org_id),
+                last_seen_message_id = (SELECT max_id FROM max_msg),
                 last_seen_at = NOW(),
                 updated_at = NOW()
             """

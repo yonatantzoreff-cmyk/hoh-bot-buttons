@@ -42,20 +42,14 @@ async def whatsapp_webhook(
             body = contact_summary
     logger.info("Incoming WhatsApp body: %s", body)
 
-    # Get message repo to broadcast after handling
-    message_repo = MessageRepository()
-    
-    # Get the current max message_id before handling
-    from app.appdb import get_session
-    from sqlalchemy import text
-    with get_session() as session:
-        result = session.execute(text("SELECT COALESCE(MAX(message_id), 0) as max_id FROM messages WHERE org_id = :org_id"), {"org_id": 1})
-        max_id_before = result.scalar_one()
-
     # Handle webhook
     await hoh.handle_whatsapp_webhook(payload, org_id=1)
     
-    # Get the new message that was just created (if any)
+    # Get the most recent incoming message that was just created
+    # Note: We query after webhook handling to avoid race conditions
+    # The webhook handler creates the message, so we fetch the latest one
+    from app.appdb import get_session
+    from sqlalchemy import text
     with get_session() as session:
         result = session.execute(
             text("""
@@ -64,17 +58,17 @@ async def whatsapp_webhook(
                 FROM messages m
                 LEFT JOIN events e ON m.event_id = e.event_id
                 WHERE m.org_id = :org_id 
-                  AND m.message_id > :max_id_before
                   AND m.direction = 'incoming'
-                ORDER BY m.message_id DESC
+                ORDER BY m.received_at DESC, m.message_id DESC
                 LIMIT 1
             """),
-            {"org_id": 1, "max_id_before": max_id_before}
+            {"org_id": 1}
         )
         new_message = result.mappings().first()
     
     # Broadcast the new message via SSE
-    if new_message:
+    # Only broadcast if we have a valid incoming message with recent timestamp
+    if new_message and new_message.get("received_at"):
         pubsub = get_pubsub()
         await pubsub.publish("notifications", {
             "type": "incoming_message",
