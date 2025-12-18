@@ -221,6 +221,360 @@ async def get_technical_suggestions(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.delete("/events/{event_id}")
+async def delete_event(
+    event_id: int,
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """
+    Delete an event (PHASE 3 - Task 5A).
+    """
+    try:
+        # Check if event exists
+        event = hoh.get_event_with_contacts(org_id=org_id, event_id=event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Delete the event
+        hoh.delete_event(org_id=org_id, event_id=event_id)
+        
+        # Broadcast deletion via SSE
+        pubsub = get_pubsub()
+        await pubsub.publish("events", {
+            "type": "event_deleted",
+            "event_id": event_id,
+            "org_id": org_id,
+        })
+        
+        return {"success": True, "message": "Event deleted successfully"}
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Failed to delete event {event_id}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/events/{event_id}/send-whatsapp")
+async def send_whatsapp_for_event(
+    event_id: int,
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """
+    Send WhatsApp INIT message for an event (PHASE 3 - Task 5B).
+    """
+    try:
+        # Check if event exists
+        event = hoh.get_event_with_contacts(org_id=org_id, event_id=event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Send INIT message
+        await hoh.send_init_for_event(org_id=org_id, event_id=event_id)
+        
+        return {"success": True, "message": "WhatsApp message sent successfully"}
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Failed to send WhatsApp for event {event_id}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/events/{event_id}/shifts")
+async def list_shifts_for_event(
+    event_id: int,
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """
+    Get all shifts for an event (PHASE 4 - Task 7).
+    """
+    try:
+        # Check if event exists
+        event = hoh.get_event_with_contacts(org_id=org_id, event_id=event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Get shifts from repository
+        shifts = hoh.employee_shifts.list_shifts_for_event(org_id=org_id, event_id=event_id)
+        
+        # Format shifts for response
+        result = []
+        for shift in shifts:
+            result.append({
+                "shift_id": shift["shift_id"],
+                "employee_id": shift["employee_id"],
+                "employee_name": shift.get("employee_name"),
+                "employee_phone": shift.get("employee_phone"),
+                "call_time": shift["call_time"].isoformat() if shift.get("call_time") else None,
+                "shift_role": shift.get("shift_role"),
+                "notes": shift.get("notes"),
+                "reminder_24h_sent_at": shift.get("reminder_24h_sent_at").isoformat() if shift.get("reminder_24h_sent_at") else None,
+            })
+        
+        return {"shifts": result}
+    
+    except Exception as e:
+        logger.exception(f"Failed to list shifts for event {event_id}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ShiftCreateRequest(BaseModel):
+    """Request model for creating a shift."""
+    employee_name: str = Field(..., description="Employee name")
+    shift_date: Optional[str] = Field(None, description="Shift date (YYYY-MM-DD)")
+    shift_time: Optional[str] = Field(None, description="Shift time (HH:MM)")
+    notes: Optional[str] = None
+
+
+@router.post("/events/{event_id}/shifts")
+async def create_shift_for_event(
+    event_id: int,
+    shift_data: ShiftCreateRequest,
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """
+    Create a new shift for an event (PHASE 4 - Task 7).
+    """
+    try:
+        from app.time_utils import parse_local_time_to_utc
+        from datetime import datetime, date as date_type
+        
+        # Check if event exists
+        event = hoh.get_event_with_contacts(org_id=org_id, event_id=event_id)
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Find or create employee by name
+        # First try to find existing employee
+        employees = hoh.employees.list_employees(org_id=org_id)
+        employee = next((e for e in employees if e["name"] == shift_data.employee_name), None)
+        
+        if not employee:
+            # Create new employee with placeholder phone
+            employee_id = hoh.employees.create_employee(
+                org_id=org_id,
+                name=shift_data.employee_name,
+                phone="",  # Empty string as placeholder (can be updated later)
+            )
+        else:
+            employee_id = employee["employee_id"]
+        
+        # Determine call_time
+        # Default to event's date and load_in_time
+        shift_date = shift_data.shift_date or (event["event_date"].isoformat() if event.get("event_date") else None)
+        shift_time = shift_data.shift_time
+        
+        if not shift_time and event.get("load_in_time"):
+            # Extract time from load_in_time
+            shift_time = event["load_in_time"].strftime("%H:%M")
+        elif not shift_time:
+            shift_time = "09:00"  # Default fallback
+        
+        if not shift_date:
+            raise HTTPException(status_code=400, detail="Shift date is required")
+        
+        # Parse to UTC datetime
+        call_time_utc = parse_local_time_to_utc(date_type.fromisoformat(shift_date), shift_time)
+        
+        # Create shift
+        shift_id = hoh.employee_shifts.create_shift(
+            org_id=org_id,
+            event_id=event_id,
+            employee_id=employee_id,
+            call_time=call_time_utc,
+            shift_role=None,
+            notes=shift_data.notes,
+        )
+        
+        return {
+            "success": True,
+            "shift_id": shift_id,
+            "employee_id": employee_id,
+        }
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Failed to create shift for event {event_id}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class ShiftPatchRequest(BaseModel):
+    """Request model for updating a shift."""
+    employee_name: Optional[str] = None
+    shift_date: Optional[str] = None  # YYYY-MM-DD
+    shift_time: Optional[str] = None  # HH:MM
+    notes: Optional[str] = None
+
+
+@router.patch("/shifts/{shift_id}")
+async def update_shift(
+    shift_id: int,
+    updates: ShiftPatchRequest,
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """
+    Update a shift (PHASE 4 - Task 7).
+    """
+    try:
+        from app.time_utils import parse_local_time_to_utc, utc_to_local_datetime
+        from datetime import date as date_type
+        
+        # Get current shift
+        shift = hoh.employee_shifts.get_shift_by_id(org_id=org_id, shift_id=shift_id)
+        if not shift:
+            raise HTTPException(status_code=404, detail="Shift not found")
+        
+        # Build update parameters
+        update_params = {}
+        
+        # Handle employee name change
+        if updates.employee_name is not None:
+            # Find or create employee
+            employees = hoh.employees.list_employees(org_id=org_id)
+            employee = next((e for e in employees if e["name"] == updates.employee_name), None)
+            
+            if not employee:
+                # Create new employee with placeholder phone
+                employee_id = hoh.employees.create_employee(
+                    org_id=org_id,
+                    name=updates.employee_name,
+                    phone="",  # Empty string as placeholder
+                )
+                update_params["employee_id"] = employee_id
+            else:
+                update_params["employee_id"] = employee["employee_id"]
+        
+        # Handle date/time changes
+        if updates.shift_date is not None or updates.shift_time is not None:
+            # Get current call_time
+            current_call_time = shift["call_time"]
+            local_dt = utc_to_local_datetime(current_call_time) if current_call_time else None
+            
+            # Determine new date and time
+            if updates.shift_date:
+                new_date = date_type.fromisoformat(updates.shift_date)
+            else:
+                new_date = local_dt.date() if local_dt else date_type.today()
+            
+            if updates.shift_time:
+                new_time = updates.shift_time
+            else:
+                new_time = local_dt.strftime("%H:%M") if local_dt else "09:00"
+            
+            # Convert to UTC
+            new_call_time = parse_local_time_to_utc(new_date, new_time)
+            update_params["call_time"] = new_call_time
+        
+        # Handle notes
+        if updates.notes is not None:
+            update_params["notes"] = updates.notes
+        
+        # Update shift
+        if update_params:
+            hoh.employee_shifts.update_shift(org_id=org_id, shift_id=shift_id, **update_params)
+        
+        return {"success": True, "shift_id": shift_id}
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Failed to update shift {shift_id}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/shifts/{shift_id}")
+async def delete_shift(
+    shift_id: int,
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """
+    Delete a shift (PHASE 4 - Task 7).
+    """
+    try:
+        # Check if shift exists
+        shift = hoh.employee_shifts.get_shift_by_id(org_id=org_id, shift_id=shift_id)
+        if not shift:
+            raise HTTPException(status_code=404, detail="Shift not found")
+        
+        # Delete shift
+        hoh.employee_shifts.delete_shift(org_id=org_id, shift_id=shift_id)
+        
+        return {"success": True, "message": "Shift deleted successfully"}
+    
+    except Exception as e:
+        logger.exception(f"Failed to delete shift {shift_id}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/shifts/{shift_id}/send-reminder")
+async def send_shift_reminder(
+    shift_id: int,
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """
+    Send WhatsApp reminder for a shift (PHASE 4 - Task 7).
+    """
+    try:
+        from app.time_utils import utc_to_local_datetime, format_datetime_for_display
+        from app.credentials import CONTENT_SID_SHIFT_REMINDER
+        from app import twilio_client
+        
+        # Get shift with employee details
+        shift = hoh.employee_shifts.get_shift_by_id(org_id=org_id, shift_id=shift_id)
+        if not shift:
+            raise HTTPException(status_code=404, detail="Shift not found")
+        
+        employee_phone = shift.get("employee_phone")
+        if not employee_phone or employee_phone.strip() == "":
+            raise HTTPException(
+                status_code=400, 
+                detail="Employee has no phone number. Please add a phone number before sending reminders."
+            )
+        
+        # Get event details
+        event = hoh.get_event_with_contacts(org_id=org_id, event_id=shift["event_id"])
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Format times for message
+        call_time_local = utc_to_local_datetime(shift["call_time"])
+        event_date_str = format_datetime_for_display(call_time_local)
+        
+        # Send WhatsApp reminder
+        if CONTENT_SID_SHIFT_REMINDER:
+            twilio_client.send_whatsapp_template(
+                to_phone=employee_phone,
+                content_sid=CONTENT_SID_SHIFT_REMINDER,
+                content_variables={
+                    "1": shift.get("employee_name", "Employee"),
+                    "2": event.get("name", "Event"),
+                    "3": event_date_str,
+                }
+            )
+        else:
+            logger.warning("CONTENT_SID_SHIFT_REMINDER not configured, skipping WhatsApp send")
+        
+        # Mark reminder as sent
+        hoh.employee_shifts.mark_24h_reminder_sent(shift_id=shift_id)
+        
+        return {"success": True, "message": "Reminder sent successfully"}
+    
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        logger.exception(f"Failed to send reminder for shift {shift_id}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/sse/events")
 async def sse_events(org_id: int = Query(1)):
     """
