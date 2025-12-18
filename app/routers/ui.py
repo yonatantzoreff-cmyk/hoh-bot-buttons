@@ -1,5 +1,6 @@
 """Minimal Bootstrap-based UI for managing events via Postgres."""
 import logging
+from typing import Optional
 from datetime import datetime, timezone
 from html import escape
 from string import Template
