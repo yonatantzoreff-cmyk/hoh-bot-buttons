@@ -1169,6 +1169,14 @@ class MessageRepository:
                   AND m.direction = 'incoming'
                   AND (m.message_id > us.last_seen_id OR m.received_at > us.last_seen_time)
             ),
+            latest_incoming_messages AS (
+                SELECT DISTINCT ON (event_id)
+                    event_id,
+                    body AS last_message_snippet
+                FROM messages
+                WHERE org_id = :org_id AND direction = 'incoming'
+                ORDER BY event_id, received_at DESC
+            ),
             event_summary AS (
                 SELECT 
                     e.event_id,
@@ -1178,13 +1186,12 @@ class MessageRepository:
                     h.hall_id,
                     COUNT(um.message_id) AS unread_count,
                     MAX(um.received_at) AS last_message_at,
-                    (SELECT body FROM messages 
-                     WHERE event_id = e.event_id AND direction = 'incoming'
-                     ORDER BY received_at DESC LIMIT 1) AS last_message_snippet
+                    lim.last_message_snippet
                 FROM unread_messages um
                 JOIN events e ON um.event_id = e.event_id
                 LEFT JOIN halls h ON e.hall_id = h.hall_id
-                GROUP BY e.event_id, e.name, e.event_date, h.name, h.hall_id
+                LEFT JOIN latest_incoming_messages lim ON e.event_id = lim.event_id
+                GROUP BY e.event_id, e.name, e.event_date, h.name, h.hall_id, lim.last_message_snippet
                 ORDER BY MAX(um.received_at) DESC
                 LIMIT :limit
             )

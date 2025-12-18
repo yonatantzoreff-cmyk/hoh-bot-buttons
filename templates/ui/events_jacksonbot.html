@@ -1407,9 +1407,11 @@
                 const snippet = escapeHtml(item.last_message_snippet || '');
                 const eventName = escapeHtml(item.event_name || 'אירוע ללא שם');
                 const unreadCount = item.unread_count_for_event || 0;
+                const eventId = parseInt(item.event_id) || 0;
+                const eventDate = escapeHtml(item.event_date || '');
                 
                 return `
-                    <div class="notification-item" onclick="navigateToEvent(${item.event_id}, '${item.event_date}')">
+                    <div class="notification-item" data-event-id="${eventId}" data-event-date="${eventDate}">
                         <div class="notification-item-header">
                             <div class="notification-item-title">${eventName}</div>
                             ${unreadCount > 0 ? `<div class="notification-item-badge">${unreadCount}</div>` : ''}
@@ -1419,6 +1421,17 @@
                     </div>
                 `;
             }).join('');
+            
+            // Add event listeners to notification items (safer than inline onclick)
+            list.querySelectorAll('.notification-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const eventId = parseInt(item.getAttribute('data-event-id'));
+                    const eventDate = item.getAttribute('data-event-date');
+                    if (eventId) {
+                        navigateToEvent(eventId, eventDate);
+                    }
+                });
+            });
         }
         
         function formatTimeAgo(timestamp) {
@@ -1561,11 +1574,18 @@
         }
         
         function scrollAndHighlightEvent(eventId) {
-            // Find the event row
-            const eventRow = document.querySelector(`tr[data-event-id="${eventId}"]`);
+            // Validate and sanitize eventId to prevent XSS
+            const safeEventId = parseInt(eventId);
+            if (!safeEventId || isNaN(safeEventId)) {
+                console.warn('Invalid event ID:', eventId);
+                return;
+            }
+            
+            // Find the event row using the validated ID
+            const eventRow = document.querySelector(`tr[data-event-id="${safeEventId}"]`);
             
             if (!eventRow) {
-                console.warn('Event row not found:', eventId);
+                console.warn('Event row not found:', safeEventId);
                 return;
             }
             
