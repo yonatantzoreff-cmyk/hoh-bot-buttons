@@ -9,6 +9,11 @@ from collections import defaultdict
 
 logger = logging.getLogger(__name__)
 
+# Maximum number of messages to buffer per subscriber
+# This prevents memory issues if a slow client falls behind
+# Messages beyond this limit will be dropped with a warning
+SSE_QUEUE_SIZE = 100
+
 
 class InMemoryPubSub:
     """Simple in-memory pub/sub for broadcasting events within a single process."""
@@ -19,7 +24,7 @@ class InMemoryPubSub:
     
     async def subscribe(self, channel: str) -> asyncio.Queue:
         """Subscribe to a channel and return a queue for receiving messages."""
-        queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+        queue: asyncio.Queue = asyncio.Queue(maxsize=SSE_QUEUE_SIZE)
         async with self._lock:
             self._subscribers[channel].add(queue)
         logger.debug(f"Subscriber added to channel '{channel}'. Total: {len(self._subscribers[channel])}")

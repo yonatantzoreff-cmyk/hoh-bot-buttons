@@ -947,15 +947,24 @@
         }
 
         function selectSuggestion(eventId, name, phone) {
+            // Mark both name and phone as dirty
             markDirty(eventId, 'technical_name', name);
             markDirty(eventId, 'technical_phone', phone);
             
             const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
-            const nameInput = row.querySelector('input[type="text"]');
-            if (nameInput) nameInput.value = name;
+            // Find the technical name input specifically (it has onchange with 'technical_name')
+            const nameInput = row.querySelector('input[onchange*="technical_name"]');
+            if (nameInput) {
+                nameInput.value = name;
+                // Trigger change event to ensure dirty tracking
+                nameInput.dispatchEvent(new Event('change'));
+            }
+            
+            // Note: Phone is tracked in dirtyRows but not displayed in UI
+            // It will be sent when saving the event
 
             document.querySelector('.suggestions-popover')?.remove();
-            showToast('Suggestion applied. Remember to save!', 'success');
+            showToast(`Suggestion applied: ${name}. Remember to save!`, 'success');
         }
 
         // SSE Connection

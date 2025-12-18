@@ -1736,12 +1736,23 @@ class HOHService:
         from app.appdb import get_session
 
         query = text("""
-            WITH producer_events AS (
+            WITH all_events AS (
+                -- Get all events where this producer worked with technical contacts
                 SELECT 
-                    e.event_id,
+                    e.technical_contact_id,
+                    COUNT(*) as times_worked
+                FROM events e
+                WHERE e.org_id = :org_id
+                  AND e.producer_contact_id = :producer_contact_id
+                  AND e.technical_contact_id IS NOT NULL
+                GROUP BY e.technical_contact_id
+            ),
+            recent_events AS (
+                -- Get the most recent event for each technical contact
+                SELECT 
+                    e.technical_contact_id,
                     e.name as event_name,
                     e.event_date,
-                    e.technical_contact_id,
                     ROW_NUMBER() OVER (
                         PARTITION BY e.technical_contact_id 
                         ORDER BY e.event_date DESC
@@ -1755,14 +1766,14 @@ class HOHService:
                 c.contact_id,
                 c.name,
                 c.phone,
-                pe.event_name as last_event_name,
-                pe.event_date as last_event_date,
-                COUNT(*) as times_worked
-            FROM producer_events pe
-            JOIN contacts c ON c.contact_id = pe.technical_contact_id
-            WHERE pe.rn = 1  -- Only get the most recent event per technical contact
-            GROUP BY c.contact_id, c.name, c.phone, pe.event_name, pe.event_date
-            ORDER BY times_worked DESC, pe.event_date DESC
+                re.event_name as last_event_name,
+                re.event_date as last_event_date,
+                ae.times_worked
+            FROM all_events ae
+            JOIN recent_events re ON re.technical_contact_id = ae.technical_contact_id
+            JOIN contacts c ON c.contact_id = ae.technical_contact_id
+            WHERE re.rn = 1
+            ORDER BY ae.times_worked DESC, re.event_date DESC
             LIMIT 10
         """)
 

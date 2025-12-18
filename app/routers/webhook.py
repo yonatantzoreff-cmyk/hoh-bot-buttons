@@ -42,19 +42,11 @@ async def whatsapp_webhook(
             body = contact_summary
     logger.info("Incoming WhatsApp body: %s", body)
 
-    # Handle webhook and get event_id if available
-    result = await hoh.handle_whatsapp_webhook(payload, org_id=1)
+    # Handle webhook
+    await hoh.handle_whatsapp_webhook(payload, org_id=1)
     
-    # Broadcast SSE update if we have an event_id
-    # Note: handle_whatsapp_webhook doesn't currently return event_id,
-    # but the logic is here for future enhancement
-    if result and isinstance(result, dict) and result.get("event_id"):
-        pubsub = get_pubsub()
-        await pubsub.publish("events", {
-            "type": "event_updated",
-            "event_id": result["event_id"],
-            "org_id": 1,
-        })
+    # TODO: Add SSE broadcasting when handle_whatsapp_webhook is refactored to return event_id
+    # This will enable real-time updates when events are modified via WhatsApp
     
     return Response(status_code=204)
 
