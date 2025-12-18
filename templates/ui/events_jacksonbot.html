@@ -1,0 +1,1078 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JacksonBot - Events Management</title>
+    
+    <style>
+        /* CSS Variables for Light/Dark Mode */
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f6f7fb;
+            --bg-tertiary: #eef0f7;
+            --text-primary: #323338;
+            --text-secondary: #676879;
+            --text-muted: #9699a6;
+            --border-color: #d0d4e4;
+            --accent-color: #0085ff;
+            --accent-hover: #0073e6;
+            --success-color: #00c875;
+            --warning-color: #fdab3d;
+            --danger-color: #e44258;
+            --info-color: #579bfc;
+            --chip-bg: #e6f4ff;
+            --chip-text: #0073e6;
+            --shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+            --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.12);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #1c1f3b;
+            --bg-secondary: #292d4d;
+            --bg-tertiary: #353a5f;
+            --text-primary: #ffffff;
+            --text-secondary: #c4c7d7;
+            --text-muted: #8b8fa3;
+            --border-color: #3f4564;
+            --accent-color: #4da6ff;
+            --accent-hover: #66b3ff;
+            --success-color: #00d97e;
+            --warning-color: #f5a623;
+            --danger-color: #f16061;
+            --info-color: #5f9bff;
+            --chip-bg: #2d4a6d;
+            --chip-text: #66b3ff;
+            --shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-primary);
+            padding: 1.5rem 2rem;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        /* Theme Toggle */
+        .theme-toggle {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 0.4rem 0.8rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+
+        .theme-toggle:hover {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        /* Month Selector */
+        .month-selector {
+            padding: 2rem;
+            background: var(--bg-primary);
+            margin: 2rem 2rem 1rem;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .month-scale {
+            display: flex;
+            gap: 1.5rem;
+            overflow-x: auto;
+            padding: 1rem 0;
+            justify-content: center;
+        }
+
+        .month-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .month-item:hover {
+            transform: translateY(-3px);
+        }
+
+        .month-circle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: var(--text-secondary);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        .month-circle.active {
+            background: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 4px rgba(0, 133, 255, 0.1);
+        }
+
+        .month-label {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* Main Container */
+        .container {
+            padding: 0 2rem 2rem;
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+
+        /* Hall Section */
+        .hall-section {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            margin-bottom: 1.5rem;
+            overflow: hidden;
+        }
+
+        .hall-header {
+            padding: 1.5rem 2rem;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .hall-header:hover {
+            background: var(--bg-secondary);
+        }
+
+        .hall-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .hall-count {
+            background: var(--chip-bg);
+            color: var(--chip-text);
+            padding: 0.3rem 0.8rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .collapse-icon {
+            font-size: 1.2rem;
+            color: var(--text-muted);
+            transition: transform 0.3s;
+        }
+
+        .collapse-icon.collapsed {
+            transform: rotate(-90deg);
+        }
+
+        .hall-body {
+            padding: 1.5rem;
+        }
+
+        .hall-body.hidden {
+            display: none;
+        }
+
+        /* Events Table */
+        .events-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .events-table thead {
+            background: var(--bg-secondary);
+        }
+
+        .events-table th {
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            cursor: pointer;
+            user-select: none;
+            position: relative;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .events-table th:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .events-table th.sortable::after {
+            content: ' ↕';
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .events-table th.sorted-asc::after {
+            content: ' ↑';
+            color: var(--accent-color);
+        }
+
+        .events-table th.sorted-desc::after {
+            content: ' ↓';
+            color: var(--accent-color);
+        }
+
+        .events-table td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+
+        .events-table tr {
+            transition: background 0.2s;
+        }
+
+        .events-table tbody tr:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .events-table tbody tr.dirty {
+            background: #fff9e6;
+            border-left: 4px solid var(--warning-color);
+        }
+
+        [data-theme="dark"] .events-table tbody tr.dirty {
+            background: #3d3420;
+        }
+
+        /* Inline Edit Fields */
+        .inline-edit {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .inline-edit:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0, 133, 255, 0.1);
+        }
+
+        .inline-edit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Status Chip */
+        .status-chip {
+            display: inline-block;
+            padding: 0.4rem 0.9rem;
+            border-radius: 16px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+
+        .status-chip.draft {
+            background: #e6e9f0;
+            color: #5a5f7d;
+        }
+
+        .status-chip.pending {
+            background: #fff4e6;
+            color: #d97706;
+        }
+
+        .status-chip.confirmed {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-chip.cancelled {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        [data-theme="dark"] .status-chip.draft {
+            background: #3d4157;
+            color: #c4c7d7;
+        }
+
+        [data-theme="dark"] .status-chip.pending {
+            background: #4d3d1a;
+            color: #fbbf24;
+        }
+
+        [data-theme="dark"] .status-chip.confirmed {
+            background: #1a4d3a;
+            color: #34d399;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #00b56a;
+            box-shadow: var(--shadow-hover);
+        }
+
+        .btn-sm {
+            padding: 0.3rem 0.7rem;
+            font-size: 0.8rem;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Save Button */
+        .save-btn {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 1rem 2rem;
+            background: var(--success-color);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: var(--shadow-hover);
+            z-index: 1000;
+            display: none;
+            animation: slideIn 0.3s;
+        }
+
+        .save-btn.visible {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(100px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 0.8s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Suggestions Popover */
+        .suggestions-popover {
+            position: absolute;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: var(--shadow-hover);
+            max-width: 400px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .suggestions-popover.visible {
+            display: block;
+        }
+
+        .suggestion-item {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .suggestion-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .suggestion-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .suggestion-details {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.3rem;
+        }
+
+        .suggestion-badge {
+            display: inline-block;
+            background: var(--chip-bg);
+            color: var(--chip-text);
+            padding: 0.2rem 0.5rem;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            margin-top: 0.3rem;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Notification Toast */
+        .toast {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            box-shadow: var(--shadow-hover);
+            z-index: 2000;
+            display: none;
+            animation: slideInRight 0.3s;
+        }
+
+        .toast.visible {
+            display: block;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast.success {
+            border-left: 4px solid var(--success-color);
+        }
+
+        .toast.error {
+            border-left: 4px solid var(--danger-color);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .month-scale {
+                gap: 1rem;
+            }
+
+            .month-circle {
+                width: 50px;
+                height: 50px;
+            }
+
+            .events-table {
+                font-size: 0.85rem;
+            }
+
+            .events-table th,
+            .events-table td {
+                padding: 0.7rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>JacksonBot 🤖</h1>
+        <div class="header-actions">
+            <button class="theme-toggle" onclick="toggleTheme()">
+                <span id="theme-icon">🌙</span> Dark Mode
+            </button>
+            <a href="/ui" class="btn btn-primary">+ Add Event</a>
+        </div>
+    </div>
+
+    <div class="month-selector">
+        <div class="month-scale" id="monthScale">
+            <!-- Month circles will be generated by JavaScript -->
+        </div>
+    </div>
+
+    <div class="container" id="eventsContainer">
+        <div class="empty-state">
+            <div class="spinner" style="width: 40px; height: 40px; border-width: 4px;"></div>
+            <p style="margin-top: 1rem;">Loading events...</p>
+        </div>
+    </div>
+
+    <button class="save-btn" id="saveBtn" onclick="saveChanges()">
+        <span>💾</span> Save Changes
+    </button>
+
+    <div class="toast" id="toast">
+        <div id="toastMessage"></div>
+    </div>
+
+    <script>
+        // Global state
+        let currentMonth = '';
+        let currentTheme = 'light';
+        let dirtyRows = new Map();
+        let eventSource = null;
+        const ORG_ID = 1;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTheme();
+            generateMonthSelector();
+            const today = new Date();
+            const defaultMonth = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            selectMonth(defaultMonth);
+            connectSSE();
+        });
+
+        // Theme Management
+        function loadTheme() {
+            const saved = localStorage.getItem('theme') || 'light';
+            currentTheme = saved;
+            document.documentElement.setAttribute('data-theme', saved);
+            updateThemeIcon();
+        }
+
+        function toggleTheme() {
+            currentTheme = currentTheme === 'light' ? 'dark' : 'light';
+            localStorage.setItem('theme', currentTheme);
+            document.documentElement.setAttribute('data-theme', currentTheme);
+            updateThemeIcon();
+        }
+
+        function updateThemeIcon() {
+            const icon = document.getElementById('theme-icon');
+            const toggle = document.querySelector('.theme-toggle');
+            if (currentTheme === 'dark') {
+                icon.textContent = '☀️';
+                toggle.childNodes[1].textContent = ' Light Mode';
+            } else {
+                icon.textContent = '🌙';
+                toggle.childNodes[1].textContent = ' Dark Mode';
+            }
+        }
+
+        // Month Selector
+        function generateMonthSelector() {
+            const scale = document.getElementById('monthScale');
+            const today = new Date();
+            const months = [];
+
+            // Generate 12 months: 6 before, current, 5 after
+            for (let i = -6; i <= 5; i++) {
+                const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+                months.push({
+                    year: date.getFullYear(),
+                    month: date.getMonth() + 1,
+                    label: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).replace(' ', '/'),
+                    value: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
+                    isCurrent: i === 0
+                });
+            }
+
+            scale.innerHTML = months.map(m => `
+                <div class="month-item" onclick="selectMonth('${m.value}')">
+                    <div class="month-circle ${m.isCurrent ? 'active' : ''}" data-month="${m.value}">
+                        ${m.month}
+                    </div>
+                    <div class="month-label">${m.label}</div>
+                </div>
+            `).join('');
+        }
+
+        function selectMonth(month) {
+            currentMonth = month;
+            
+            // Update UI
+            document.querySelectorAll('.month-circle').forEach(circle => {
+                circle.classList.toggle('active', circle.dataset.month === month);
+            });
+
+            // Load events
+            loadEvents(month);
+        }
+
+        // Load Events
+        async function loadEvents(month) {
+            try {
+                const response = await fetch(`/api/events?month=${month}&org_id=${ORG_ID}`);
+                const data = await response.json();
+                renderEvents(data);
+            } catch (error) {
+                console.error('Failed to load events:', error);
+                showToast('Failed to load events', 'error');
+            }
+        }
+
+        // Render Events
+        function renderEvents(data) {
+            const container = document.getElementById('eventsContainer');
+            
+            if (!data.halls || Object.keys(data.halls).length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📅</div>
+                        <h3>No events for this month</h3>
+                        <p>Select a different month or add a new event</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Sort events by date (ascending - earliest first) for each hall
+            Object.keys(data.halls).forEach(hallName => {
+                data.halls[hallName].sort((a, b) => {
+                    const dateA = a.event_date ? new Date(a.event_date).getTime() : 0;
+                    const dateB = b.event_date ? new Date(b.event_date).getTime() : 0;
+                    return dateA - dateB;
+                });
+            });
+
+            container.innerHTML = Object.entries(data.halls).map(([hallName, events]) => `
+                <div class="hall-section">
+                    <div class="hall-header" onclick="toggleHall(this)">
+                        <div class="hall-title">
+                            ${hallName}
+                            <span class="hall-count">${events.length} events</span>
+                        </div>
+                        <div class="collapse-icon">▼</div>
+                    </div>
+                    <div class="hall-body">
+                        <table class="events-table" data-hall="${hallName}">
+                            <thead>
+                                <tr>
+                                    <th class="sortable" onclick="sortTable(this, 'name')">Name</th>
+                                    <th class="sortable sorted-asc" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date</th>
+                                    <th class="sortable" onclick="sortTable(this, 'show_time')">Show Time</th>
+                                    <th class="sortable" onclick="sortTable(this, 'load_in_time')">Load In</th>
+                                    <th>Status</th>
+                                    <th>Producer</th>
+                                    <th>Technical</th>
+                                    <th>Notes</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${events.map(event => renderEventRow(event)).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            `).join('');
+
+            // Restore column order from localStorage
+            restoreColumnOrder();
+        }
+
+        function renderEventRow(event) {
+            const statusClass = (event.status || 'draft').toLowerCase();
+            const showTime = event.show_time ? new Date(event.show_time).toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}) : '';
+            const loadInTime = event.load_in_time ? new Date(event.load_in_time).toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}) : '';
+            const eventDate = event.event_date ? new Date(event.event_date).toLocaleDateString('en-US') : '';
+
+            return `
+                <tr data-event-id="${event.event_id}">
+                    <td>
+                        <input type="text" class="inline-edit" value="${escapeHtml(event.name || '')}" 
+                               onchange="markDirty(${event.event_id}, 'name', this.value)">
+                    </td>
+                    <td>
+                        <input type="date" class="inline-edit" value="${event.event_date || ''}" 
+                               onchange="markDirty(${event.event_id}, 'event_date', this.value)">
+                    </td>
+                    <td>
+                        <input type="time" class="inline-edit" value="${event.show_time ? event.show_time.substring(11, 16) : ''}" 
+                               onchange="markDirty(${event.event_id}, 'show_time', this.value)">
+                    </td>
+                    <td>
+                        <input type="time" class="inline-edit" value="${event.load_in_time ? event.load_in_time.substring(11, 16) : ''}" 
+                               onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
+                    </td>
+                    <td>
+                        <span class="status-chip ${statusClass}">${event.status || 'draft'}</span>
+                    </td>
+                    <td>
+                        <input type="text" class="inline-edit" value="${escapeHtml(event.producer_name || '')}" 
+                               onchange="markDirty(${event.event_id}, 'producer_name', this.value)">
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <input type="text" class="inline-edit" value="${escapeHtml(event.technical_name || '')}" 
+                                   onchange="markDirty(${event.event_id}, 'technical_name', this.value)"
+                                   style="flex: 1;">
+                            <button class="btn btn-sm btn-primary" onclick="showSuggestions(${event.event_id}, this)"
+                                    title="Suggested technical contacts">
+                                💡
+                            </button>
+                        </div>
+                    </td>
+                    <td>
+                        <input type="text" class="inline-edit" value="${escapeHtml(event.notes || '')}" 
+                               onchange="markDirty(${event.event_id}, 'notes', this.value)">
+                    </td>
+                    <td>
+                        <a href="/ui/events/${event.event_id}/edit" class="btn btn-sm">Edit</a>
+                    </td>
+                </tr>
+            `;
+        }
+
+        // Hall Collapse
+        function toggleHall(header) {
+            const body = header.nextElementSibling;
+            const icon = header.querySelector('.collapse-icon');
+            body.classList.toggle('hidden');
+            icon.classList.toggle('collapsed');
+        }
+
+        // Dirty Tracking
+        function markDirty(eventId, field, value) {
+            if (!dirtyRows.has(eventId)) {
+                dirtyRows.set(eventId, {});
+            }
+            dirtyRows.get(eventId)[field] = value;
+
+            // Mark row visually
+            const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
+            if (row) row.classList.add('dirty');
+
+            // Show save button
+            document.getElementById('saveBtn').classList.add('visible');
+        }
+
+        // Save Changes
+        async function saveChanges() {
+            const saveBtn = document.getElementById('saveBtn');
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner"></span> Saving...';
+
+            let successCount = 0;
+            let errorCount = 0;
+
+            for (const [eventId, changes] of dirtyRows.entries()) {
+                try {
+                    const response = await fetch(`/api/events/${eventId}?org_id=${ORG_ID}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(changes)
+                    });
+
+                    if (response.ok) {
+                        successCount++;
+                        const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
+                        if (row) row.classList.remove('dirty');
+                    } else {
+                        errorCount++;
+                        const error = await response.json();
+                        console.error(`Failed to update event ${eventId}:`, error);
+                    }
+                } catch (error) {
+                    errorCount++;
+                    console.error(`Error updating event ${eventId}:`, error);
+                }
+            }
+
+            dirtyRows.clear();
+            saveBtn.classList.remove('visible');
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<span>💾</span> Save Changes';
+
+            if (errorCount === 0) {
+                showToast(`Successfully saved ${successCount} event(s)`, 'success');
+            } else {
+                showToast(`Saved ${successCount}, failed ${errorCount}`, 'error');
+            }
+        }
+
+        // Technical Suggestions
+        async function showSuggestions(eventId, button) {
+            try {
+                const response = await fetch(`/api/events/${eventId}/technical-suggestions?org_id=${ORG_ID}`);
+                const suggestions = await response.json();
+
+                if (suggestions.length === 0) {
+                    showToast('No suggestions available', 'info');
+                    return;
+                }
+
+                // Create popover
+                const existing = document.querySelector('.suggestions-popover');
+                if (existing) existing.remove();
+
+                const popover = document.createElement('div');
+                popover.className = 'suggestions-popover visible';
+                popover.style.position = 'fixed';
+                
+                const rect = button.getBoundingClientRect();
+                popover.style.top = `${rect.bottom + 5}px`;
+                popover.style.left = `${rect.left - 300}px`;
+
+                popover.innerHTML = suggestions.map(s => `
+                    <div class="suggestion-item" onclick="selectSuggestion(${eventId}, '${escapeHtml(s.name)}', '${escapeHtml(s.phone)}')">
+                        <div class="suggestion-name">${escapeHtml(s.name)}</div>
+                        <div class="suggestion-details">
+                            ${escapeHtml(s.phone)}<br>
+                            Last: ${escapeHtml(s.last_event_name || 'N/A')} (${s.last_event_date || 'N/A'})
+                        </div>
+                        <span class="suggestion-badge">Worked ${s.times_worked}x</span>
+                    </div>
+                `).join('');
+
+                document.body.appendChild(popover);
+
+                // Close on outside click
+                setTimeout(() => {
+                    document.addEventListener('click', function closePopover(e) {
+                        if (!popover.contains(e.target) && e.target !== button) {
+                            popover.remove();
+                            document.removeEventListener('click', closePopover);
+                        }
+                    });
+                }, 100);
+
+            } catch (error) {
+                console.error('Failed to load suggestions:', error);
+                showToast('Failed to load suggestions', 'error');
+            }
+        }
+
+        function selectSuggestion(eventId, name, phone) {
+            // Mark both name and phone as dirty
+            markDirty(eventId, 'technical_name', name);
+            markDirty(eventId, 'technical_phone', phone);
+            
+            const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
+            // Find the technical name input specifically (it has onchange with 'technical_name')
+            const nameInput = row.querySelector('input[onchange*="technical_name"]');
+            if (nameInput) {
+                nameInput.value = name;
+                // Trigger change event to ensure dirty tracking
+                nameInput.dispatchEvent(new Event('change'));
+            }
+            
+            // Note: Phone is tracked in dirtyRows but not displayed in UI
+            // It will be sent when saving the event
+
+            document.querySelector('.suggestions-popover')?.remove();
+            showToast(`Suggestion applied: ${name}. Remember to save!`, 'success');
+        }
+
+        // SSE Connection
+        function connectSSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            eventSource = new EventSource(`/api/sse/events?org_id=${ORG_ID}`);
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('SSE event received:', data);
+
+                    if (data.type === 'event_updated') {
+                        // Reload current month if event is in current view
+                        loadEvents(currentMonth);
+                        showToast('Event updated by another user', 'info');
+                    }
+                } catch (error) {
+                    console.error('SSE parse error:', error);
+                }
+            };
+
+            eventSource.onerror = (error) => {
+                console.error('SSE error:', error);
+                // Reconnect after delay
+                setTimeout(() => connectSSE(), 5000);
+            };
+        }
+
+        // Sorting
+        // Note: Sort state is NOT saved to localStorage, so on page refresh,
+        // the default sort (by date, ascending) is always applied
+        function sortTable(th, field) {
+            const table = th.closest('table');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            // Determine sort direction (toggle between asc/desc)
+            let direction = 'asc';
+            if (th.classList.contains('sorted-asc')) {
+                direction = 'desc';
+            }
+
+            // Clear all sort indicators in this table
+            table.querySelectorAll('th').forEach(h => {
+                h.classList.remove('sorted-asc', 'sorted-desc');
+            });
+
+            // Sort rows
+            rows.sort((a, b) => {
+                let aVal = a.querySelector(`input[onchange*="${field}"]`)?.value || '';
+                let bVal = b.querySelector(`input[onchange*="${field}"]`)?.value || '';
+
+                // Handle date/time fields - convert to timestamps for proper sorting
+                if (field === 'event_date' || field === 'show_time' || field === 'load_in_time') {
+                    aVal = aVal ? new Date(aVal).getTime() : 0;
+                    bVal = bVal ? new Date(bVal).getTime() : 0;
+                }
+
+                if (direction === 'asc') {
+                    return aVal > bVal ? 1 : -1;
+                } else {
+                    return aVal < bVal ? 1 : -1;
+                }
+            });
+
+            // Re-append sorted rows to DOM
+            rows.forEach(row => tbody.appendChild(row));
+
+            // Update sort indicator on clicked column
+            th.classList.add(direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
+        }
+
+        // Column Order (placeholder - would need drag & drop library)
+        function restoreColumnOrder() {
+            // Future: Implement drag & drop with a library like SortableJS
+            // and save/restore column order from localStorage
+        }
+
+        // Toast Notifications
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            
+            toast.className = `toast visible ${type}`;
+            toastMessage.textContent = message;
+
+            setTimeout(() => {
+                toast.classList.remove('visible');
+            }, 3000);
+        }
+
+        // Utility
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (eventSource) {
+                eventSource.close();
+            }
+        });
+    </script>
+</body>
+</html>

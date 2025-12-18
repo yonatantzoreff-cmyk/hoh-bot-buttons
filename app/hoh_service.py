@@ -1723,3 +1723,64 @@ class HOHService:
             channel="whatsapp",
             status="open",
         )
+
+    def get_technical_suggestions_for_producer(
+        self, org_id: int, producer_contact_id: int
+    ) -> List[Dict[str, Any]]:
+        """
+        Get suggested technical contacts based on producer history.
+        Returns contacts who have worked with this producer before,
+        sorted by frequency and recency.
+        """
+        from sqlalchemy import text
+        from app.appdb import get_session
+
+        query = text("""
+            WITH all_events AS (
+                -- Get all events where this producer worked with technical contacts
+                SELECT 
+                    e.technical_contact_id,
+                    COUNT(*) as times_worked
+                FROM events e
+                WHERE e.org_id = :org_id
+                  AND e.producer_contact_id = :producer_contact_id
+                  AND e.technical_contact_id IS NOT NULL
+                GROUP BY e.technical_contact_id
+            ),
+            recent_events AS (
+                -- Get the most recent event for each technical contact
+                SELECT 
+                    e.technical_contact_id,
+                    e.name as event_name,
+                    e.event_date,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY e.technical_contact_id 
+                        ORDER BY e.event_date DESC
+                    ) as rn
+                FROM events e
+                WHERE e.org_id = :org_id
+                  AND e.producer_contact_id = :producer_contact_id
+                  AND e.technical_contact_id IS NOT NULL
+            )
+            SELECT 
+                c.contact_id,
+                c.name,
+                c.phone,
+                re.event_name as last_event_name,
+                re.event_date as last_event_date,
+                ae.times_worked
+            FROM all_events ae
+            JOIN recent_events re ON re.technical_contact_id = ae.technical_contact_id
+            JOIN contacts c ON c.contact_id = ae.technical_contact_id
+            WHERE re.rn = 1
+            ORDER BY ae.times_worked DESC, re.event_date DESC
+            LIMIT 10
+        """)
+
+        with get_session() as session:
+            result = session.execute(
+                query,
+                {"org_id": org_id, "producer_contact_id": producer_contact_id},
+            )
+            rows = result.mappings().all()
+            return [dict(row) for row in rows]

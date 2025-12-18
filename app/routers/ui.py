@@ -599,7 +599,15 @@ async def ui_send_init(
 
 
 @router.get("/ui/events", response_class=HTMLResponse)
-async def list_events(hoh: HOHService = Depends(get_hoh_service)) -> HTMLResponse:
+async def list_events() -> HTMLResponse:
+    """JacksonBot redesigned events UI."""
+    with open("templates/ui/events_jacksonbot.html", "r", encoding="utf-8") as f:
+        return HTMLResponse(content=f.read())
+
+
+@router.get("/ui/events/legacy", response_class=HTMLResponse)
+async def list_events_legacy(hoh: HOHService = Depends(get_hoh_service)) -> HTMLResponse:
+    """Legacy events UI (kept for reference)."""
     events = hoh.list_events_for_org(org_id=1)
     # Get all active employees for dropdown
     active_employees = hoh.list_employees(org_id=1, active_only=True)

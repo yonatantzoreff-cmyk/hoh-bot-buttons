@@ -6,6 +6,7 @@ from fastapi import APIRouter, Request, Depends, Response
 from app.dependencies import get_hoh_service
 from app.hoh_service import HOHService
 from app.repositories import MessageDeliveryLogRepository, MessageRepository
+from app.pubsub import get_pubsub
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,12 @@ async def whatsapp_webhook(
             body = contact_summary
     logger.info("Incoming WhatsApp body: %s", body)
 
+    # Handle webhook
     await hoh.handle_whatsapp_webhook(payload, org_id=1)
+    
+    # TODO: Add SSE broadcasting when handle_whatsapp_webhook is refactored to return event_id
+    # This will enable real-time updates when events are modified via WhatsApp
+    
     return Response(status_code=204)
 
 
