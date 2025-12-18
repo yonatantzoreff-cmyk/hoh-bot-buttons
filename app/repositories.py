@@ -1617,6 +1617,282 @@ class EmployeeShiftRepository:
             session.execute(q, {"org_id": org_id, "shift_id": shift_id})
             session.commit()
 
+    def get_shifts_for_month(
+        self,
+        org_id: int,
+        year: int,
+        month: int,
+    ) -> list[dict]:
+        """מחזיר משמרות בחודש מסוים (כולל יום לפני ויום אחרי לחישובי מנוחה)"""
+        from datetime import date
+        from calendar import monthrange
+        
+        start_date = date(year, month, 1)
+        _, last_day = monthrange(year, month)
+        end_date = date(year, month, last_day)
+        
+        # Expand range by 1 day before and after for rest calculations
+        from datetime import datetime as dt, time, timedelta
+        from zoneinfo import ZoneInfo
+        
+        israel_tz = ZoneInfo("Asia/Jerusalem")
+        start_dt = dt.combine(start_date - timedelta(days=1), time.min).replace(tzinfo=israel_tz)
+        end_dt = dt.combine(end_date + timedelta(days=1), time.max).replace(tzinfo=israel_tz)
+        
+        q = text("""
+            SELECT 
+                s.*,
+                e.name AS employee_name,
+                e.phone AS employee_phone,
+                ev.name AS event_name,
+                ev.event_date,
+                ev.show_time,
+                ev.load_in_time
+            FROM employee_shifts s
+            JOIN employees e ON e.employee_id = s.employee_id AND e.org_id = s.org_id
+            JOIN events ev ON ev.event_id = s.event_id AND ev.org_id = s.org_id
+            WHERE s.org_id = :org_id
+              AND (s.start_at IS NULL OR s.start_at <= :end_dt)
+              AND (s.call_time >= :start_dt OR s.end_at >= :start_dt)
+            ORDER BY s.call_time, e.name
+        """)
+        
+        with get_session() as session:
+            res = session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "start_dt": start_dt,
+                    "end_dt": end_dt,
+                },
+            )
+            return [dict(r) for r in res.mappings().all()]
+
+    def upsert_shift(
+        self,
+        org_id: int,
+        event_id: int,
+        employee_id: int,
+        start_at: datetime,
+        end_at: datetime,
+        shift_type: Optional[str] = None,
+        is_locked: bool = False,
+        shift_id: Optional[int] = None,
+    ) -> int:
+        """יוצר או מעדכן משמרת. אם shift_id מסופק - מעדכן, אחרת יוצר חדש"""
+        now = now_utc()
+        
+        if shift_id:
+            # Update existing shift
+            q = text("""
+                UPDATE employee_shifts
+                SET employee_id = :employee_id,
+                    start_at = :start_at,
+                    end_at = :end_at,
+                    call_time = :start_at,
+                    shift_type = :shift_type,
+                    is_locked = :is_locked,
+                    updated_at = :now
+                WHERE org_id = :org_id
+                  AND shift_id = :shift_id
+                RETURNING shift_id
+            """)
+            
+            with get_session() as session:
+                res = session.execute(
+                    q,
+                    {
+                        "org_id": org_id,
+                        "shift_id": shift_id,
+                        "employee_id": employee_id,
+                        "start_at": start_at,
+                        "end_at": end_at,
+                        "shift_type": shift_type,
+                        "is_locked": is_locked,
+                        "now": now,
+                    },
+                )
+                session.commit()
+                return res.scalar_one()
+        else:
+            # Create new shift
+            q = text("""
+                INSERT INTO employee_shifts (
+                    org_id, event_id, employee_id,
+                    start_at, end_at, call_time,
+                    shift_type, is_locked,
+                    created_at, updated_at
+                )
+                VALUES (
+                    :org_id, :event_id, :employee_id,
+                    :start_at, :end_at, :start_at,
+                    :shift_type, :is_locked,
+                    :now, :now
+                )
+                RETURNING shift_id
+            """)
+            
+            with get_session() as session:
+                res = session.execute(
+                    q,
+                    {
+                        "org_id": org_id,
+                        "event_id": event_id,
+                        "employee_id": employee_id,
+                        "start_at": start_at,
+                        "end_at": end_at,
+                        "shift_type": shift_type,
+                        "is_locked": is_locked,
+                        "now": now,
+                    },
+                )
+                session.commit()
+                return res.scalar_one()
+
+    def delete_shifts_for_event(self, org_id: int, event_id: int, keep_locked: bool = True) -> None:
+        """מחיקת כל המשמרות לאירוע (אופציה לשמור משמרות נעולות)"""
+        if keep_locked:
+            q = text("""
+                DELETE FROM employee_shifts
+                WHERE org_id = :org_id
+                  AND event_id = :event_id
+                  AND (is_locked = FALSE OR is_locked IS NULL)
+            """)
+        else:
+            q = text("""
+                DELETE FROM employee_shifts
+                WHERE org_id = :org_id
+                  AND event_id = :event_id
+            """)
+        
+        with get_session() as session:
+            session.execute(q, {"org_id": org_id, "event_id": event_id})
+            session.commit()
+
+
+class EmployeeUnavailabilityRepository:
+    """אחראי על טבלת employee_unavailability (אי-זמינות עובדים)"""
+
+    def create_unavailability(
+        self,
+        org_id: int,
+        employee_id: int,
+        start_at: datetime,
+        end_at: datetime,
+        note: Optional[str] = None,
+    ) -> int:
+        """יוצר בלוק אי-זמינות חדש ומחזיר unavailability_id"""
+        q = text("""
+            INSERT INTO employee_unavailability (
+                org_id, employee_id, start_at, end_at, note, created_at, updated_at
+            )
+            VALUES (:org_id, :employee_id, :start_at, :end_at, :note, :now, :now)
+            RETURNING unavailability_id
+        """)
+        
+        now = now_utc()
+        
+        with get_session() as session:
+            res = session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "employee_id": employee_id,
+                    "start_at": start_at,
+                    "end_at": end_at,
+                    "note": note,
+                    "now": now,
+                },
+            )
+            unavailability_id = res.scalar_one()
+            session.commit()
+            return unavailability_id
+
+    def get_unavailability_for_month(
+        self,
+        org_id: int,
+        year: int,
+        month: int,
+    ) -> list[dict]:
+        """מחזיר את כל בלוקי האי-זמינות בחודש מסוים"""
+        from datetime import date
+        from calendar import monthrange
+        
+        start_date = date(year, month, 1)
+        _, last_day = monthrange(year, month)
+        end_date = date(year, month, last_day)
+        
+        # Convert to timezone-aware datetime (start of day and end of day in UTC)
+        from datetime import datetime as dt, time
+        from zoneinfo import ZoneInfo
+        
+        israel_tz = ZoneInfo("Asia/Jerusalem")
+        start_dt = dt.combine(start_date, time.min).replace(tzinfo=israel_tz)
+        end_dt = dt.combine(end_date, time.max).replace(tzinfo=israel_tz)
+        
+        q = text("""
+            SELECT u.*, e.name AS employee_name, e.phone AS employee_phone
+            FROM employee_unavailability u
+            JOIN employees e ON e.employee_id = u.employee_id AND e.org_id = u.org_id
+            WHERE u.org_id = :org_id
+              AND u.start_at <= :end_dt
+              AND u.end_at >= :start_dt
+            ORDER BY u.start_at, e.name
+        """)
+        
+        with get_session() as session:
+            res = session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "start_dt": start_dt,
+                    "end_dt": end_dt,
+                },
+            )
+            return [dict(r) for r in res.mappings().all()]
+
+    def get_unavailability_for_employee(
+        self,
+        org_id: int,
+        employee_id: int,
+        start_at: datetime,
+        end_at: datetime,
+    ) -> list[dict]:
+        """מחזיר אי-זמינות לעובד בטווח זמן מסוים"""
+        q = text("""
+            SELECT *
+            FROM employee_unavailability
+            WHERE org_id = :org_id
+              AND employee_id = :employee_id
+              AND start_at < :end_at
+              AND end_at > :start_at
+            ORDER BY start_at
+        """)
+        
+        with get_session() as session:
+            res = session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "employee_id": employee_id,
+                    "start_at": start_at,
+                    "end_at": end_at,
+                },
+            )
+            return [dict(r) for r in res.mappings().all()]
+
+    def delete_unavailability(self, org_id: int, unavailability_id: int) -> None:
+        """מחיקת בלוק אי-זמינות"""
+        q = text("""
+            DELETE FROM employee_unavailability
+            WHERE org_id = :org_id
+              AND unavailability_id = :unavailability_id
+        """)
+        
+        with get_session() as session:
+            session.execute(q, {"org_id": org_id, "unavailability_id": unavailability_id})
+            session.commit()
+
 
 class StagingEventRepository:
     """Repository for staging_events table (calendar import)"""

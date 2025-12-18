@@ -1,5 +1,6 @@
 """Minimal Bootstrap-based UI for managing events via Postgres."""
 import logging
+from typing import Optional
 from datetime import datetime, timezone
 from html import escape
 from string import Template
@@ -76,6 +77,8 @@ def _render_page(title: str, body: str) -> str:
               <a class="btn btn-outline-light btn-sm ms-2" href="/ui/employees">Employees</a>
               <a class="btn btn-light btn-sm ms-2" href="/ui/messages">Messages</a>
               <a class="btn btn-outline-success btn-sm ms-2" href="/ui/calendar-import">Import Calendar</a>
+              <a class="btn btn-outline-warning btn-sm ms-2" href="/ui/shift-organizer">Shift Organizer</a>
+              <a class="btn btn-outline-info btn-sm ms-2" href="/ui/availability">Availability</a>
             </div>
           </div>
         </nav>
@@ -1925,3 +1928,651 @@ async def delete_employee(
     """Soft delete an employee (set is_active=false)."""
     hoh.soft_delete_employee(org_id=1, employee_id=employee_id)
     return RedirectResponse(url="/ui/employees", status_code=303)
+
+
+# ==========================================
+# SHIFT ORGANIZER
+# ==========================================
+
+@router.get("/ui/shift-organizer")
+async def shift_organizer_page(
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+):
+    """Shift Organizer UI - month-based shift scheduling."""
+    from datetime import date
+    from calendar import monthrange
+    import json
+    
+    # Default to current month if not specified
+    today = date.today()
+    if year is None:
+        year = today.year
+    if month is None:
+        month = today.month
+    
+    # Get month name
+    import calendar
+    month_name = calendar.month_name[month]
+    
+    # Calculate prev/next month
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    next_month = month + 1 if month < 12 else 1
+    next_year = year if month < 12 else year + 1
+    
+    body = f"""
+    <div class="row mb-3">
+      <div class="col">
+        <h2>Shift Organizer - {month_name} {year}</h2>
+      </div>
+    </div>
+    
+    <div class="row mb-3">
+      <div class="col">
+        <div class="btn-group" role="group">
+          <a href="/ui/shift-organizer?year={prev_year}&month={prev_month}" class="btn btn-outline-secondary">← Previous Month</a>
+          <a href="/ui/shift-organizer" class="btn btn-outline-secondary">Current Month</a>
+          <a href="/ui/shift-organizer?year={next_year}&month={next_month}" class="btn btn-outline-secondary">Next Month →</a>
+        </div>
+      </div>
+      <div class="col text-end">
+        <button id="generateBtn" class="btn btn-primary me-2">
+          <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+          Generate Shifts
+        </button>
+        <button id="saveBtn" class="btn btn-success" disabled>
+          <span class="spinner-border spinner-border-sm d-none" role="status"></span>
+          Save to Database
+        </button>
+      </div>
+    </div>
+    
+    <!-- Employee Stats -->
+    <div id="employeeStats" class="row mb-3 d-none">
+      <div class="col">
+        <div class="card">
+          <div class="card-header">
+            <h5 class="mb-0">Employee Statistics</h5>
+          </div>
+          <div class="card-body">
+            <table class="table table-sm">
+              <thead>
+                <tr>
+                  <th>Employee</th>
+                  <th>Total Shifts</th>
+                  <th>Weekend Shifts</th>
+                </tr>
+              </thead>
+              <tbody id="statsBody">
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Events and Slots -->
+    <div id="eventsContainer">
+      <div class="text-center py-5">
+        <div class="spinner-border" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Loading events...</p>
+      </div>
+    </div>
+    
+    <script>
+    const ORG_ID = 1;
+    const YEAR = {year};
+    const MONTH = {month};
+    
+    let currentData = null;
+    let generatedSlots = null;
+    let employees = [];
+    
+    // Load initial data
+    async function loadMonthData() {{
+      try {{
+        const response = await fetch(`/shift-organizer/month?org_id=${{ORG_ID}}&year=${{YEAR}}&month=${{MONTH}}`);
+        const data = await response.json();
+        currentData = data;
+        employees = data.employees;
+        renderEvents(data);
+        renderStats(data.employee_stats);
+      }} catch (error) {{
+        console.error('Error loading data:', error);
+        document.getElementById('eventsContainer').innerHTML = `
+          <div class="alert alert-danger">
+            <strong>Error:</strong> Failed to load events. ${{error.message}}
+          </div>
+        `;
+      }}
+    }}
+    
+    function renderStats(stats) {{
+      if (!stats || stats.length === 0) {{
+        document.getElementById('employeeStats').classList.add('d-none');
+        return;
+      }}
+      
+      document.getElementById('employeeStats').classList.remove('d-none');
+      const tbody = document.getElementById('statsBody');
+      tbody.innerHTML = stats.map(s => `
+        <tr>
+          <td>${{s.employee_name}}</td>
+          <td>${{s.total_shifts}}</td>
+          <td>${{s.weekend_shifts}}</td>
+        </tr>
+      `).join('');
+    }}
+    
+    function renderEvents(data) {{
+      const container = document.getElementById('eventsContainer');
+      
+      if (!data.events || data.events.length === 0) {{
+        container.innerHTML = `
+          <div class="alert alert-info">
+            No events found for this month.
+          </div>
+        `;
+        return;
+      }}
+      
+      // Group shifts by event
+      const shiftsByEvent = {{}};
+      (data.shifts || []).forEach(shift => {{
+        if (!shiftsByEvent[shift.event_id]) {{
+          shiftsByEvent[shift.event_id] = [];
+        }}
+        shiftsByEvent[shift.event_id].push(shift);
+      }});
+      
+      container.innerHTML = data.events.map(event => {{
+        const eventShifts = shiftsByEvent[event.event_id] || [];
+        return renderEvent(event, eventShifts);
+      }}).join('');
+    }}
+    
+    function renderEvent(event, shifts) {{
+      const eventDate = new Date(event.event_date + 'T00:00:00');
+      const dateStr = eventDate.toLocaleDateString('en-GB');
+      const showTime = event.show_time ? new Date(event.show_time).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : '-';
+      const loadInTime = event.load_in_time ? new Date(event.load_in_time).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : '-';
+      
+      return `
+        <div class="card mb-3" data-event-id="${{event.event_id}}">
+          <div class="card-header">
+            <div class="row align-items-center">
+              <div class="col-md-3">
+                <strong>${{event.name}}</strong>
+              </div>
+              <div class="col-md-2">
+                <small class="text-muted">Date:</small> ${{dateStr}}
+              </div>
+              <div class="col-md-2">
+                <small class="text-muted">Show:</small> ${{showTime}}
+              </div>
+              <div class="col-md-2">
+                <small class="text-muted">Load In:</small> ${{loadInTime}}
+              </div>
+              <div class="col-md-3">
+                ${{event.notes ? `<small class="text-muted">${{event.notes}}</small>` : ''}}
+              </div>
+            </div>
+          </div>
+          <div class="card-body">
+            <div class="slots-container" data-event-id="${{event.event_id}}">
+              ${{shifts.map((shift, idx) => renderSlot(event.event_id, shift, idx)).join('')}}
+              ${{shifts.length === 0 ? '<p class="text-muted">No shifts assigned yet. Click "Generate Shifts" to auto-assign.</p>' : ''}}
+            </div>
+          </div>
+        </div>
+      `;
+    }}
+    
+    function renderSlot(eventId, shift, index) {{
+      const startTime = shift.start_at ? new Date(shift.start_at).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : 
+                        (shift.call_time ? new Date(shift.call_time).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : '-');
+      const employeeOptions = employees.map(emp => `
+        <option value="${{emp.employee_id}}" ${{shift.employee_id === emp.employee_id ? 'selected' : ''}}>
+          ${{emp.name}}
+        </option>
+      `).join('');
+      
+      const isLocked = shift.is_locked || false;
+      const lockIcon = isLocked ? '🔒' : '';
+      
+      return `
+        <div class="row mb-2 align-items-center slot-row" data-slot-index="${{index}}">
+          <div class="col-md-2">
+            <input type="time" class="form-control form-control-sm" value="${{startTime}}" disabled>
+          </div>
+          <div class="col-md-4">
+            <select class="form-select form-select-sm employee-select">
+              <option value="">-- Select Employee --</option>
+              ${{employeeOptions}}
+            </select>
+          </div>
+          <div class="col-md-2">
+            ${{shift.employee_name || '-'}}
+          </div>
+          <div class="col-md-2">
+            <span class="badge bg-${{isLocked ? 'warning' : 'secondary'}}">${{lockIcon}} ${{shift.shift_type || 'shift'}}</span>
+          </div>
+          <div class="col-md-2 text-end">
+            <button class="btn btn-sm btn-outline-danger" onclick="removeSlot(this)">✕</button>
+          </div>
+        </div>
+      `;
+    }}
+    
+    function removeSlot(btn) {{
+      btn.closest('.slot-row').remove();
+      document.getElementById('saveBtn').disabled = false;
+    }}
+    
+    // Generate Shifts
+    document.getElementById('generateBtn').addEventListener('click', async () => {{
+      const btn = document.getElementById('generateBtn');
+      const spinner = btn.querySelector('.spinner-border');
+      
+      btn.disabled = true;
+      spinner.classList.remove('d-none');
+      
+      try {{
+        const response = await fetch('/shift-organizer/generate', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{
+            org_id: ORG_ID,
+            year: YEAR,
+            month: MONTH
+          }})
+        }});
+        
+        const result = await response.json();
+        generatedSlots = result.slots;
+        
+        // Render generated slots
+        renderGeneratedSlots(result);
+        renderStats(Object.values(result.employee_stats));
+        
+        // Enable save button
+        document.getElementById('saveBtn').disabled = false;
+        
+        alert(`Generated ${{result.slots.length}} shift assignments!`);
+      }} catch (error) {{
+        console.error('Error generating shifts:', error);
+        alert('Failed to generate shifts: ' + error.message);
+      }} finally {{
+        btn.disabled = false;
+        spinner.classList.add('d-none');
+      }}
+    }});
+    
+    function renderGeneratedSlots(result) {{
+      // Group slots by event
+      const slotsByEvent = {{}};
+      result.slots.forEach(slot => {{
+        if (!slotsByEvent[slot.event_id]) {{
+          slotsByEvent[slot.event_id] = [];
+        }}
+        slotsByEvent[slot.event_id].push(slot);
+      }});
+      
+      // Update each event's slots
+      Object.entries(slotsByEvent).forEach(([eventId, slots]) => {{
+        const container = document.querySelector(`.slots-container[data-event-id="${{eventId}}"]`);
+        if (container) {{
+          container.innerHTML = slots.map((slot, idx) => renderGeneratedSlot(eventId, slot, idx)).join('');
+        }}
+      }});
+    }}
+    
+    function renderGeneratedSlot(eventId, slot, index) {{
+      const startTime = new Date(slot.start_at).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}});
+      const endTime = new Date(slot.end_at).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}});
+      const employeeOptions = employees.map(emp => `
+        <option value="${{emp.employee_id}}" ${{slot.suggested_employee_id === emp.employee_id ? 'selected' : ''}}>
+          ${{emp.name}}
+        </option>
+      `).join('');
+      
+      const isUnfilled = !slot.suggested_employee_id;
+      const bgClass = isUnfilled ? 'bg-danger text-white' : '';
+      const reason = slot.unfilled_reason || '';
+      
+      return `
+        <div class="row mb-2 align-items-center slot-row ${{bgClass}}" 
+             data-slot-index="${{index}}"
+             data-event-id="${{eventId}}"
+             data-start="${{slot.start_at}}"
+             data-end="${{slot.end_at}}"
+             title="${{reason}}">
+          <div class="col-md-2">
+            <small>${{startTime}} - ${{endTime}}</small>
+          </div>
+          <div class="col-md-5">
+            <select class="form-select form-select-sm employee-select">
+              <option value="">-- Select Employee --</option>
+              ${{employeeOptions}}
+            </select>
+          </div>
+          <div class="col-md-3">
+            ${{slot.suggested_employee_name || '<em>No available employee</em>'}}
+          </div>
+          <div class="col-md-2 text-end">
+            <button class="btn btn-sm btn-outline-danger" onclick="removeSlot(this)">✕</button>
+          </div>
+        </div>
+      `;
+    }}
+    
+    // Save Shifts
+    document.getElementById('saveBtn').addEventListener('click', async () => {{
+      const btn = document.getElementById('saveBtn');
+      const spinner = btn.querySelector('.spinner-border');
+      
+      btn.disabled = true;
+      spinner.classList.remove('d-none');
+      
+      try {{
+        // Collect all slots from UI
+        const slots = [];
+        document.querySelectorAll('.slot-row').forEach(row => {{
+          const eventId = parseInt(row.dataset.eventId);
+          const employeeSelect = row.querySelector('.employee-select');
+          const employeeId = employeeSelect ? parseInt(employeeSelect.value) : null;
+          const startAt = row.dataset.start;
+          const endAt = row.dataset.end;
+          
+          if (employeeId && startAt && endAt) {{
+            slots.push({{
+              event_id: eventId,
+              employee_id: employeeId,
+              start_at: startAt,
+              end_at: endAt,
+              is_locked: false
+            }});
+          }}
+        }});
+        
+        const response = await fetch('/shift-organizer/save', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{
+            org_id: ORG_ID,
+            year: YEAR,
+            month: MONTH,
+            slots: slots
+          }})
+        }});
+        
+        const result = await response.json();
+        
+        // Reload data
+        await loadMonthData();
+        
+        alert(`Saved ${{slots.length}} shift assignments!`);
+        btn.disabled = true;
+      }} catch (error) {{
+        console.error('Error saving shifts:', error);
+        alert('Failed to save shifts: ' + error.message);
+      }} finally {{
+        spinner.classList.add('d-none');
+      }}
+    }});
+    
+    // Initial load
+    loadMonthData();
+    </script>
+    """
+    
+    return HTMLResponse(_render_page("Shift Organizer", body))
+
+
+@router.get("/ui/availability")
+async def availability_page(
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+):
+    """Employee Availability Management UI."""
+    from datetime import date
+    import calendar
+    
+    # Default to next month
+    today = date.today()
+    if year is None or month is None:
+        # Default to next month
+        next_month = today.month + 1 if today.month < 12 else 1
+        next_year = today.year if today.month < 12 else today.year + 1
+        year = next_year
+        month = next_month
+    
+    month_name = calendar.month_name[month]
+    
+    # Calculate prev/next month
+    prev_month = month - 1 if month > 1 else 12
+    prev_year = year if month > 1 else year - 1
+    next_month = month + 1 if month < 12 else 1
+    next_year = year if month < 12 else year + 1
+    
+    body = f"""
+    <div class="row mb-3">
+      <div class="col">
+        <h2>Employee Availability - {month_name} {year}</h2>
+        <p class="text-muted">Mark periods when employees are unavailable for shifts</p>
+      </div>
+    </div>
+    
+    <div class="row mb-3">
+      <div class="col">
+        <div class="btn-group" role="group">
+          <a href="/ui/availability?year={prev_year}&month={prev_month}" class="btn btn-outline-secondary">← Previous Month</a>
+          <a href="/ui/availability" class="btn btn-outline-secondary">Next Month (Default)</a>
+          <a href="/ui/availability?year={next_year}&month={next_month}" class="btn btn-outline-secondary">Following Month →</a>
+        </div>
+      </div>
+      <div class="col text-end">
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUnavailabilityModal">
+          + Add Unavailability
+        </button>
+      </div>
+    </div>
+    
+    <!-- Unavailability List -->
+    <div id="unavailabilityContainer">
+      <div class="text-center py-5">
+        <div class="spinner-border" role="status">
+          <span class="visually-hidden">Loading...</span>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Add Unavailability Modal -->
+    <div class="modal fade" id="addUnavailabilityModal" tabindex="-1">
+      <div class="modal-dialog">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Add Unavailability</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <form id="unavailabilityForm">
+              <div class="mb-3">
+                <label class="form-label">Employee</label>
+                <select class="form-select" id="employeeSelect" required>
+                  <option value="">-- Select Employee --</option>
+                </select>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Start Date & Time</label>
+                <input type="datetime-local" class="form-control" id="startAt" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">End Date & Time</label>
+                <input type="datetime-local" class="form-control" id="endAt" required>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Reason (Optional)</label>
+                <textarea class="form-control" id="note" rows="2"></textarea>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="saveUnavailabilityBtn">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script>
+    const ORG_ID = 1;
+    const YEAR = {year};
+    const MONTH = {month};
+    
+    let employees = [];
+    let unavailability = [];
+    
+    async function loadEmployees() {{
+      try {{
+        // Use the shift-organizer endpoint to get employees
+        const response = await fetch(`/shift-organizer/month?org_id=${{ORG_ID}}&year=${{YEAR}}&month=${{MONTH}}`);
+        const data = await response.json();
+        employees = data.employees;
+        
+        // Populate employee dropdown
+        const select = document.getElementById('employeeSelect');
+        select.innerHTML = '<option value="">-- Select Employee --</option>' +
+          employees.map(emp => `<option value="${{emp.employee_id}}">${{emp.name}}</option>`).join('');
+      }} catch (error) {{
+        console.error('Error loading employees:', error);
+      }}
+    }}
+    
+    async function loadUnavailability() {{
+      try {{
+        const response = await fetch(`/availability/month?org_id=${{ORG_ID}}&year=${{YEAR}}&month=${{MONTH}}`);
+        const data = await response.json();
+        unavailability = data.unavailability || [];
+        renderUnavailability();
+      }} catch (error) {{
+        console.error('Error loading unavailability:', error);
+        document.getElementById('unavailabilityContainer').innerHTML = `
+          <div class="alert alert-danger">
+            Failed to load unavailability data: ${{error.message}}
+          </div>
+        `;
+      }}
+    }}
+    
+    function renderUnavailability() {{
+      const container = document.getElementById('unavailabilityContainer');
+      
+      if (unavailability.length === 0) {{
+        container.innerHTML = `
+          <div class="alert alert-info">
+            No unavailability blocks for this month. Employees are available for all shifts.
+          </div>
+        `;
+        return;
+      }}
+      
+      // Group by employee
+      const byEmployee = {{}};
+      unavailability.forEach(u => {{
+        const empName = u.employee_name || 'Unknown';
+        if (!byEmployee[empName]) {{
+          byEmployee[empName] = [];
+        }}
+        byEmployee[empName].push(u);
+      }});
+      
+      container.innerHTML = `
+        <div class="list-group">
+          ${{Object.entries(byEmployee).map(([empName, blocks]) => `
+            <div class="list-group-item">
+              <h6>${{empName}}</h6>
+              ${{blocks.map(block => {{
+                const startDate = new Date(block.start_at);
+                const endDate = new Date(block.end_at);
+                const startStr = startDate.toLocaleString('en-GB', {{dateStyle: 'short', timeStyle: 'short'}});
+                const endStr = endDate.toLocaleString('en-GB', {{dateStyle: 'short', timeStyle: 'short'}});
+                
+                return `
+                  <div class="d-flex justify-content-between align-items-start mb-2">
+                    <div>
+                      <strong>${{startStr}}</strong> → <strong>${{endStr}}</strong>
+                      ${{block.note ? `<br><small class="text-muted">${{block.note}}</small>` : ''}}
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteUnavailability(${{block.unavailability_id}})">
+                      Delete
+                    </button>
+                  </div>
+                `;
+              }}).join('')}}
+            </div>
+          `).join('')}}
+        </div>
+      `;
+    }}
+    
+    async function deleteUnavailability(id) {{
+      if (!confirm('Delete this unavailability block?')) return;
+      
+      try {{
+        await fetch(`/availability/${{id}}?org_id=${{ORG_ID}}`, {{
+          method: 'DELETE'
+        }});
+        await loadUnavailability();
+      }} catch (error) {{
+        console.error('Error deleting:', error);
+        alert('Failed to delete: ' + error.message);
+      }}
+    }}
+    
+    document.getElementById('saveUnavailabilityBtn').addEventListener('click', async () => {{
+      const form = document.getElementById('unavailabilityForm');
+      if (!form.checkValidity()) {{
+        form.reportValidity();
+        return;
+      }}
+      
+      const employeeId = parseInt(document.getElementById('employeeSelect').value);
+      const startAt = document.getElementById('startAt').value;
+      const endAt = document.getElementById('endAt').value;
+      const note = document.getElementById('note').value;
+      
+      try {{
+        await fetch('/availability', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{
+            org_id: ORG_ID,
+            employee_id: employeeId,
+            start_at: startAt,
+            end_at: endAt,
+            note: note || null
+          }})
+        }});
+        
+        // Close modal and reload
+        const modal = bootstrap.Modal.getInstance(document.getElementById('addUnavailabilityModal'));
+        modal.hide();
+        form.reset();
+        await loadUnavailability();
+      }} catch (error) {{
+        console.error('Error saving:', error);
+        alert('Failed to save: ' + error.message);
+      }}
+    }});
+    
+    // Initial load
+    loadEmployees();
+    loadUnavailability();
+    </script>
+    """
+    
+    return HTMLResponse(_render_page("Employee Availability", body))
