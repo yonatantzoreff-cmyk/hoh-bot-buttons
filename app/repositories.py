@@ -1706,6 +1706,7 @@ class EmployeeShiftRepository:
         org_id: int,
         shift_id: int,
         *,
+        employee_id: Optional[int] = None,
         call_time=None,
         shift_role: Optional[str] = None,
         notes: Optional[str] = None,
@@ -1717,6 +1718,10 @@ class EmployeeShiftRepository:
             "shift_id": shift_id,
             "now": now_utc(),
         }
+
+        if employee_id is not None:
+            sets.append("employee_id = :employee_id")
+            params["employee_id"] = employee_id
 
         if call_time is not None:
             sets.append("call_time = :call_time")
