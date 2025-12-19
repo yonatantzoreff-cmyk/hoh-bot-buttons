@@ -1456,10 +1456,7 @@
             // Restore column order from localStorage
             restoreColumnOrder();
 
-            // Load shifts for all events (in background)
-            Object.values(data.halls).flat().forEach(event => {
-                loadShiftsForEvent(event.event_id);
-            });
+            // Note: Shifts are loaded on-demand when user expands the section
         }
 
         function renderEventWithShifts(event) {
@@ -1542,6 +1539,8 @@
         function renderShiftsRow(event) {
             // Count columns dynamically (will be 9 by default)
             const colCount = 9;
+            // Use load_in_time_display instead of substring manipulation
+            const defaultTime = event.load_in_time_display || '';
             return `
                 <tr class="shifts-row" data-event-id="${event.event_id}">
                     <td colspan="${colCount}" style="padding: 0;">
@@ -1550,9 +1549,9 @@
                                 <div class="shifts-title">
                                     👷 Employees Shifts
                                 </div>
-                                <div class="shifts-collapse-icon" id="shifts-icon-${event.event_id}">▼</div>
+                                <div class="shifts-collapse-icon collapsed" id="shifts-icon-${event.event_id}">▼</div>
                             </div>
-                            <div class="shifts-body" id="shifts-body-${event.event_id}">
+                            <div class="shifts-body hidden" id="shifts-body-${event.event_id}">
                                 <div id="shifts-container-${event.event_id}">
                                     <div style="text-align: center; padding: 1rem; color: var(--text-muted);">
                                         <div class="spinner" style="width: 24px; height: 24px;"></div>
@@ -1560,7 +1559,7 @@
                                     </div>
                                 </div>
                                 <button class="btn btn-sm btn-primary add-shift-btn" 
-                                        onclick="addShift(${event.event_id}, '${event.event_date || ''}', '${event.load_in_time ? event.load_in_time.substring(11, 16) : ''}')">
+                                        onclick="addShift(${event.event_id}, '${event.event_date || ''}', '${escapeHtml(defaultTime)}')">
                                     + Add Shift
                                 </button>
                             </div>
@@ -2218,6 +2217,17 @@
             // Move cells in each body row
             bodyRows.forEach(row => {
                 const cells = Array.from(row.children);
+                
+                // Skip rows with colspan (shifts rows)
+                if (cells.length === 1 && cells[0].colSpan > 1) {
+                    return;
+                }
+                
+                // Only reorder if we have the right number of cells
+                if (fromIndex >= cells.length || toIndex >= cells.length) {
+                    return;
+                }
+                
                 const cell = cells[fromIndex];
                 if (toIndex < fromIndex) {
                     row.insertBefore(cell, cells[toIndex]);
