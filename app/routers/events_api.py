@@ -36,8 +36,10 @@ class EventPatchRequest(BaseModel):
     load_in_time: Optional[str] = None  # HH:MM
     producer_name: Optional[str] = None
     producer_phone: Optional[str] = None
+    producer_contact_id: Optional[int] = None
     technical_name: Optional[str] = None
     technical_phone: Optional[str] = None
+    technical_contact_id: Optional[int] = None
     notes: Optional[str] = None
     status: Optional[str] = None
 
@@ -153,10 +155,14 @@ async def update_event(
             update_params["producer_name"] = updates.producer_name
         if updates.producer_phone is not None:
             update_params["producer_phone"] = updates.producer_phone
+        if updates.producer_contact_id is not None:
+            update_params["producer_contact_id"] = updates.producer_contact_id
         if updates.technical_name is not None:
             update_params["technical_name"] = updates.technical_name
         if updates.technical_phone is not None:
             update_params["technical_phone"] = updates.technical_phone
+        if updates.technical_contact_id is not None:
+            update_params["technical_contact_id"] = updates.technical_contact_id
         if updates.notes is not None:
             update_params["notes"] = updates.notes
         
@@ -659,3 +665,54 @@ async def sse_events(org_id: int = Query(1)):
             "X-Accel-Buffering": "no",  # Disable buffering in nginx
         },
     )
+
+
+@router.get("/contacts/by-role")
+async def get_contacts_by_role(
+    role: Optional[str] = Query(None, description="Filter by role (e.g., 'מפיק', 'טכני')"),
+    search: Optional[str] = Query(None, description="Search by name or phone"),
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """
+    Get contacts filtered by role and/or search term (PHASE 4).
+    Returns contacts with name, phone, and role.
+    """
+    try:
+        # Get all contacts by role
+        contacts_by_role = hoh.list_contacts_by_role(org_id=org_id)
+        
+        # If role filter is specified, only return that role
+        if role:
+            contacts = contacts_by_role.get(role, [])
+        else:
+            # Return all contacts
+            contacts = []
+            for role_contacts in contacts_by_role.values():
+                contacts.extend(role_contacts)
+        
+        # Apply search filter if provided
+        if search:
+            search_lower = search.lower()
+            contacts = [
+                c for c in contacts
+                if (search_lower in (c.get("name") or "").lower() or
+                    search_lower in (c.get("phone") or ""))
+            ]
+        
+        # Format response
+        return {
+            "contacts": [
+                {
+                    "contact_id": c.get("contact_id"),
+                    "name": c.get("name"),
+                    "phone": c.get("phone"),
+                    "role": c.get("role"),
+                }
+                for c in contacts
+            ]
+        }
+    
+    except Exception as e:
+        logger.exception("Failed to get contacts by role")
+        raise HTTPException(status_code=500, detail=str(e))

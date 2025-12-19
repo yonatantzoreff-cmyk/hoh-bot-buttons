@@ -1027,6 +1027,106 @@
             display: block;
         }
 
+        /* Contact Dropdown (PHASE 4) */
+        .contact-dropdown-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .contact-dropdown-trigger {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .contact-dropdown-trigger:hover {
+            border-color: var(--accent-color);
+        }
+
+        .contact-dropdown-trigger.active {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0, 133, 255, 0.1);
+        }
+
+        .contact-dropdown-menu {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-shadow: var(--shadow-hover);
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+
+        .contact-dropdown-menu.visible {
+            display: block;
+        }
+
+        .contact-dropdown-search {
+            position: sticky;
+            top: 0;
+            padding: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-primary);
+        }
+
+        .contact-dropdown-search input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .contact-dropdown-item {
+            padding: 0.75rem;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.2s;
+        }
+
+        .contact-dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .contact-dropdown-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .contact-dropdown-item-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.2rem;
+        }
+
+        .contact-dropdown-item-phone {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .contact-dropdown-empty {
+            padding: 1rem;
+            text-align: center;
+            color: var(--text-muted);
+        }
+
         .suggestion-item {
             padding: 1rem;
             border-bottom: 1px solid var(--border-color);
@@ -1522,26 +1622,25 @@
                         ${event.latest_delivery_status ? `<span class="status-chip" style="font-size: 0.75rem;">${escapeHtml(event.latest_delivery_status)}</span>` : '<span style="color: var(--text-muted); font-size: 0.8rem;">—</span>'}
                     </td>
                     <td>
-                        <div>
-                            <input type="text" class="inline-edit" value="${escapeHtml(event.producer_name || '')}" 
-                                   onchange="markDirty(${event.event_id}, 'producer_name', this.value)"
-                                   placeholder="Name">
-                            ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">${escapeHtml(event.producer_phone)}</div>` : ''}
+                        <div class="contact-dropdown-container" id="producer-${event.event_id}">
+                            <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'producer', 'מפיק')">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.producer_name || 'Select producer')}</div>
+                                    ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.producer_phone)}</div>` : ''}
+                                </div>
+                                <span style="color: var(--text-muted);">▼</span>
+                            </div>
                         </div>
                     </td>
                     <td>
-                        <div>
-                            <div style="display: flex; gap: 0.5rem; align-items: center;">
-                                <input type="text" class="inline-edit" value="${escapeHtml(event.technical_name || '')}" 
-                                       onchange="markDirty(${event.event_id}, 'technical_name', this.value)"
-                                       style="flex: 1;"
-                                       placeholder="Name">
-                                <button class="btn btn-sm btn-primary" onclick="showSuggestions(${event.event_id}, this)"
-                                        title="Suggested technical contacts">
-                                    💡
-                                </button>
+                        <div class="contact-dropdown-container" id="technical-${event.event_id}">
+                            <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'טכני')">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || 'Select technical')}</div>
+                                    ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
+                                </div>
+                                <span style="color: var(--text-muted);">▼</span>
                             </div>
-                            ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">${escapeHtml(event.technical_phone)}</div>` : ''}
                         </div>
                     </td>
                     <td>
@@ -1723,6 +1822,137 @@
                     input.value = eventData.technical_name;
                 }
             });
+        }
+
+        // Contact Dropdown (PHASE 4)
+        let activeDropdown = null;
+
+        async function toggleContactDropdown(eventId, fieldType, role) {
+            const containerId = `${fieldType}-${eventId}`;
+            const container = document.getElementById(containerId);
+            
+            // Close any existing dropdown
+            if (activeDropdown && activeDropdown !== container) {
+                closeContactDropdown();
+            }
+            
+            // Check if dropdown already exists
+            let menu = container.querySelector('.contact-dropdown-menu');
+            if (menu) {
+                if (menu.classList.contains('visible')) {
+                    closeContactDropdown();
+                    return;
+                } else {
+                    menu.classList.add('visible');
+                    container.querySelector('.contact-dropdown-trigger').classList.add('active');
+                    activeDropdown = container;
+                    menu.querySelector('.contact-dropdown-search input')?.focus();
+                    return;
+                }
+            }
+            
+            // Create dropdown menu
+            menu = document.createElement('div');
+            menu.className = 'contact-dropdown-menu visible';
+            menu.innerHTML = `
+                <div class="contact-dropdown-search">
+                    <input type="text" placeholder="Search by name or phone..." oninput="filterContactDropdown(${eventId}, '${fieldType}', '${role}', this.value)">
+                </div>
+                <div class="contact-dropdown-list" id="${fieldType}-list-${eventId}">
+                    <div class="contact-dropdown-empty">Loading...</div>
+                </div>
+            `;
+            
+            container.appendChild(menu);
+            container.querySelector('.contact-dropdown-trigger').classList.add('active');
+            activeDropdown = container;
+            
+            // Load contacts
+            await loadContactsForDropdown(eventId, fieldType, role);
+            
+            // Focus search input
+            menu.querySelector('.contact-dropdown-search input')?.focus();
+            
+            // Close on outside click
+            setTimeout(() => {
+                document.addEventListener('click', handleDropdownOutsideClick);
+            }, 100);
+        }
+
+        function handleDropdownOutsideClick(e) {
+            if (activeDropdown && !activeDropdown.contains(e.target)) {
+                closeContactDropdown();
+            }
+        }
+
+        function closeContactDropdown() {
+            if (activeDropdown) {
+                const menu = activeDropdown.querySelector('.contact-dropdown-menu');
+                if (menu) {
+                    menu.remove();
+                }
+                activeDropdown.querySelector('.contact-dropdown-trigger')?.classList.remove('active');
+                document.removeEventListener('click', handleDropdownOutsideClick);
+                activeDropdown = null;
+            }
+        }
+
+        async function loadContactsForDropdown(eventId, fieldType, role, searchTerm = '') {
+            try {
+                const url = `/api/contacts/by-role?org_id=${ORG_ID}&role=${encodeURIComponent(role)}${searchTerm ? '&search=' + encodeURIComponent(searchTerm) : ''}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                const listId = `${fieldType}-list-${eventId}`;
+                const listEl = document.getElementById(listId);
+                if (!listEl) return;
+                
+                if (data.contacts.length === 0) {
+                    listEl.innerHTML = '<div class="contact-dropdown-empty">No contacts found</div>';
+                    return;
+                }
+                
+                listEl.innerHTML = data.contacts.map(contact => `
+                    <div class="contact-dropdown-item" onclick="selectContact(${eventId}, '${fieldType}', ${contact.contact_id}, '${escapeHtml(contact.name)}', '${escapeHtml(contact.phone)}')">
+                        <div class="contact-dropdown-item-name">${escapeHtml(contact.name)}</div>
+                        <div class="contact-dropdown-item-phone">${escapeHtml(contact.phone)}</div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load contacts:', error);
+                const listId = `${fieldType}-list-${eventId}`;
+                const listEl = document.getElementById(listId);
+                if (listEl) {
+                    listEl.innerHTML = '<div class="contact-dropdown-empty">Error loading contacts</div>';
+                }
+            }
+        }
+
+        function filterContactDropdown(eventId, fieldType, role, searchTerm) {
+            loadContactsForDropdown(eventId, fieldType, role, searchTerm);
+        }
+
+        function selectContact(eventId, fieldType, contactId, name, phone) {
+            // Update the UI
+            const container = document.getElementById(`${fieldType}-${eventId}`);
+            const trigger = container.querySelector('.contact-dropdown-trigger');
+            trigger.innerHTML = `
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(name)}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(phone)}</div>
+                </div>
+                <span style="color: var(--text-muted);">▼</span>
+            `;
+            
+            // Mark as dirty
+            markDirty(eventId, `${fieldType}_contact_id`, contactId);
+            markDirty(eventId, `${fieldType}_name`, name);
+            markDirty(eventId, `${fieldType}_phone`, phone);
+            
+            // Close dropdown
+            closeContactDropdown();
+            
+            showToast(`${fieldType === 'producer' ? 'Producer' : 'Technical'} contact updated. Remember to save!`, 'success');
         }
 
         // Technical Suggestions

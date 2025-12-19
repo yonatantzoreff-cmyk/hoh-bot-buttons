@@ -652,51 +652,81 @@ class HOHService:
         *,
         org_id: int,
         event_id: int,
-        event_name: str,
-        event_date_str: str,
-        show_time_str: Optional[str],
-        load_in_time_str: Optional[str],
-        producer_name: Optional[str],
-        producer_phone: Optional[str],
-        technical_name: Optional[str],
-        technical_phone: Optional[str],
+        event_name: Optional[str] = None,
+        event_date_str: Optional[str] = None,
+        show_time_str: Optional[str] = _NO_UPDATE,
+        load_in_time_str: Optional[str] = _NO_UPDATE,
+        producer_name: Optional[str] = None,
+        producer_phone: Optional[str] = None,
+        producer_contact_id: Optional[int] = None,
+        technical_name: Optional[str] = None,
+        technical_phone: Optional[str] = None,
+        technical_contact_id: Optional[int] = None,
         notes: Optional[str] = None,
     ) -> None:
         event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
         if not event:
             raise ValueError("Event not found")
 
-        event_date = datetime.strptime(event_date_str, "%Y-%m-%d").date()
-        show_time = self._combine_time(event_date, show_time_str)
-        load_in_time = self._combine_time(event_date, load_in_time_str)
-
-        producer_contact_id = self._ensure_event_contact(
-            org_id=org_id,
-            existing_contact_id=event.get("producer_contact_id"),
-            name=producer_name,
-            phone=producer_phone,
-            role="producer",
-        )
-
-        technical_contact_id = self._ensure_event_contact(
-            org_id=org_id,
-            existing_contact_id=event.get("technical_contact_id"),
-            name=technical_name,
-            phone=technical_phone,
-            role="technical",
-        )
-
-        self.events.update_event(
-            org_id=org_id,
-            event_id=event_id,
-            name=event_name,
-            event_date=event_date,
-            show_time=show_time,
-            load_in_time=load_in_time,
-            producer_contact_id=producer_contact_id,
-            technical_contact_id=technical_contact_id,
-            notes=notes,
-        )
+        # Build update parameters - only update what was provided
+        update_params = {}
+        
+        # Handle name
+        if event_name is not None:
+            update_params["name"] = event_name
+        
+        # Handle dates/times
+        if event_date_str is not None:
+            event_date = datetime.strptime(event_date_str, "%Y-%m-%d").date()
+            update_params["event_date"] = event_date
+        else:
+            event_date = event.get("event_date")
+        
+        if show_time_str is not _NO_UPDATE:
+            update_params["show_time"] = self._combine_time(event_date, show_time_str)
+        
+        if load_in_time_str is not _NO_UPDATE:
+            update_params["load_in_time"] = self._combine_time(event_date, load_in_time_str)
+        
+        # Handle producer contact
+        if producer_contact_id is not None:
+            # Explicit contact ID provided (from dropdown)
+            update_params["producer_contact_id"] = producer_contact_id
+        elif producer_name is not None or producer_phone is not None:
+            # Name/phone provided (legacy inline edit)
+            update_params["producer_contact_id"] = self._ensure_event_contact(
+                org_id=org_id,
+                existing_contact_id=event.get("producer_contact_id"),
+                name=producer_name,
+                phone=producer_phone,
+                role="producer",
+            )
+        
+        # Handle technical contact
+        if technical_contact_id is not None:
+            # Explicit contact ID provided (from dropdown)
+            update_params["technical_contact_id"] = technical_contact_id
+        elif technical_name is not None or technical_phone is not None:
+            # Name/phone provided (legacy inline edit)
+            update_params["technical_contact_id"] = self._ensure_event_contact(
+                org_id=org_id,
+                existing_contact_id=event.get("technical_contact_id"),
+                name=technical_name,
+                phone=technical_phone,
+                role="technical",
+            )
+        
+        # Handle notes
+        if notes is not None:
+            update_params["notes"] = notes
+        
+        # Only update if there are changes
+        if update_params:
+            self.events.update_event(
+                org_id=org_id,
+                event_id=event_id,
+                **update_params
+            )
 
     @staticmethod
     def _combine_time(event_date: date, time_str: Optional[str]):
