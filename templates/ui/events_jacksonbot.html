@@ -1777,14 +1777,22 @@
                         </div>
                     </td>
                     <td>
-                        <div class="contact-dropdown-container" id="technical-${event.event_id}">
-                            <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'טכני')">
-                                <div style="flex: 1;">
-                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || 'Select technical')}</div>
-                                    ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div class="contact-dropdown-container" id="technical-${event.event_id}" style="flex: 1;">
+                                <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'טכני')">
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || 'Select technical')}</div>
+                                        ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
+                                    </div>
+                                    <span style="color: var(--text-muted);">▼</span>
                                 </div>
-                                <span style="color: var(--text-muted);">▼</span>
                             </div>
+                            <button class="btn btn-sm" 
+                                    onclick="showSuggestions(${event.event_id}, this)" 
+                                    title="הצעות טכנאים"
+                                    style="padding: 0.3rem 0.6rem; font-size: 0.85rem; white-space: nowrap;">
+                                💡
+                            </button>
                         </div>
                     </td>
                     <td>
@@ -2117,7 +2125,7 @@
                 popover.style.left = `${rect.left - 300}px`;
 
                 popover.innerHTML = suggestions.map(s => `
-                    <div class="suggestion-item" onclick="selectSuggestion(${eventId}, '${escapeHtml(s.name)}', '${escapeHtml(s.phone)}')">
+                    <div class="suggestion-item" onclick="selectSuggestion(${eventId}, ${s.contact_id}, '${escapeHtml(s.name)}', '${escapeHtml(s.phone)}')">
                         <div class="suggestion-name">${escapeHtml(s.name)}</div>
                         <div class="suggestion-details">
                             ${escapeHtml(s.phone)}<br>
@@ -2145,22 +2153,23 @@
             }
         }
 
-        function selectSuggestion(eventId, name, phone) {
-            // Mark both name and phone as dirty
+        // PHASE 6: Select technician suggestion and update UI
+        function selectSuggestion(eventId, contactId, name, phone) {
+            // Update the UI - find the technical contact dropdown
+            const container = document.getElementById(`technical-${eventId}`);
+            const trigger = container.querySelector('.contact-dropdown-trigger');
+            trigger.innerHTML = `
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(name)}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(phone)}</div>
+                </div>
+                <span style="color: var(--text-muted);">▼</span>
+            `;
+            
+            // Mark as dirty with contact_id
+            markDirty(eventId, 'technical_contact_id', contactId);
             markDirty(eventId, 'technical_name', name);
             markDirty(eventId, 'technical_phone', phone);
-            
-            const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
-            // Find the technical name input specifically (it has onchange with 'technical_name')
-            const nameInput = row.querySelector('input[onchange*="technical_name"]');
-            if (nameInput) {
-                nameInput.value = name;
-                // Trigger change event to ensure dirty tracking
-                nameInput.dispatchEvent(new Event('change'));
-            }
-            
-            // Note: Phone is tracked in dirtyRows but not displayed in UI
-            // It will be sent when saving the event
 
             document.querySelector('.suggestions-popover')?.remove();
             showToast(`Suggestion applied: ${name}. Remember to save!`, 'success');
