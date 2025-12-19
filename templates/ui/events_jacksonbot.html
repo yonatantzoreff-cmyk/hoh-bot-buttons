@@ -2028,6 +2028,114 @@
             showToast(`Suggestion applied: ${name}. Remember to save!`, 'success');
         }
 
+        // Employee Dropdown for Shifts (PHASE 5)
+        async function toggleEmployeeDropdown(eventId, shiftId, currentName) {
+            const containerId = `employee-shift-${shiftId}`;
+            const container = document.getElementById(containerId);
+            
+            // Close any existing dropdown
+            if (activeDropdown && activeDropdown !== container) {
+                closeContactDropdown();
+            }
+            
+            // Check if dropdown already exists
+            let menu = container.querySelector('.contact-dropdown-menu');
+            if (menu) {
+                if (menu.classList.contains('visible')) {
+                    closeContactDropdown();
+                    return;
+                } else {
+                    menu.classList.add('visible');
+                    container.querySelector('.contact-dropdown-trigger').classList.add('active');
+                    activeDropdown = container;
+                    menu.querySelector('.contact-dropdown-search input')?.focus();
+                    return;
+                }
+            }
+            
+            // Create dropdown menu
+            menu = document.createElement('div');
+            menu.className = 'contact-dropdown-menu visible';
+            menu.innerHTML = `
+                <div class="contact-dropdown-search">
+                    <input type="text" placeholder="Search employee..." oninput="filterEmployeeDropdown(${eventId}, ${shiftId}, this.value)">
+                </div>
+                <div class="contact-dropdown-list" id="employee-list-${shiftId}">
+                    <div class="contact-dropdown-empty">Loading...</div>
+                </div>
+            `;
+            
+            container.appendChild(menu);
+            container.querySelector('.contact-dropdown-trigger').classList.add('active');
+            activeDropdown = container;
+            
+            // Load employees
+            await loadEmployeesForDropdown(eventId, shiftId);
+            
+            // Focus search input
+            menu.querySelector('.contact-dropdown-search input')?.focus();
+            
+            // Close on outside click
+            setTimeout(() => {
+                document.addEventListener('click', handleDropdownOutsideClick);
+            }, 100);
+        }
+
+        async function loadEmployeesForDropdown(eventId, shiftId, searchTerm = '') {
+            try {
+                const url = `/api/employees?org_id=${ORG_ID}&active_only=true${searchTerm ? '&search=' + encodeURIComponent(searchTerm) : ''}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                const listId = `employee-list-${shiftId}`;
+                const listEl = document.getElementById(listId);
+                if (!listEl) return;
+                
+                if (data.employees.length === 0) {
+                    listEl.innerHTML = '<div class="contact-dropdown-empty">No employees found</div>';
+                    return;
+                }
+                
+                listEl.innerHTML = data.employees.map(emp => `
+                    <div class="contact-dropdown-item" onclick="selectEmployee(${eventId}, ${shiftId}, ${emp.employee_id}, '${escapeHtml(emp.name)}')">
+                        <div class="contact-dropdown-item-name">${escapeHtml(emp.name)}</div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load employees:', error);
+                const listId = `employee-list-${shiftId}`;
+                const listEl = document.getElementById(listId);
+                if (listEl) {
+                    listEl.innerHTML = '<div class="contact-dropdown-empty">Error loading employees</div>';
+                }
+            }
+        }
+
+        function filterEmployeeDropdown(eventId, shiftId, searchTerm) {
+            loadEmployeesForDropdown(eventId, shiftId, searchTerm);
+        }
+
+        function selectEmployee(eventId, shiftId, employeeId, name) {
+            // Update the UI
+            const container = document.getElementById(`employee-shift-${shiftId}`);
+            const trigger = container.querySelector('.contact-dropdown-trigger');
+            trigger.innerHTML = `
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(name)}</div>
+                </div>
+                <span style="color: var(--text-muted);">▼</span>
+            `;
+            
+            // Mark as dirty
+            markShiftDirty(eventId, shiftId, 'employee_id', employeeId);
+            markShiftDirty(eventId, shiftId, 'employee_name', name);
+            
+            // Close dropdown
+            closeContactDropdown();
+            
+            showToast('Employee updated. Remember to save!', 'success');
+        }
+
         // Shifts Management (PHASE 4 - Task 7)
         let dirtyShifts = new Map();
         let loadedShifts = new Map(); // Cache shifts per event
@@ -2105,10 +2213,14 @@
             return `
                 <tr data-shift-id="${shift.shift_id}">
                     <td>
-                        <input type="text" class="inline-edit" 
-                               value="${escapeHtml(shift.employee_name || '')}" 
-                               onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'employee_name', this.value)"
-                               placeholder="Employee name">
+                        <div class="contact-dropdown-container" id="employee-shift-${shift.shift_id}" style="min-width: 150px;">
+                            <div class="contact-dropdown-trigger" onclick="toggleEmployeeDropdown(${eventId}, ${shift.shift_id}, '${escapeHtml(shift.employee_name || 'Select employee')}')">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(shift.employee_name || 'Select employee')}</div>
+                                </div>
+                                <span style="color: var(--text-muted);">▼</span>
+                            </div>
+                        </div>
                     </td>
                     <td>
                         <input type="date" class="inline-edit" 

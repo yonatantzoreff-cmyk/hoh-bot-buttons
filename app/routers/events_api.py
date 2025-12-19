@@ -446,7 +446,8 @@ async def create_shift_for_event(
 
 class ShiftPatchRequest(BaseModel):
     """Request model for updating a shift."""
-    employee_name: Optional[str] = None
+    employee_id: Optional[int] = None  # Direct employee ID (from dropdown)
+    employee_name: Optional[str] = None  # Legacy text input
     shift_date: Optional[str] = None  # YYYY-MM-DD
     shift_time: Optional[str] = None  # HH:MM
     notes: Optional[str] = None
@@ -474,9 +475,12 @@ async def update_shift(
         # Build update parameters
         update_params = {}
         
-        # Handle employee name change
-        if updates.employee_name is not None:
-            # Find or create employee
+        # Handle employee change (PHASE 5: prefer employee_id from dropdown)
+        if updates.employee_id is not None:
+            # Direct employee ID provided from dropdown
+            update_params["employee_id"] = updates.employee_id
+        elif updates.employee_name is not None:
+            # Legacy: Find or create employee by name
             employees = hoh.employees.list_employees(org_id=org_id)
             employee = next((e for e in employees if e["name"] == updates.employee_name), None)
             
@@ -715,4 +719,43 @@ async def get_contacts_by_role(
     
     except Exception as e:
         logger.exception("Failed to get contacts by role")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/employees")
+async def get_employees(
+    search: Optional[str] = Query(None, description="Search by name"),
+    active_only: bool = Query(True, description="Only return active employees"),
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """
+    Get employees for dropdown selection (PHASE 5).
+    Returns employees with name only (as per spec: "שם בלבד").
+    """
+    try:
+        # Get all employees
+        employees = hoh.list_employees(org_id=org_id, active_only=active_only)
+        
+        # Apply search filter if provided
+        if search:
+            search_lower = search.lower()
+            employees = [
+                e for e in employees
+                if search_lower in (e.get("name") or "").lower()
+            ]
+        
+        # Format response - name only as per spec
+        return {
+            "employees": [
+                {
+                    "employee_id": e.get("employee_id"),
+                    "name": e.get("name"),
+                }
+                for e in employees
+            ]
+        }
+    
+    except Exception as e:
+        logger.exception("Failed to get employees")
         raise HTTPException(status_code=500, detail=str(e))
