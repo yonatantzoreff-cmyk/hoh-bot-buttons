@@ -582,12 +582,24 @@
             border-left: 3px solid var(--accent-color);
         }
 
+        .events-table th[data-col="expander"] {
+            cursor: default;
+        }
+
+        .events-table th[data-col="expander"]:hover {
+            background: var(--bg-secondary);
+        }
+
         .events-table th::before {
             content: '⋮⋮';
             color: var(--text-muted);
             font-size: 0.9rem;
             margin-right: 0.5rem;
             opacity: 0.5;
+        }
+
+        .events-table th[data-col="expander"]::before {
+            content: '';
         }
 
         .events-table th:hover::before {
@@ -801,47 +813,61 @@
             align-items: center;
         }
 
-        /* Employees Shifts Section (PHASE 4 - Task 7) */
-        .shifts-section {
-            padding: 1rem 1.5rem;
+        /* Row Expander Column */
+        .expander-cell {
+            width: 40px;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .expander-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            color: var(--text-muted);
+            padding: 0.3rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+        }
+
+        .expander-btn:hover {
+            color: var(--accent-color);
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+
+        .expander-btn.expanded {
+            transform: rotate(90deg);
+        }
+
+        /* Row Details (Shifts) */
+        .row-details {
+            display: none;
             background: var(--bg-secondary);
             border-top: 1px solid var(--border-color);
         }
 
-        .shifts-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 0.75rem 0;
-            cursor: pointer;
-            user-select: none;
+        .row-details.visible {
+            display: table-row;
         }
 
-        .shifts-title {
-            font-size: 1.1rem;
+        .row-details-content {
+            padding: 1rem 1.5rem 1rem 3rem;
+        }
+
+        .row-details-header {
+            font-size: 0.9rem;
             font-weight: 600;
-            color: var(--text-primary);
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
             display: flex;
             align-items: center;
             gap: 0.5rem;
-        }
-
-        .shifts-collapse-icon {
-            font-size: 1rem;
-            color: var(--text-muted);
-            transition: transform 0.3s;
-        }
-
-        .shifts-collapse-icon.collapsed {
-            transform: rotate(-90deg);
-        }
-
-        .shifts-body {
-            margin-top: 1rem;
-        }
-
-        .shifts-body.hidden {
-            display: none;
         }
 
         .shifts-table {
@@ -853,17 +879,17 @@
         }
 
         .shifts-table th {
-            padding: 0.75rem;
+            padding: 0.6rem;
             text-align: left;
             font-weight: 600;
-            font-size: 0.85rem;
+            font-size: 0.8rem;
             background: var(--bg-tertiary);
             color: var(--text-secondary);
             border-bottom: 1px solid var(--border-color);
         }
 
         .shifts-table td {
-            padding: 0.75rem;
+            padding: 0.6rem;
             border-bottom: 1px solid var(--border-color);
         }
 
@@ -876,7 +902,16 @@
         }
 
         .add-shift-btn {
-            margin-top: 1rem;
+            margin-top: 0.75rem;
+        }
+        
+        /* Reminder Bell Colors */
+        .action-icon.reminder {
+            color: var(--success-color);
+        }
+        
+        .action-icon.reminder.sent {
+            color: var(--info-color);
         }
 
         /* Modal System */
@@ -1554,6 +1589,7 @@
                         <table class="events-table" data-hall="${hallName}">
                             <thead>
                                 <tr id="header-row-${hallName.replace(/\s+/g, '-')}">
+                                    <th data-col="expander" style="width: 40px;"></th>
                                     <th class="sortable" draggable="true" data-col="name" onclick="sortTable(this, 'name')">Name</th>
                                     <th class="sortable sorted-asc" draggable="true" data-col="event_date" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date</th>
                                     <th class="sortable" draggable="true" data-col="show_time" onclick="sortTable(this, 'show_time')">Show Time</th>
@@ -1567,7 +1603,7 @@
                                 </tr>
                             </thead>
                             <tbody>
-                                ${events.map(event => renderEventWithShifts(event)).join('')}
+                                ${events.map(event => renderEventRow(event)).join('')}
                             </tbody>
                         </table>
                     </div>
@@ -1578,10 +1614,6 @@
             restoreColumnOrder();
 
             // Note: Shifts are loaded on-demand when user expands the section
-        }
-
-        function renderEventWithShifts(event) {
-            return renderEventRow(event) + renderShiftsRow(event);
         }
 
         function renderEventRow(event) {
@@ -1596,9 +1628,15 @@
             const showTime = event.show_time_display || '';
             const loadInTime = event.load_in_time_display || '';
             const eventDate = event.event_date || '';
+            const defaultTime = event.load_in_time_display || '';
 
             return `
-                <tr data-event-id="${event.event_id}">
+                <tr data-event-id="${event.event_id}" class="event-row">
+                    <td class="expander-cell">
+                        <button class="expander-btn" onclick="toggleRowDetails(${event.event_id})" id="expander-${event.event_id}" aria-label="Toggle shifts">
+                            ▶
+                        </button>
+                    </td>
                     <td>
                         <input type="text" class="inline-edit" value="${escapeHtml(event.name || '')}" 
                                onchange="markDirty(${event.event_id}, 'name', this.value)">
@@ -1662,36 +1700,22 @@
                         </div>
                     </td>
                 </tr>
-            `;
-        }
-
-        function renderShiftsRow(event) {
-            // Count columns dynamically (will be 10 now with delivery column)
-            const colCount = 10;
-            // Use load_in_time_display instead of substring manipulation
-            const defaultTime = event.load_in_time_display || '';
-            return `
-                <tr class="shifts-row" data-event-id="${event.event_id}">
-                    <td colspan="${colCount}" style="padding: 0;">
-                        <div class="shifts-section">
-                            <div class="shifts-header" onclick="toggleShifts(${event.event_id})">
-                                <div class="shifts-title">
-                                    👷 Employees Shifts
-                                </div>
-                                <div class="shifts-collapse-icon collapsed" id="shifts-icon-${event.event_id}">▼</div>
+                <tr class="row-details" id="details-${event.event_id}" data-event-id="${event.event_id}">
+                    <td colspan="11" style="padding: 0;">
+                        <div class="row-details-content">
+                            <div class="row-details-header">
+                                <span>👷</span> Employee Shifts
                             </div>
-                            <div class="shifts-body hidden" id="shifts-body-${event.event_id}">
-                                <div id="shifts-container-${event.event_id}">
-                                    <div style="text-align: center; padding: 1rem; color: var(--text-muted);">
-                                        <div class="spinner" style="width: 24px; height: 24px;"></div>
-                                        <p style="margin-top: 0.5rem;">Loading shifts...</p>
-                                    </div>
+                            <div id="shifts-container-${event.event_id}">
+                                <div style="text-align: center; padding: 1rem; color: var(--text-muted);">
+                                    <div class="spinner" style="width: 24px; height: 24px;"></div>
+                                    <p style="margin-top: 0.5rem; font-size: 0.85rem;">Loading shifts...</p>
                                 </div>
-                                <button class="btn btn-sm btn-primary add-shift-btn" 
-                                        onclick="addShift(${event.event_id}, '${event.event_date || ''}', '${escapeHtml(defaultTime)}')">
-                                    + Add Shift
-                                </button>
                             </div>
+                            <button class="btn btn-sm btn-primary add-shift-btn" 
+                                    onclick="addShift(${event.event_id}, '${event.event_date || ''}', '${escapeHtml(defaultTime)}')">
+                                + Add Shift
+                            </button>
                         </div>
                     </td>
                 </tr>
@@ -2136,24 +2160,27 @@
             showToast('Employee updated. Remember to save!', 'success');
         }
 
-        // Shifts Management (PHASE 4 - Task 7)
+        // Shifts Management (Row Expander Pattern)
         let dirtyShifts = new Map();
         let loadedShifts = new Map(); // Cache shifts per event
 
-        function toggleShifts(eventId) {
-            const body = document.getElementById(`shifts-body-${eventId}`);
-            const icon = document.getElementById(`shifts-icon-${eventId}`);
+        function toggleRowDetails(eventId) {
+            const detailsRow = document.getElementById(`details-${eventId}`);
+            const expanderBtn = document.getElementById(`expander-${eventId}`);
             
-            if (body.classList.contains('hidden')) {
-                body.classList.remove('hidden');
-                icon.classList.remove('collapsed');
+            if (detailsRow.classList.contains('visible')) {
+                // Close
+                detailsRow.classList.remove('visible');
+                expanderBtn.classList.remove('expanded');
+            } else {
+                // Open
+                detailsRow.classList.add('visible');
+                expanderBtn.classList.add('expanded');
+                
                 // Load shifts if not already loaded
                 if (!loadedShifts.has(eventId)) {
                     loadShiftsForEvent(eventId);
                 }
-            } else {
-                body.classList.add('hidden');
-                icon.classList.add('collapsed');
             }
         }
 
@@ -2209,6 +2236,11 @@
             const shiftDate = shift.call_date_display || '';
             const shiftTime = shift.call_time_display || '';
             const reminderSent = shift.reminder_24h_sent_at ? true : false;
+            
+            // Reminder tooltip
+            const reminderTooltip = reminderSent 
+                ? `נשלח לאחרונה: ${escapeHtml(shift.reminder_sent_display)}` 
+                : 'שלח תזכורת';
 
             return `
                 <tr data-shift-id="${shift.shift_id}">
@@ -2216,46 +2248,49 @@
                         <div class="contact-dropdown-container" id="employee-shift-${shift.shift_id}" style="min-width: 150px;">
                             <div class="contact-dropdown-trigger" onclick="toggleEmployeeDropdown(${eventId}, ${shift.shift_id}, '${escapeHtml(shift.employee_name || 'Select employee')}')">
                                 <div style="flex: 1;">
-                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(shift.employee_name || 'Select employee')}</div>
+                                    <div style="font-weight: 600; font-size: 0.85rem;">${escapeHtml(shift.employee_name || 'Select employee')}</div>
                                 </div>
-                                <span style="color: var(--text-muted);">▼</span>
+                                <span style="color: var(--text-muted); font-size: 0.8rem;">▼</span>
                             </div>
                         </div>
                     </td>
                     <td>
                         <input type="date" class="inline-edit" 
                                value="${shiftDate}" 
-                               onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'shift_date', this.value)">
+                               onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'shift_date', this.value)"
+                               style="font-size: 0.85rem;">
                     </td>
                     <td>
                         <input type="time" class="inline-edit" 
                                value="${shiftTime}" 
-                               onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'shift_time', this.value)">
+                               onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'shift_time', this.value)"
+                               style="font-size: 0.85rem;">
                     </td>
                     <td>
                         <input type="text" class="inline-edit" 
                                value="${escapeHtml(shift.notes || '')}" 
                                onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'notes', this.value)"
-                               placeholder="Notes">
+                               placeholder="Notes"
+                               style="font-size: 0.85rem;">
                     </td>
                     <td>
                         <div class="actions-container">
                             <button class="btn btn-sm btn-success" 
                                     id="save-shift-${shift.shift_id}"
                                     onclick="saveShift(${eventId}, ${shift.shift_id})"
-                                    style="display: none;"
+                                    style="display: none; padding: 0.25rem 0.5rem; font-size: 0.75rem;"
                                     title="Save changes">
                                 💾
                             </button>
+                            <button class="action-icon reminder ${reminderSent ? 'sent' : ''}" 
+                                    onclick="sendShiftReminder(${eventId}, ${shift.shift_id})"
+                                    title="${reminderTooltip}">
+                                🔔
+                            </button>
                             <button class="action-icon delete" 
                                     onclick="deleteShift(${eventId}, ${shift.shift_id})"
-                                    title="Delete shift">
+                                    title="מחק משמרת">
                                 🗑️
-                            </button>
-                            <button class="action-icon whatsapp ${reminderSent ? 'sent' : ''}" 
-                                    onclick="sendShiftReminder(${eventId}, ${shift.shift_id})"
-                                    title="${reminderSent ? 'נשלח לאחרונה: ' + escapeHtml(shift.reminder_sent_display) : 'טרם נשלח'}">
-                                🔔
                             </button>
                         </div>
                     </td>
@@ -2649,8 +2684,13 @@
             bodyRows.forEach(row => {
                 const cells = Array.from(row.children);
                 
-                // Skip rows with colspan (shifts rows)
+                // Skip row-details rows (they have colspan)
                 if (cells.length === 1 && cells[0].colSpan > 1) {
+                    return;
+                }
+                
+                // Skip if this is a row-details row by checking class
+                if (row.classList.contains('row-details')) {
                     return;
                 }
                 
@@ -2716,10 +2756,15 @@
                         bodyRows.forEach(row => {
                             const cells = Array.from(row.children);
                             
-                            // Skip shifts rows (they have colspan)
+                            // Skip row-details rows (they have colspan)
                             if (cells.length === 1 && cells[0].colSpan > 1) {
                                 // Update colspan to match current column count
                                 cells[0].colSpan = headers.length;
+                                return;
+                            }
+                            
+                            // Skip if this is a row-details row by checking class
+                            if (row.classList.contains('row-details')) {
                                 return;
                             }
 
