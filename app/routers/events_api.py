@@ -15,6 +15,11 @@ from pydantic import BaseModel, Field
 from app.dependencies import get_hoh_service
 from app.hoh_service import HOHService
 from app.pubsub import get_pubsub
+from app.time_utils import (
+    utc_to_local_time_str,
+    utc_to_local_date_str,
+    format_datetime_for_display,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -79,12 +84,19 @@ async def list_events(
             hall_name = event.get("hall_name") or f"Hall #{event.get('hall_id', 'Unknown')}"
             if hall_name not in halls:
                 halls[hall_name] = []
+            # Format times for display (Israel timezone)
+            show_time_utc = event.get("show_time")
+            load_in_time_utc = event.get("load_in_time")
+            init_sent_at_utc = event.get("init_sent_at")
+            
             halls[hall_name].append({
                 "event_id": event.get("event_id"),
                 "name": event.get("name"),
                 "event_date": event.get("event_date").isoformat() if event.get("event_date") else None,
-                "show_time": event.get("show_time").isoformat() if event.get("show_time") else None,
-                "load_in_time": event.get("load_in_time").isoformat() if event.get("load_in_time") else None,
+                "show_time": show_time_utc.isoformat() if show_time_utc else None,
+                "show_time_display": utc_to_local_time_str(show_time_utc) if show_time_utc else "",
+                "load_in_time": load_in_time_utc.isoformat() if load_in_time_utc else None,
+                "load_in_time_display": utc_to_local_time_str(load_in_time_utc) if load_in_time_utc else "",
                 "status": event.get("status"),
                 "notes": event.get("notes"),
                 "producer_name": event.get("producer_name"),
@@ -94,7 +106,8 @@ async def list_events(
                 "technical_contact_id": event.get("technical_contact_id"),
                 "producer_contact_id": event.get("producer_contact_id"),
                 "latest_delivery_status": event.get("latest_delivery_status"),
-                "init_sent_at": event.get("init_sent_at").isoformat() if event.get("init_sent_at") else None,
+                "init_sent_at": init_sent_at_utc.isoformat() if init_sent_at_utc else None,
+                "init_sent_at_display": format_datetime_for_display(init_sent_at_utc) if init_sent_at_utc else "",
             })
         
         return {
@@ -304,15 +317,21 @@ async def list_shifts_for_event(
         # Format shifts for response
         result = []
         for shift in shifts:
+            call_time_utc = shift.get("call_time")
+            reminder_sent_utc = shift.get("reminder_24h_sent_at")
+            
             result.append({
                 "shift_id": shift["shift_id"],
                 "employee_id": shift["employee_id"],
                 "employee_name": shift.get("employee_name"),
                 "employee_phone": shift.get("employee_phone"),
-                "call_time": shift["call_time"].isoformat() if shift.get("call_time") else None,
+                "call_time": call_time_utc.isoformat() if call_time_utc else None,
+                "call_time_display": format_datetime_for_display(call_time_utc, include_date=False) if call_time_utc else "",
+                "call_date_display": utc_to_local_date_str(call_time_utc, format="%Y-%m-%d") if call_time_utc else "",
                 "shift_role": shift.get("shift_role"),
                 "notes": shift.get("notes"),
-                "reminder_24h_sent_at": shift.get("reminder_24h_sent_at").isoformat() if shift.get("reminder_24h_sent_at") else None,
+                "reminder_24h_sent_at": reminder_sent_utc.isoformat() if reminder_sent_utc else None,
+                "reminder_sent_display": format_datetime_for_display(reminder_sent_utc) if reminder_sent_utc else "",
             })
         
         return {"shifts": result}

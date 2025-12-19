@@ -128,19 +128,19 @@
         .hamburger-menu {
             position: fixed;
             top: 80px;
-            left: -300px;
+            right: -300px;
             width: 280px;
             background: var(--bg-primary);
-            border-right: 1px solid var(--border-color);
+            border-left: 1px solid var(--border-color);
             box-shadow: var(--shadow-hover);
-            transition: left 0.3s ease;
+            transition: right 0.3s ease;
             z-index: 99;
             max-height: calc(100vh - 80px);
             overflow-y: auto;
         }
 
         .hamburger-menu.open {
-            left: 0;
+            right: 0;
         }
 
         .hamburger-menu-overlay {
@@ -1136,11 +1136,6 @@
 <body>
     <div class="header">
         <div class="header-left">
-            <button class="hamburger-btn" onclick="toggleHamburgerMenu()" aria-label="Menu">
-                <span></span>
-                <span></span>
-                <span></span>
-            </button>
             <h1>JacksonBot 🤖</h1>
         </div>
         <div class="header-actions">
@@ -1173,10 +1168,15 @@
                 </div>
             </div>
             
-            <button class="theme-toggle" onclick="toggleTheme()">
-                <span id="theme-icon">🌙</span> Dark Mode
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                <span id="theme-icon">🌙</span>
             </button>
             <a href="/ui" class="btn btn-primary">+ Add Event</a>
+            <button class="hamburger-btn" onclick="toggleHamburgerMenu()" aria-label="Menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
         </div>
     </div>
 
@@ -1299,21 +1299,10 @@
             const toggle = document.querySelector('.theme-toggle');
             if (currentTheme === 'dark') {
                 icon.textContent = '☀️';
-                // Find the text node and update it
-                for (let i = 0; i < toggle.childNodes.length; i++) {
-                    if (toggle.childNodes[i].nodeType === Node.TEXT_NODE) {
-                        toggle.childNodes[i].textContent = ' Light Mode';
-                        break;
-                    }
-                }
+                toggle.title = 'Switch to light mode';
             } else {
                 icon.textContent = '🌙';
-                for (let i = 0; i < toggle.childNodes.length; i++) {
-                    if (toggle.childNodes[i].nodeType === Node.TEXT_NODE) {
-                        toggle.childNodes[i].textContent = ' Dark Mode';
-                        break;
-                    }
-                }
+                toggle.title = 'Switch to dark mode';
             }
         }
 
@@ -1365,7 +1354,7 @@
                 months.push({
                     year: monthYear,
                     month: monthNum,
-                    label: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).replace(' ', '/'),
+                    label: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'Asia/Jerusalem' }).replace(' ', '/'),
                     value: `${monthYear}-${String(monthNum).padStart(2, '0')}`,
                     timeClass: timeClass
                 });
@@ -1479,9 +1468,10 @@
 
         function renderEventRow(event) {
             const statusClass = (event.status || 'draft').toLowerCase();
-            const showTime = event.show_time ? new Date(event.show_time).toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}) : '';
-            const loadInTime = event.load_in_time ? new Date(event.load_in_time).toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}) : '';
-            const eventDate = event.event_date ? new Date(event.event_date).toLocaleDateString('en-US') : '';
+            // Use pre-formatted times from backend (Israel timezone)
+            const showTime = event.show_time_display || '';
+            const loadInTime = event.load_in_time_display || '';
+            const eventDate = event.event_date || '';
 
             return `
                 <tr data-event-id="${event.event_id}">
@@ -1494,11 +1484,11 @@
                                onchange="markDirty(${event.event_id}, 'event_date', this.value)">
                     </td>
                     <td>
-                        <input type="time" class="inline-edit" value="${event.show_time ? event.show_time.substring(11, 16) : ''}" 
+                        <input type="time" class="inline-edit" value="${event.show_time_display}" 
                                onchange="markDirty(${event.event_id}, 'show_time', this.value)">
                     </td>
                     <td>
-                        <input type="time" class="inline-edit" value="${event.load_in_time ? event.load_in_time.substring(11, 16) : ''}" 
+                        <input type="time" class="inline-edit" value="${event.load_in_time_display}" 
                                onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
                     </td>
                     <td>
@@ -1540,7 +1530,7 @@
                             </button>
                             <button class="action-icon whatsapp ${event.init_sent_at ? 'sent' : ''}" 
                                     onclick="sendWhatsApp(${event.event_id})"
-                                    title="${event.init_sent_at ? 'נשלח בעבר – שלח שוב' : 'שלח וואצאפ'}">
+                                    title="${event.init_sent_at ? 'נשלח לאחרונה: ' + escapeHtml(event.init_sent_at_display) : 'טרם נשלח'}">
                                 📱
                             </button>
                         </div>
@@ -1789,9 +1779,9 @@
         }
 
         function renderShiftRow(eventId, shift) {
-            const callTime = shift.call_time ? new Date(shift.call_time) : null;
-            const shiftDate = callTime ? callTime.toISOString().split('T')[0] : '';
-            const shiftTime = callTime ? callTime.toTimeString().substring(0, 5) : '';
+            // Use pre-formatted times from backend (Israel timezone)
+            const shiftDate = shift.call_date_display || '';
+            const shiftTime = shift.call_time_display || '';
             const reminderSent = shift.reminder_24h_sent_at ? true : false;
 
             return `
@@ -1834,7 +1824,7 @@
                             </button>
                             <button class="action-icon whatsapp ${reminderSent ? 'sent' : ''}" 
                                     onclick="sendShiftReminder(${eventId}, ${shift.shift_id})"
-                                    title="${reminderSent ? 'נשלח בעבר – שלח שוב' : 'שלח תזכורת'}">
+                                    title="${reminderSent ? 'נשלח לאחרונה: ' + escapeHtml(shift.reminder_sent_display) : 'טרם נשלח'}">
                                 🔔
                             </button>
                         </div>
@@ -2533,6 +2523,7 @@
         function formatTimeAgo(timestamp) {
             if (!timestamp) return '';
             
+            // Parse ISO timestamp (UTC) and convert to local time for comparison
             const now = new Date();
             const then = new Date(timestamp);
             const diffMs = now - then;
@@ -2545,7 +2536,8 @@
             if (diffHours < 24) return `לפני ${diffHours} שעות`;
             if (diffDays === 1) return 'אתמול';
             if (diffDays < 7) return `לפני ${diffDays} ימים`;
-            return then.toLocaleDateString('he-IL');
+            // Format date in Israel timezone using Intl API
+            return then.toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' });
         }
         
         function connectNotificationSSE() {
