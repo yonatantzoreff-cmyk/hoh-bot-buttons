@@ -687,6 +687,16 @@
             color: #991b1b;
         }
 
+        .status-chip.follow_up {
+            background: #e0e7ff;
+            color: #4338ca;
+        }
+
+        .status-chip.contact_required {
+            background: #fce7f3;
+            color: #be185d;
+        }
+
         [data-theme="dark"] .status-chip.draft {
             background: #3d4157;
             color: #c4c7d7;
@@ -700,6 +710,16 @@
         [data-theme="dark"] .status-chip.confirmed {
             background: #1a4d3a;
             color: #34d399;
+        }
+
+        [data-theme="dark"] .status-chip.follow_up {
+            background: #312e81;
+            color: #a5b4fc;
+        }
+
+        [data-theme="dark"] .status-chip.contact_required {
+            background: #831843;
+            color: #f9a8d4;
         }
 
         /* Buttons */
@@ -1465,6 +1485,12 @@
         }
 
         function renderEventRow(event) {
+            // Event status mapping (PHASE 3):
+            // - draft: Event created, no message sent yet
+            // - pending: Message sent, waiting for response
+            // - confirmed: Load-in time received and confirmed
+            // - follow_up: Client clicked "still don't know" (עדיין לא יודע)
+            // - contact_required: Client is not the contact person, forwarded contact info
             const statusClass = (event.status || 'draft').toLowerCase();
             // Use pre-formatted times from backend (Israel timezone)
             const showTime = event.show_time_display || '';
