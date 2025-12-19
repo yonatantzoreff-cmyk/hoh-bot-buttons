@@ -128,19 +128,19 @@
         .hamburger-menu {
             position: fixed;
             top: 80px;
-            left: -300px;
+            right: -300px;
             width: 280px;
             background: var(--bg-primary);
-            border-right: 1px solid var(--border-color);
+            border-left: 1px solid var(--border-color);
             box-shadow: var(--shadow-hover);
-            transition: left 0.3s ease;
+            transition: right 0.3s ease;
             z-index: 99;
             max-height: calc(100vh - 80px);
             overflow-y: auto;
         }
 
         .hamburger-menu.open {
-            left: 0;
+            right: 0;
         }
 
         .hamburger-menu-overlay {
@@ -687,6 +687,16 @@
             color: #991b1b;
         }
 
+        .status-chip.follow_up {
+            background: #e0e7ff;
+            color: #4338ca;
+        }
+
+        .status-chip.contact_required {
+            background: #fce7f3;
+            color: #be185d;
+        }
+
         [data-theme="dark"] .status-chip.draft {
             background: #3d4157;
             color: #c4c7d7;
@@ -700,6 +710,16 @@
         [data-theme="dark"] .status-chip.confirmed {
             background: #1a4d3a;
             color: #34d399;
+        }
+
+        [data-theme="dark"] .status-chip.follow_up {
+            background: #312e81;
+            color: #a5b4fc;
+        }
+
+        [data-theme="dark"] .status-chip.contact_required {
+            background: #831843;
+            color: #f9a8d4;
         }
 
         /* Buttons */
@@ -1007,6 +1027,106 @@
             display: block;
         }
 
+        /* Contact Dropdown (PHASE 4) */
+        .contact-dropdown-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .contact-dropdown-trigger {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .contact-dropdown-trigger:hover {
+            border-color: var(--accent-color);
+        }
+
+        .contact-dropdown-trigger.active {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0, 133, 255, 0.1);
+        }
+
+        .contact-dropdown-menu {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-shadow: var(--shadow-hover);
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+
+        .contact-dropdown-menu.visible {
+            display: block;
+        }
+
+        .contact-dropdown-search {
+            position: sticky;
+            top: 0;
+            padding: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-primary);
+        }
+
+        .contact-dropdown-search input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .contact-dropdown-item {
+            padding: 0.75rem;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.2s;
+        }
+
+        .contact-dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .contact-dropdown-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .contact-dropdown-item-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.2rem;
+        }
+
+        .contact-dropdown-item-phone {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .contact-dropdown-empty {
+            padding: 1rem;
+            text-align: center;
+            color: var(--text-muted);
+        }
+
         .suggestion-item {
             padding: 1rem;
             border-bottom: 1px solid var(--border-color);
@@ -1136,11 +1256,6 @@
 <body>
     <div class="header">
         <div class="header-left">
-            <button class="hamburger-btn" onclick="toggleHamburgerMenu()" aria-label="Menu">
-                <span></span>
-                <span></span>
-                <span></span>
-            </button>
             <h1>JacksonBot 🤖</h1>
         </div>
         <div class="header-actions">
@@ -1173,10 +1288,15 @@
                 </div>
             </div>
             
-            <button class="theme-toggle" onclick="toggleTheme()">
-                <span id="theme-icon">🌙</span> Dark Mode
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                <span id="theme-icon">🌙</span>
             </button>
             <a href="/ui" class="btn btn-primary">+ Add Event</a>
+            <button class="hamburger-btn" onclick="toggleHamburgerMenu()" aria-label="Menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
         </div>
     </div>
 
@@ -1299,21 +1419,10 @@
             const toggle = document.querySelector('.theme-toggle');
             if (currentTheme === 'dark') {
                 icon.textContent = '☀️';
-                // Find the text node and update it
-                for (let i = 0; i < toggle.childNodes.length; i++) {
-                    if (toggle.childNodes[i].nodeType === Node.TEXT_NODE) {
-                        toggle.childNodes[i].textContent = ' Light Mode';
-                        break;
-                    }
-                }
+                toggle.title = 'Switch to light mode';
             } else {
                 icon.textContent = '🌙';
-                for (let i = 0; i < toggle.childNodes.length; i++) {
-                    if (toggle.childNodes[i].nodeType === Node.TEXT_NODE) {
-                        toggle.childNodes[i].textContent = ' Dark Mode';
-                        break;
-                    }
-                }
+                toggle.title = 'Switch to dark mode';
             }
         }
 
@@ -1365,7 +1474,7 @@
                 months.push({
                     year: monthYear,
                     month: monthNum,
-                    label: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).replace(' ', '/'),
+                    label: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'Asia/Jerusalem' }).replace(' ', '/'),
                     value: `${monthYear}-${String(monthNum).padStart(2, '0')}`,
                     timeClass: timeClass
                 });
@@ -1450,6 +1559,7 @@
                                     <th class="sortable" draggable="true" data-col="show_time" onclick="sortTable(this, 'show_time')">Show Time</th>
                                     <th class="sortable" draggable="true" data-col="load_in_time" onclick="sortTable(this, 'load_in_time')">Load In</th>
                                     <th draggable="true" data-col="status">Status</th>
+                                    <th draggable="true" data-col="delivery">Delivery</th>
                                     <th draggable="true" data-col="producer">Producer</th>
                                     <th draggable="true" data-col="technical">Technical</th>
                                     <th draggable="true" data-col="notes">Notes</th>
@@ -1467,10 +1577,7 @@
             // Restore column order from localStorage
             restoreColumnOrder();
 
-            // Load shifts for all events (in background)
-            Object.values(data.halls).flat().forEach(event => {
-                loadShiftsForEvent(event.event_id);
-            });
+            // Note: Shifts are loaded on-demand when user expands the section
         }
 
         function renderEventWithShifts(event) {
@@ -1478,10 +1585,17 @@
         }
 
         function renderEventRow(event) {
+            // Event status mapping (PHASE 3):
+            // - draft: Event created, no message sent yet
+            // - pending: Message sent, waiting for response
+            // - confirmed: Load-in time received and confirmed
+            // - follow_up: Client clicked "still don't know" (עדיין לא יודע)
+            // - contact_required: Client is not the contact person, forwarded contact info
             const statusClass = (event.status || 'draft').toLowerCase();
-            const showTime = event.show_time ? new Date(event.show_time).toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}) : '';
-            const loadInTime = event.load_in_time ? new Date(event.load_in_time).toLocaleTimeString('en-US', {hour: '2-digit', minute: '2-digit'}) : '';
-            const eventDate = event.event_date ? new Date(event.event_date).toLocaleDateString('en-US') : '';
+            // Use pre-formatted times from backend (Israel timezone)
+            const showTime = event.show_time_display || '';
+            const loadInTime = event.load_in_time_display || '';
+            const eventDate = event.event_date || '';
 
             return `
                 <tr data-event-id="${event.event_id}">
@@ -1494,37 +1608,39 @@
                                onchange="markDirty(${event.event_id}, 'event_date', this.value)">
                     </td>
                     <td>
-                        <input type="time" class="inline-edit" value="${event.show_time ? event.show_time.substring(11, 16) : ''}" 
+                        <input type="time" class="inline-edit" value="${event.show_time_display}" 
                                onchange="markDirty(${event.event_id}, 'show_time', this.value)">
                     </td>
                     <td>
-                        <input type="time" class="inline-edit" value="${event.load_in_time ? event.load_in_time.substring(11, 16) : ''}" 
+                        <input type="time" class="inline-edit" value="${event.load_in_time_display}" 
                                onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
                     </td>
                     <td>
                         <span class="status-chip ${statusClass}">${event.status || 'draft'}</span>
                     </td>
                     <td>
-                        <div>
-                            <input type="text" class="inline-edit" value="${escapeHtml(event.producer_name || '')}" 
-                                   onchange="markDirty(${event.event_id}, 'producer_name', this.value)"
-                                   placeholder="Name">
-                            ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">${escapeHtml(event.producer_phone)}</div>` : ''}
+                        ${event.latest_delivery_status ? `<span class="status-chip" style="font-size: 0.75rem;">${escapeHtml(event.latest_delivery_status)}</span>` : '<span style="color: var(--text-muted); font-size: 0.8rem;">—</span>'}
+                    </td>
+                    <td>
+                        <div class="contact-dropdown-container" id="producer-${event.event_id}">
+                            <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'producer', 'מפיק')">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.producer_name || 'Select producer')}</div>
+                                    ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.producer_phone)}</div>` : ''}
+                                </div>
+                                <span style="color: var(--text-muted);">▼</span>
+                            </div>
                         </div>
                     </td>
                     <td>
-                        <div>
-                            <div style="display: flex; gap: 0.5rem; align-items: center;">
-                                <input type="text" class="inline-edit" value="${escapeHtml(event.technical_name || '')}" 
-                                       onchange="markDirty(${event.event_id}, 'technical_name', this.value)"
-                                       style="flex: 1;"
-                                       placeholder="Name">
-                                <button class="btn btn-sm btn-primary" onclick="showSuggestions(${event.event_id}, this)"
-                                        title="Suggested technical contacts">
-                                    💡
-                                </button>
+                        <div class="contact-dropdown-container" id="technical-${event.event_id}">
+                            <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'טכני')">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || 'Select technical')}</div>
+                                    ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
+                                </div>
+                                <span style="color: var(--text-muted);">▼</span>
                             </div>
-                            ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.2rem;">${escapeHtml(event.technical_phone)}</div>` : ''}
                         </div>
                     </td>
                     <td>
@@ -1540,7 +1656,7 @@
                             </button>
                             <button class="action-icon whatsapp ${event.init_sent_at ? 'sent' : ''}" 
                                     onclick="sendWhatsApp(${event.event_id})"
-                                    title="${event.init_sent_at ? 'נשלח בעבר – שלח שוב' : 'שלח וואצאפ'}">
+                                    title="${event.init_sent_at ? 'נשלח לאחרונה: ' + escapeHtml(event.init_sent_at_display) : 'טרם נשלח'}">
                                 📱
                             </button>
                         </div>
@@ -1550,8 +1666,10 @@
         }
 
         function renderShiftsRow(event) {
-            // Count columns dynamically (will be 9 by default)
-            const colCount = 9;
+            // Count columns dynamically (will be 10 now with delivery column)
+            const colCount = 10;
+            // Use load_in_time_display instead of substring manipulation
+            const defaultTime = event.load_in_time_display || '';
             return `
                 <tr class="shifts-row" data-event-id="${event.event_id}">
                     <td colspan="${colCount}" style="padding: 0;">
@@ -1560,9 +1678,9 @@
                                 <div class="shifts-title">
                                     👷 Employees Shifts
                                 </div>
-                                <div class="shifts-collapse-icon" id="shifts-icon-${event.event_id}">▼</div>
+                                <div class="shifts-collapse-icon collapsed" id="shifts-icon-${event.event_id}">▼</div>
                             </div>
-                            <div class="shifts-body" id="shifts-body-${event.event_id}">
+                            <div class="shifts-body hidden" id="shifts-body-${event.event_id}">
                                 <div id="shifts-container-${event.event_id}">
                                     <div style="text-align: center; padding: 1rem; color: var(--text-muted);">
                                         <div class="spinner" style="width: 24px; height: 24px;"></div>
@@ -1570,7 +1688,7 @@
                                     </div>
                                 </div>
                                 <button class="btn btn-sm btn-primary add-shift-btn" 
-                                        onclick="addShift(${event.event_id}, '${event.event_date || ''}', '${event.load_in_time ? event.load_in_time.substring(11, 16) : ''}')">
+                                        onclick="addShift(${event.event_id}, '${event.event_date || ''}', '${escapeHtml(defaultTime)}')">
                                     + Add Shift
                                 </button>
                             </div>
@@ -1611,6 +1729,7 @@
 
             let successCount = 0;
             let errorCount = 0;
+            const failedEvents = [];
 
             for (const [eventId, changes] of dirtyRows.entries()) {
                 try {
@@ -1623,28 +1742,217 @@
                     if (response.ok) {
                         successCount++;
                         const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
-                        if (row) row.classList.remove('dirty');
+                        if (row) {
+                            row.classList.remove('dirty');
+                        }
+                        
+                        // Update row with response data
+                        const result = await response.json();
+                        if (result.event) {
+                            updateEventRow(eventId, result.event);
+                        }
                     } else {
                         errorCount++;
+                        failedEvents.push(eventId);
                         const error = await response.json();
                         console.error(`Failed to update event ${eventId}:`, error);
+                        showToast(`Failed to save event ${eventId}: ${error.detail || 'Unknown error'}`, 'error');
                     }
                 } catch (error) {
                     errorCount++;
+                    failedEvents.push(eventId);
                     console.error(`Error updating event ${eventId}:`, error);
+                    showToast(`Error saving event ${eventId}: ${error.message}`, 'error');
                 }
             }
 
-            dirtyRows.clear();
-            saveBtn.classList.remove('visible');
+            // Only clear dirty rows that succeeded
+            for (const [eventId] of dirtyRows.entries()) {
+                if (!failedEvents.includes(eventId)) {
+                    dirtyRows.delete(eventId);
+                }
+            }
+
+            // Hide save button only if no more dirty rows
+            if (dirtyRows.size === 0) {
+                saveBtn.classList.remove('visible');
+            }
+            
             saveBtn.disabled = false;
             saveBtn.innerHTML = '<span>💾</span> Save Changes';
 
             if (errorCount === 0) {
                 showToast(`Successfully saved ${successCount} event(s)`, 'success');
             } else {
-                showToast(`Saved ${successCount}, failed ${errorCount}`, 'error');
+                showToast(`Saved ${successCount}, failed ${errorCount}. Please retry failed items.`, 'error');
             }
+        }
+        
+        // Update event row with new data from server
+        function updateEventRow(eventId, eventData) {
+            const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
+            if (!row) return;
+            
+            // Update input values with server data
+            const inputs = row.querySelectorAll('.inline-edit');
+            inputs.forEach(input => {
+                const onchange = input.getAttribute('onchange');
+                if (!onchange) return;
+                
+                // Extract field name from onchange attribute
+                const fieldMatch = onchange.match(/markDirty\([^,]+,\s*['"]([^'"]+)['"]/);
+                if (!fieldMatch) return;
+                
+                const field = fieldMatch[1];
+                
+                // Update value based on field
+                if (field === 'name' && eventData.name !== undefined) {
+                    input.value = eventData.name;
+                } else if (field === 'event_date' && eventData.event_date) {
+                    input.value = eventData.event_date;
+                } else if (field === 'show_time' && eventData.show_time_display !== undefined) {
+                    input.value = eventData.show_time_display;
+                } else if (field === 'load_in_time' && eventData.load_in_time_display !== undefined) {
+                    input.value = eventData.load_in_time_display;
+                } else if (field === 'notes' && eventData.notes !== undefined) {
+                    input.value = eventData.notes;
+                } else if (field === 'producer_name' && eventData.producer_name !== undefined) {
+                    input.value = eventData.producer_name;
+                } else if (field === 'technical_name' && eventData.technical_name !== undefined) {
+                    input.value = eventData.technical_name;
+                }
+            });
+        }
+
+        // Contact Dropdown (PHASE 4)
+        let activeDropdown = null;
+
+        async function toggleContactDropdown(eventId, fieldType, role) {
+            const containerId = `${fieldType}-${eventId}`;
+            const container = document.getElementById(containerId);
+            
+            // Close any existing dropdown
+            if (activeDropdown && activeDropdown !== container) {
+                closeContactDropdown();
+            }
+            
+            // Check if dropdown already exists
+            let menu = container.querySelector('.contact-dropdown-menu');
+            if (menu) {
+                if (menu.classList.contains('visible')) {
+                    closeContactDropdown();
+                    return;
+                } else {
+                    menu.classList.add('visible');
+                    container.querySelector('.contact-dropdown-trigger').classList.add('active');
+                    activeDropdown = container;
+                    menu.querySelector('.contact-dropdown-search input')?.focus();
+                    return;
+                }
+            }
+            
+            // Create dropdown menu
+            menu = document.createElement('div');
+            menu.className = 'contact-dropdown-menu visible';
+            menu.innerHTML = `
+                <div class="contact-dropdown-search">
+                    <input type="text" placeholder="Search by name or phone..." oninput="filterContactDropdown(${eventId}, '${fieldType}', '${role}', this.value)">
+                </div>
+                <div class="contact-dropdown-list" id="${fieldType}-list-${eventId}">
+                    <div class="contact-dropdown-empty">Loading...</div>
+                </div>
+            `;
+            
+            container.appendChild(menu);
+            container.querySelector('.contact-dropdown-trigger').classList.add('active');
+            activeDropdown = container;
+            
+            // Load contacts
+            await loadContactsForDropdown(eventId, fieldType, role);
+            
+            // Focus search input
+            menu.querySelector('.contact-dropdown-search input')?.focus();
+            
+            // Close on outside click
+            setTimeout(() => {
+                document.addEventListener('click', handleDropdownOutsideClick);
+            }, 100);
+        }
+
+        function handleDropdownOutsideClick(e) {
+            if (activeDropdown && !activeDropdown.contains(e.target)) {
+                closeContactDropdown();
+            }
+        }
+
+        function closeContactDropdown() {
+            if (activeDropdown) {
+                const menu = activeDropdown.querySelector('.contact-dropdown-menu');
+                if (menu) {
+                    menu.remove();
+                }
+                activeDropdown.querySelector('.contact-dropdown-trigger')?.classList.remove('active');
+                document.removeEventListener('click', handleDropdownOutsideClick);
+                activeDropdown = null;
+            }
+        }
+
+        async function loadContactsForDropdown(eventId, fieldType, role, searchTerm = '') {
+            try {
+                const url = `/api/contacts/by-role?org_id=${ORG_ID}&role=${encodeURIComponent(role)}${searchTerm ? '&search=' + encodeURIComponent(searchTerm) : ''}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                const listId = `${fieldType}-list-${eventId}`;
+                const listEl = document.getElementById(listId);
+                if (!listEl) return;
+                
+                if (data.contacts.length === 0) {
+                    listEl.innerHTML = '<div class="contact-dropdown-empty">No contacts found</div>';
+                    return;
+                }
+                
+                listEl.innerHTML = data.contacts.map(contact => `
+                    <div class="contact-dropdown-item" onclick="selectContact(${eventId}, '${fieldType}', ${contact.contact_id}, '${escapeHtml(contact.name)}', '${escapeHtml(contact.phone)}')">
+                        <div class="contact-dropdown-item-name">${escapeHtml(contact.name)}</div>
+                        <div class="contact-dropdown-item-phone">${escapeHtml(contact.phone)}</div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load contacts:', error);
+                const listId = `${fieldType}-list-${eventId}`;
+                const listEl = document.getElementById(listId);
+                if (listEl) {
+                    listEl.innerHTML = '<div class="contact-dropdown-empty">Error loading contacts</div>';
+                }
+            }
+        }
+
+        function filterContactDropdown(eventId, fieldType, role, searchTerm) {
+            loadContactsForDropdown(eventId, fieldType, role, searchTerm);
+        }
+
+        function selectContact(eventId, fieldType, contactId, name, phone) {
+            // Update the UI
+            const container = document.getElementById(`${fieldType}-${eventId}`);
+            const trigger = container.querySelector('.contact-dropdown-trigger');
+            trigger.innerHTML = `
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(name)}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(phone)}</div>
+                </div>
+                <span style="color: var(--text-muted);">▼</span>
+            `;
+            
+            // Mark as dirty
+            markDirty(eventId, `${fieldType}_contact_id`, contactId);
+            markDirty(eventId, `${fieldType}_name`, name);
+            markDirty(eventId, `${fieldType}_phone`, phone);
+            
+            // Close dropdown
+            closeContactDropdown();
+            
+            showToast(`${fieldType === 'producer' ? 'Producer' : 'Technical'} contact updated. Remember to save!`, 'success');
         }
 
         // Technical Suggestions
@@ -1720,6 +2028,114 @@
             showToast(`Suggestion applied: ${name}. Remember to save!`, 'success');
         }
 
+        // Employee Dropdown for Shifts (PHASE 5)
+        async function toggleEmployeeDropdown(eventId, shiftId, currentName) {
+            const containerId = `employee-shift-${shiftId}`;
+            const container = document.getElementById(containerId);
+            
+            // Close any existing dropdown
+            if (activeDropdown && activeDropdown !== container) {
+                closeContactDropdown();
+            }
+            
+            // Check if dropdown already exists
+            let menu = container.querySelector('.contact-dropdown-menu');
+            if (menu) {
+                if (menu.classList.contains('visible')) {
+                    closeContactDropdown();
+                    return;
+                } else {
+                    menu.classList.add('visible');
+                    container.querySelector('.contact-dropdown-trigger').classList.add('active');
+                    activeDropdown = container;
+                    menu.querySelector('.contact-dropdown-search input')?.focus();
+                    return;
+                }
+            }
+            
+            // Create dropdown menu
+            menu = document.createElement('div');
+            menu.className = 'contact-dropdown-menu visible';
+            menu.innerHTML = `
+                <div class="contact-dropdown-search">
+                    <input type="text" placeholder="Search employee..." oninput="filterEmployeeDropdown(${eventId}, ${shiftId}, this.value)">
+                </div>
+                <div class="contact-dropdown-list" id="employee-list-${shiftId}">
+                    <div class="contact-dropdown-empty">Loading...</div>
+                </div>
+            `;
+            
+            container.appendChild(menu);
+            container.querySelector('.contact-dropdown-trigger').classList.add('active');
+            activeDropdown = container;
+            
+            // Load employees
+            await loadEmployeesForDropdown(eventId, shiftId);
+            
+            // Focus search input
+            menu.querySelector('.contact-dropdown-search input')?.focus();
+            
+            // Close on outside click
+            setTimeout(() => {
+                document.addEventListener('click', handleDropdownOutsideClick);
+            }, 100);
+        }
+
+        async function loadEmployeesForDropdown(eventId, shiftId, searchTerm = '') {
+            try {
+                const url = `/api/employees?org_id=${ORG_ID}&active_only=true${searchTerm ? '&search=' + encodeURIComponent(searchTerm) : ''}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                const listId = `employee-list-${shiftId}`;
+                const listEl = document.getElementById(listId);
+                if (!listEl) return;
+                
+                if (data.employees.length === 0) {
+                    listEl.innerHTML = '<div class="contact-dropdown-empty">No employees found</div>';
+                    return;
+                }
+                
+                listEl.innerHTML = data.employees.map(emp => `
+                    <div class="contact-dropdown-item" onclick="selectEmployee(${eventId}, ${shiftId}, ${emp.employee_id}, '${escapeHtml(emp.name)}')">
+                        <div class="contact-dropdown-item-name">${escapeHtml(emp.name)}</div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load employees:', error);
+                const listId = `employee-list-${shiftId}`;
+                const listEl = document.getElementById(listId);
+                if (listEl) {
+                    listEl.innerHTML = '<div class="contact-dropdown-empty">Error loading employees</div>';
+                }
+            }
+        }
+
+        function filterEmployeeDropdown(eventId, shiftId, searchTerm) {
+            loadEmployeesForDropdown(eventId, shiftId, searchTerm);
+        }
+
+        function selectEmployee(eventId, shiftId, employeeId, name) {
+            // Update the UI
+            const container = document.getElementById(`employee-shift-${shiftId}`);
+            const trigger = container.querySelector('.contact-dropdown-trigger');
+            trigger.innerHTML = `
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(name)}</div>
+                </div>
+                <span style="color: var(--text-muted);">▼</span>
+            `;
+            
+            // Mark as dirty
+            markShiftDirty(eventId, shiftId, 'employee_id', employeeId);
+            markShiftDirty(eventId, shiftId, 'employee_name', name);
+            
+            // Close dropdown
+            closeContactDropdown();
+            
+            showToast('Employee updated. Remember to save!', 'success');
+        }
+
         // Shifts Management (PHASE 4 - Task 7)
         let dirtyShifts = new Map();
         let loadedShifts = new Map(); // Cache shifts per event
@@ -1789,18 +2205,22 @@
         }
 
         function renderShiftRow(eventId, shift) {
-            const callTime = shift.call_time ? new Date(shift.call_time) : null;
-            const shiftDate = callTime ? callTime.toISOString().split('T')[0] : '';
-            const shiftTime = callTime ? callTime.toTimeString().substring(0, 5) : '';
+            // Use pre-formatted times from backend (Israel timezone)
+            const shiftDate = shift.call_date_display || '';
+            const shiftTime = shift.call_time_display || '';
             const reminderSent = shift.reminder_24h_sent_at ? true : false;
 
             return `
                 <tr data-shift-id="${shift.shift_id}">
                     <td>
-                        <input type="text" class="inline-edit" 
-                               value="${escapeHtml(shift.employee_name || '')}" 
-                               onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'employee_name', this.value)"
-                               placeholder="Employee name">
+                        <div class="contact-dropdown-container" id="employee-shift-${shift.shift_id}" style="min-width: 150px;">
+                            <div class="contact-dropdown-trigger" onclick="toggleEmployeeDropdown(${eventId}, ${shift.shift_id}, '${escapeHtml(shift.employee_name || 'Select employee')}')">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(shift.employee_name || 'Select employee')}</div>
+                                </div>
+                                <span style="color: var(--text-muted);">▼</span>
+                            </div>
+                        </div>
                     </td>
                     <td>
                         <input type="date" class="inline-edit" 
@@ -1834,7 +2254,7 @@
                             </button>
                             <button class="action-icon whatsapp ${reminderSent ? 'sent' : ''}" 
                                     onclick="sendShiftReminder(${eventId}, ${shift.shift_id})"
-                                    title="${reminderSent ? 'נשלח בעבר – שלח שוב' : 'שלח תזכורת'}">
+                                    title="${reminderSent ? 'נשלח לאחרונה: ' + escapeHtml(shift.reminder_sent_display) : 'טרם נשלח'}">
                                 🔔
                             </button>
                         </div>
@@ -2228,6 +2648,17 @@
             // Move cells in each body row
             bodyRows.forEach(row => {
                 const cells = Array.from(row.children);
+                
+                // Skip rows with colspan (shifts rows)
+                if (cells.length === 1 && cells[0].colSpan > 1) {
+                    return;
+                }
+                
+                // Only reorder if we have the right number of cells
+                if (fromIndex >= cells.length || toIndex >= cells.length) {
+                    return;
+                }
+                
                 const cell = cells[fromIndex];
                 if (toIndex < fromIndex) {
                     row.insertBefore(cell, cells[toIndex]);
@@ -2533,6 +2964,7 @@
         function formatTimeAgo(timestamp) {
             if (!timestamp) return '';
             
+            // Parse ISO timestamp (UTC) and convert to local time for comparison
             const now = new Date();
             const then = new Date(timestamp);
             const diffMs = now - then;
@@ -2545,7 +2977,8 @@
             if (diffHours < 24) return `לפני ${diffHours} שעות`;
             if (diffDays === 1) return 'אתמול';
             if (diffDays < 7) return `לפני ${diffDays} ימים`;
-            return then.toLocaleDateString('he-IL');
+            // Format date in Israel timezone using Intl API
+            return then.toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' });
         }
         
         function connectNotificationSSE() {
