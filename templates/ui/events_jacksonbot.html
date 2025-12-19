@@ -734,6 +734,70 @@
             color: #f9a8d4;
         }
 
+        /* Delivery Status Chips (PHASE 1) */
+        .delivery-chip {
+            display: inline-block;
+            padding: 0.4rem 0.9rem;
+            border-radius: 16px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+
+        /* Green: delivered, read */
+        .delivery-chip.delivered,
+        .delivery-chip.read {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        /* Orange: queued, sending, sent, accepted (in transit) */
+        .delivery-chip.queued,
+        .delivery-chip.sending,
+        .delivery-chip.sent,
+        .delivery-chip.accepted {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        /* Red: failed, undelivered */
+        .delivery-chip.failed,
+        .delivery-chip.undelivered {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Gray: no status */
+        .delivery-chip.none {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        [data-theme="dark"] .delivery-chip.delivered,
+        [data-theme="dark"] .delivery-chip.read {
+            background: #1a4d3a;
+            color: #34d399;
+        }
+
+        [data-theme="dark"] .delivery-chip.queued,
+        [data-theme="dark"] .delivery-chip.sending,
+        [data-theme="dark"] .delivery-chip.sent,
+        [data-theme="dark"] .delivery-chip.accepted {
+            background: #78350f;
+            color: #fbbf24;
+        }
+
+        [data-theme="dark"] .delivery-chip.failed,
+        [data-theme="dark"] .delivery-chip.undelivered {
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+
+        [data-theme="dark"] .delivery-chip.none {
+            background: #374151;
+            color: #9ca3af;
+        }
+
         /* Buttons */
         .btn {
             padding: 0.5rem 1rem;
@@ -1592,6 +1656,7 @@
                                     <th data-col="expander" style="width: 40px;"></th>
                                     <th class="sortable" draggable="true" data-col="name" onclick="sortTable(this, 'name')">Name</th>
                                     <th class="sortable sorted-asc" draggable="true" data-col="event_date" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date</th>
+                                    <th draggable="true" data-col="day" style="width: 80px;">Day</th>
                                     <th class="sortable" draggable="true" data-col="show_time" onclick="sortTable(this, 'show_time')">Show Time</th>
                                     <th class="sortable" draggable="true" data-col="load_in_time" onclick="sortTable(this, 'load_in_time')">Load In</th>
                                     <th draggable="true" data-col="status">Status</th>
@@ -1614,6 +1679,44 @@
             restoreColumnOrder();
 
             // Note: Shifts are loaded on-demand when user expands the section
+        }
+
+        // PHASE 5: Get day of week in English (e.g., "Sun", "Mon", "Tue", etc.)
+        function getDayOfWeek(dateStr) {
+            if (!dateStr) return '—';
+            
+            try {
+                const date = new Date(dateStr + 'T12:00:00'); // Add time to avoid timezone issues
+                const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                return days[date.getDay()];
+            } catch (e) {
+                return '—';
+            }
+        }
+
+        // Render delivery status chip with proper colors (PHASE 1)
+        function renderDeliveryStatusChip(deliveryStatus) {
+            if (!deliveryStatus) {
+                return '<span class="delivery-chip none">—</span>';
+            }
+            
+            const status = deliveryStatus.toLowerCase();
+            return `<span class="delivery-chip ${status}">${escapeHtml(deliveryStatus)}</span>`;
+        }
+
+        // Render status chip with tooltip for follow_up status (PHASE 2)
+        function renderStatusChip(event) {
+            const status = event.status || 'draft';
+            const statusClass = status.toLowerCase();
+            
+            // Add tooltip for follow_up status showing next follow-up time
+            if (statusClass === 'follow_up' && event.next_followup_at_display) {
+                return `<span class="status-chip ${statusClass}" title="הודעת follow-up הבאה תישלח ב: ${escapeHtml(event.next_followup_at_display)}">${status}</span>`;
+            } else if (statusClass === 'follow_up') {
+                return `<span class="status-chip ${statusClass}" title="לא מתוזמן">${status}</span>`;
+            }
+            
+            return `<span class="status-chip ${statusClass}">${status}</span>`;
         }
 
         function renderEventRow(event) {
@@ -1645,6 +1748,9 @@
                         <input type="date" class="inline-edit" value="${event.event_date || ''}" 
                                onchange="markDirty(${event.event_id}, 'event_date', this.value)">
                     </td>
+                    <td style="text-align: center; color: var(--text-secondary); font-size: 0.9rem;">
+                        ${getDayOfWeek(event.event_date)}
+                    </td>
                     <td>
                         <input type="time" class="inline-edit" value="${event.show_time_display}" 
                                onchange="markDirty(${event.event_id}, 'show_time', this.value)">
@@ -1654,10 +1760,10 @@
                                onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
                     </td>
                     <td>
-                        <span class="status-chip ${statusClass}">${event.status || 'draft'}</span>
+                        ${renderStatusChip(event)}
                     </td>
                     <td>
-                        ${event.latest_delivery_status ? `<span class="status-chip" style="font-size: 0.75rem;">${escapeHtml(event.latest_delivery_status)}</span>` : '<span style="color: var(--text-muted); font-size: 0.8rem;">—</span>'}
+                        ${renderDeliveryStatusChip(event.latest_delivery_status)}
                     </td>
                     <td>
                         <div class="contact-dropdown-container" id="producer-${event.event_id}">
@@ -1701,11 +1807,8 @@
                     </td>
                 </tr>
                 <tr class="row-details" id="details-${event.event_id}" data-event-id="${event.event_id}">
-                    <td colspan="11" style="padding: 0;">
+                    <td colspan="12" style="padding: 0;">
                         <div class="row-details-content">
-                            <div class="row-details-header">
-                                <span>👷</span> Employee Shifts
-                            </div>
                             <div id="shifts-container-${event.event_id}">
                                 <div style="text-align: center; padding: 1rem; color: var(--text-muted);">
                                     <div class="spinner" style="width: 24px; height: 24px;"></div>
@@ -1904,16 +2007,27 @@
         }
 
         function handleDropdownOutsideClick(e) {
-            if (activeDropdown && !activeDropdown.contains(e.target)) {
+            // Check if click is inside activeDropdown container or inside any portal dropdown
+            const portalDropdown = e.target.closest('.contact-dropdown-menu');
+            if (activeDropdown && !activeDropdown.contains(e.target) && !portalDropdown) {
                 closeContactDropdown();
             }
         }
 
         function closeContactDropdown() {
             if (activeDropdown) {
-                const menu = activeDropdown.querySelector('.contact-dropdown-menu');
+                // Try to find menu in container first (old style)
+                let menu = activeDropdown.querySelector('.contact-dropdown-menu');
                 if (menu) {
                     menu.remove();
+                }
+                // Also look for portal dropdown (PHASE 3: new style)
+                const containerId = activeDropdown.id;
+                if (containerId) {
+                    menu = document.querySelector(`[data-dropdown-id="${containerId}"]`);
+                    if (menu) {
+                        menu.remove();
+                    }
                 }
                 activeDropdown.querySelector('.contact-dropdown-trigger')?.classList.remove('active');
                 document.removeEventListener('click', handleDropdownOutsideClick);
@@ -2063,7 +2177,7 @@
             }
             
             // Check if dropdown already exists
-            let menu = container.querySelector('.contact-dropdown-menu');
+            let menu = document.querySelector(`[data-dropdown-id="${containerId}"]`);
             if (menu) {
                 if (menu.classList.contains('visible')) {
                     closeContactDropdown();
@@ -2072,37 +2186,51 @@
                     menu.classList.add('visible');
                     container.querySelector('.contact-dropdown-trigger').classList.add('active');
                     activeDropdown = container;
-                    menu.querySelector('.contact-dropdown-search input')?.focus();
                     return;
                 }
             }
             
-            // Create dropdown menu
+            // PHASE 3: Create dropdown as portal (append to body to avoid overflow issues)
             menu = document.createElement('div');
             menu.className = 'contact-dropdown-menu visible';
+            menu.setAttribute('data-dropdown-id', containerId);
+            menu.style.position = 'fixed';
+            menu.style.zIndex = '10000';
+            
+            // PHASE 3: No search field - simple dropdown only
             menu.innerHTML = `
-                <div class="contact-dropdown-search">
-                    <input type="text" placeholder="Search employee..." oninput="filterEmployeeDropdown(${eventId}, ${shiftId}, this.value)">
-                </div>
-                <div class="contact-dropdown-list" id="employee-list-${shiftId}">
+                <div class="contact-dropdown-list" id="employee-list-${shiftId}" style="max-height: 300px; overflow-y: auto;">
                     <div class="contact-dropdown-empty">Loading...</div>
                 </div>
             `;
             
-            container.appendChild(menu);
+            // Position dropdown relative to trigger
+            const triggerRect = container.getBoundingClientRect();
+            menu.style.top = `${triggerRect.bottom + 4}px`;
+            menu.style.left = `${triggerRect.left}px`;
+            menu.style.minWidth = `${triggerRect.width}px`;
+            
+            document.body.appendChild(menu);
             container.querySelector('.contact-dropdown-trigger').classList.add('active');
             activeDropdown = container;
             
             // Load employees
             await loadEmployeesForDropdown(eventId, shiftId);
             
-            // Focus search input
-            menu.querySelector('.contact-dropdown-search input')?.focus();
-            
             // Close on outside click
             setTimeout(() => {
                 document.addEventListener('click', handleDropdownOutsideClick);
             }, 100);
+            
+            // Update position on scroll
+            const updatePosition = () => {
+                if (menu && menu.classList.contains('visible')) {
+                    const rect = container.getBoundingClientRect();
+                    menu.style.top = `${rect.bottom + 4}px`;
+                    menu.style.left = `${rect.left}px`;
+                }
+            };
+            window.addEventListener('scroll', updatePosition, { passive: true, once: true });
         }
 
         async function loadEmployeesForDropdown(eventId, shiftId, searchTerm = '') {
@@ -2366,24 +2494,15 @@
             }
         }
 
+        // PHASE 3: Add shift inline (no modal) with defaults from event
         async function addShift(eventId, defaultDate, defaultTime) {
-            showInputModal(
-                'Add Shift',
-                'Employee Name:',
-                'Enter employee name...',
-                async (employeeName) => {
-                    await createShiftAPI(eventId, employeeName, defaultDate, defaultTime);
-                }
-            );
-        }
-
-        async function createShiftAPI(eventId, employeeName, defaultDate, defaultTime) {
             try {
+                // Create shift immediately with defaults: date=event_date, time=load_in_time
                 const response = await fetch(`/api/events/${eventId}/shifts?org_id=${ORG_ID}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        employee_name: employeeName,
+                        employee_name: '',  // Empty - user will select from dropdown
                         shift_date: defaultDate || null,
                         shift_time: defaultTime || null,
                         notes: ''
@@ -2391,16 +2510,16 @@
                 });
 
                 if (response.ok) {
-                    showToast('Shift created successfully', 'success');
-                    // Reload shifts
+                    showToast('Shift added. Please select employee.', 'success');
+                    // Reload shifts to show the new row
                     loadShiftsForEvent(eventId);
                 } else {
                     const error = await response.json();
-                    showToast(`Failed to create shift: ${error.detail || 'Unknown error'}`, 'error');
+                    showToast(`Failed to add shift: ${error.detail || 'Unknown error'}`, 'error');
                 }
             } catch (error) {
-                console.error('Error creating shift:', error);
-                showToast('Failed to create shift', 'error');
+                console.error('Error adding shift:', error);
+                showToast('Failed to add shift', 'error');
             }
         }
 

@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 MIGRATION_PATH = Path(__file__).resolve().parents[1] / "db" / "migrations" / "002_calendar_import.sql"
 SHIFT_ORGANIZER_MIGRATION_PATH = Path(__file__).resolve().parents[1] / "db" / "migrations" / "004_shift_organizer.sql"
 NOTIFICATIONS_MIGRATION_PATH = Path(__file__).resolve().parents[1] / "db" / "migrations" / "005_notifications.sql"
+NEXT_FOLLOWUP_MIGRATION_PATH = Path(__file__).resolve().parents[1] / "db" / "migrations" / "006_add_next_followup_at.sql"
 
 
 class SchemaMissingError(RuntimeError):
@@ -123,6 +124,25 @@ def _apply_notifications_migration() -> None:
                     raise
 
 
+def _apply_next_followup_migration() -> None:
+    """Apply the next_followup_at migration for follow-up tracking."""
+    sql = NEXT_FOLLOWUP_MIGRATION_PATH.read_text(encoding="utf-8")
+    logger.info("Applying next_followup_at migration from %s", NEXT_FOLLOWUP_MIGRATION_PATH)
+    
+    statements = [stmt.strip() for stmt in sql.split(";") if stmt.strip()]
+    
+    with engine.begin() as conn:
+        for stmt in statements:
+            try:
+                conn.exec_driver_sql(stmt)
+            except Exception as e:
+                # Log but don't fail if column already exists (idempotent)
+                if "already exists" in str(e).lower() or "duplicate" in str(e).lower():
+                    logger.info(f"Skipping statement (already applied): {stmt[:50]}...")
+                else:
+                    raise
+
+
 def ensure_calendar_schema() -> None:
     """Ensure the staging_events table exists and indexes are present.
 
@@ -162,6 +182,13 @@ def ensure_calendar_schema() -> None:
         _apply_notifications_migration()
     except Exception as e:
         logger.warning(f"Notifications migration issue (may already be applied): {e}")
+        # Don't block startup if migration already applied
+    
+    # Apply next_followup_at migration (PHASE 2)
+    try:
+        _apply_next_followup_migration()
+    except Exception as e:
+        logger.warning(f"Next followup migration issue (may already be applied): {e}")
         # Don't block startup if migration already applied
 
 

@@ -110,6 +110,9 @@ async def list_events(
                 "latest_delivery_status": event.get("latest_delivery_status"),
                 "init_sent_at": init_sent_at_utc.isoformat() if init_sent_at_utc else None,
                 "init_sent_at_display": format_datetime_for_display(init_sent_at_utc) if init_sent_at_utc else "",
+                # PHASE 2: Add next_followup_at for follow-up tooltip
+                "next_followup_at": event.get("next_followup_at").isoformat() if event.get("next_followup_at") else None,
+                "next_followup_at_display": format_datetime_for_display(event.get("next_followup_at")) if event.get("next_followup_at") else "",
             })
         
         return {
@@ -593,10 +596,10 @@ async def send_shift_reminder(
         call_time_local = utc_to_local_datetime(shift["call_time"])
         event_date_str = format_datetime_for_display(call_time_local)
         
-        # Send WhatsApp reminder
+        # PHASE 3: Send WhatsApp reminder using send_content_message (not send_whatsapp_template)
         if CONTENT_SID_SHIFT_REMINDER:
-            twilio_client.send_whatsapp_template(
-                to_phone=employee_phone,
+            twilio_client.send_content_message(
+                to=employee_phone,
                 content_sid=CONTENT_SID_SHIFT_REMINDER,
                 content_variables={
                     "1": shift.get("employee_name", "Employee"),

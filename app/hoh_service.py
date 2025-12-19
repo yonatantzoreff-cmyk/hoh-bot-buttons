@@ -1613,6 +1613,14 @@ class HOHService:
             pending_data_fields=pending_fields,
         )
 
+        # PHASE 2: Update event status to follow_up and set next_followup_at
+        self.events.update_event(
+            org_id=org_id,
+            event_id=event_id,
+            status="follow_up",
+            next_followup_at=followup_at,
+        )
+
         contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
         if not contact:
             return
