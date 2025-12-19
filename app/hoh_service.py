@@ -634,6 +634,17 @@ class HOHService:
                     technical_contact, "phone"
                 )
 
+        # Add message delivery status
+        event_dict["init_sent_at"] = self.messages.get_last_sent_at_for_content(
+            org_id=org_id,
+            event_id=event_id,
+            content_sid=CONTENT_SID_INIT,
+        )
+        
+        # Get latest delivery status for this event
+        latest_status_by_event = self.messages.get_latest_status_by_event(org_id)
+        event_dict["latest_delivery_status"] = latest_status_by_event.get(event_id)
+
         return event_dict
 
     def update_event_with_contacts(

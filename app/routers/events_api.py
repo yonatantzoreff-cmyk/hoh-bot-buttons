@@ -175,12 +175,27 @@ async def update_event(
             "org_id": org_id,
         })
         
-        # Return updated event
+        # Return updated event with formatted display fields
         updated_event = hoh.get_event_with_contacts(org_id=org_id, event_id=event_id)
+        
+        # Format times for display (Israel timezone)
+        show_time_utc = updated_event.get("show_time")
+        load_in_time_utc = updated_event.get("load_in_time")
+        init_sent_at_utc = updated_event.get("init_sent_at")
+        
         return {
             "success": True,
             "event_id": event_id,
-            "event": updated_event,
+            "event": {
+                **updated_event,
+                "event_date": updated_event.get("event_date").isoformat() if updated_event.get("event_date") else None,
+                "show_time": show_time_utc.isoformat() if show_time_utc else None,
+                "show_time_display": utc_to_local_time_str(show_time_utc) if show_time_utc else "",
+                "load_in_time": load_in_time_utc.isoformat() if load_in_time_utc else None,
+                "load_in_time_display": utc_to_local_time_str(load_in_time_utc) if load_in_time_utc else "",
+                "init_sent_at": init_sent_at_utc.isoformat() if init_sent_at_utc else None,
+                "init_sent_at_display": format_datetime_for_display(init_sent_at_utc) if init_sent_at_utc else "",
+            },
         }
     
     except ValueError as e:

@@ -1439,6 +1439,7 @@
                                     <th class="sortable" draggable="true" data-col="show_time" onclick="sortTable(this, 'show_time')">Show Time</th>
                                     <th class="sortable" draggable="true" data-col="load_in_time" onclick="sortTable(this, 'load_in_time')">Load In</th>
                                     <th draggable="true" data-col="status">Status</th>
+                                    <th draggable="true" data-col="delivery">Delivery</th>
                                     <th draggable="true" data-col="producer">Producer</th>
                                     <th draggable="true" data-col="technical">Technical</th>
                                     <th draggable="true" data-col="notes">Notes</th>
@@ -1492,6 +1493,9 @@
                         <span class="status-chip ${statusClass}">${event.status || 'draft'}</span>
                     </td>
                     <td>
+                        ${event.latest_delivery_status ? `<span class="status-chip" style="font-size: 0.75rem;">${escapeHtml(event.latest_delivery_status)}</span>` : '<span style="color: var(--text-muted); font-size: 0.8rem;">—</span>'}
+                    </td>
+                    <td>
                         <div>
                             <input type="text" class="inline-edit" value="${escapeHtml(event.producer_name || '')}" 
                                    onchange="markDirty(${event.event_id}, 'producer_name', this.value)"
@@ -1537,8 +1541,8 @@
         }
 
         function renderShiftsRow(event) {
-            // Count columns dynamically (will be 9 by default)
-            const colCount = 9;
+            // Count columns dynamically (will be 10 now with delivery column)
+            const colCount = 10;
             // Use load_in_time_display instead of substring manipulation
             const defaultTime = event.load_in_time_display || '';
             return `
@@ -1600,6 +1604,7 @@
 
             let successCount = 0;
             let errorCount = 0;
+            const failedEvents = [];
 
             for (const [eventId, changes] of dirtyRows.entries()) {
                 try {
@@ -1612,28 +1617,86 @@
                     if (response.ok) {
                         successCount++;
                         const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
-                        if (row) row.classList.remove('dirty');
+                        if (row) {
+                            row.classList.remove('dirty');
+                        }
+                        
+                        // Update row with response data
+                        const result = await response.json();
+                        if (result.event) {
+                            updateEventRow(eventId, result.event);
+                        }
                     } else {
                         errorCount++;
+                        failedEvents.push(eventId);
                         const error = await response.json();
                         console.error(`Failed to update event ${eventId}:`, error);
+                        showToast(`Failed to save event ${eventId}: ${error.detail || 'Unknown error'}`, 'error');
                     }
                 } catch (error) {
                     errorCount++;
+                    failedEvents.push(eventId);
                     console.error(`Error updating event ${eventId}:`, error);
+                    showToast(`Error saving event ${eventId}: ${error.message}`, 'error');
                 }
             }
 
-            dirtyRows.clear();
-            saveBtn.classList.remove('visible');
+            // Only clear dirty rows that succeeded
+            for (const [eventId] of dirtyRows.entries()) {
+                if (!failedEvents.includes(eventId)) {
+                    dirtyRows.delete(eventId);
+                }
+            }
+
+            // Hide save button only if no more dirty rows
+            if (dirtyRows.size === 0) {
+                saveBtn.classList.remove('visible');
+            }
+            
             saveBtn.disabled = false;
             saveBtn.innerHTML = '<span>💾</span> Save Changes';
 
             if (errorCount === 0) {
                 showToast(`Successfully saved ${successCount} event(s)`, 'success');
             } else {
-                showToast(`Saved ${successCount}, failed ${errorCount}`, 'error');
+                showToast(`Saved ${successCount}, failed ${errorCount}. Please retry failed items.`, 'error');
             }
+        }
+        
+        // Update event row with new data from server
+        function updateEventRow(eventId, eventData) {
+            const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
+            if (!row) return;
+            
+            // Update input values with server data
+            const inputs = row.querySelectorAll('.inline-edit');
+            inputs.forEach(input => {
+                const onchange = input.getAttribute('onchange');
+                if (!onchange) return;
+                
+                // Extract field name from onchange attribute
+                const fieldMatch = onchange.match(/markDirty\([^,]+,\s*['"]([^'"]+)['"]/);
+                if (!fieldMatch) return;
+                
+                const field = fieldMatch[1];
+                
+                // Update value based on field
+                if (field === 'name' && eventData.name !== undefined) {
+                    input.value = eventData.name;
+                } else if (field === 'event_date' && eventData.event_date) {
+                    input.value = eventData.event_date;
+                } else if (field === 'show_time' && eventData.show_time_display !== undefined) {
+                    input.value = eventData.show_time_display;
+                } else if (field === 'load_in_time' && eventData.load_in_time_display !== undefined) {
+                    input.value = eventData.load_in_time_display;
+                } else if (field === 'notes' && eventData.notes !== undefined) {
+                    input.value = eventData.notes;
+                } else if (field === 'producer_name' && eventData.producer_name !== undefined) {
+                    input.value = eventData.producer_name;
+                } else if (field === 'technical_name' && eventData.technical_name !== undefined) {
+                    input.value = eventData.technical_name;
+                }
+            });
         }
 
         // Technical Suggestions
