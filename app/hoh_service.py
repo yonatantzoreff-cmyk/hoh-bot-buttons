@@ -247,6 +247,7 @@ class HOHService:
         org_id: int,
         shift_id: int,
         *,
+        employee_id=_NO_UPDATE,
         call_time=None,
         shift_role: Optional[str] = None,
         notes: Optional[str] = None,
@@ -257,6 +258,7 @@ class HOHService:
         self.employee_shifts.update_shift(
             org_id=org_id,
             shift_id=shift_id,
+            employee_id=employee_id,
             call_time=call_time,
             shift_role=shift_role,
             notes=notes,

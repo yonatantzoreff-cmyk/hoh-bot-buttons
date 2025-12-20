@@ -595,48 +595,7 @@ async def send_shift_reminder(
     Send WhatsApp reminder for a shift (PHASE 4 - Task 7).
     """
     try:
-        from app.time_utils import utc_to_local_datetime, format_datetime_for_display
-        from app.credentials import CONTENT_SID_SHIFT_REMINDER
-        from app import twilio_client
-        
-        # Get shift with employee details
-        shift = hoh.employee_shifts.get_shift_by_id(org_id=org_id, shift_id=shift_id)
-        if not shift:
-            raise HTTPException(status_code=404, detail="Shift not found")
-        
-        employee_phone = shift.get("employee_phone")
-        if not employee_phone or employee_phone.strip() == "":
-            raise HTTPException(
-                status_code=400, 
-                detail="Employee has no phone number. Please add a phone number before sending reminders."
-            )
-        
-        # Get event details
-        event = hoh.get_event_with_contacts(org_id=org_id, event_id=shift["event_id"])
-        if not event:
-            raise HTTPException(status_code=404, detail="Event not found")
-        
-        # Format times for message
-        call_time_local = utc_to_local_datetime(shift["call_time"])
-        event_date_str = format_datetime_for_display(call_time_local)
-        
-        # PHASE 3: Send WhatsApp reminder using send_content_message (not send_whatsapp_template)
-        if CONTENT_SID_SHIFT_REMINDER:
-            twilio_client.send_content_message(
-                to=employee_phone,
-                content_sid=CONTENT_SID_SHIFT_REMINDER,
-                content_variables={
-                    "1": shift.get("employee_name", "Employee"),
-                    "2": event.get("name", "Event"),
-                    "3": event_date_str,
-                }
-            )
-        else:
-            logger.warning("CONTENT_SID_SHIFT_REMINDER not configured, skipping WhatsApp send")
-        
-        # Mark reminder as sent
-        hoh.employee_shifts.mark_24h_reminder_sent(shift_id=shift_id)
-        
+        hoh.send_shift_reminder(org_id=org_id, shift_id=shift_id)
         return {"success": True, "message": "Reminder sent successfully"}
     
     except ValueError as e:
