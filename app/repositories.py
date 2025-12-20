@@ -1689,7 +1689,7 @@ class EmployeeShiftRepository:
         q = text("""
             SELECT s.*, e.name AS employee_name, e.phone AS employee_phone
             FROM employee_shifts s
-            JOIN employees e
+            LEFT JOIN employees e
               ON e.employee_id = s.employee_id
              AND e.org_id = s.org_id
             WHERE s.org_id = :org_id
@@ -1712,7 +1712,7 @@ class EmployeeShiftRepository:
         org_id: int,
         shift_id: int,
         *,
-        employee_id: Optional[int] = None,
+        employee_id: Any = _NO_UPDATE,
         call_time=None,
         shift_role: Optional[str] = None,
         notes: Optional[str] = None,
@@ -1725,7 +1725,7 @@ class EmployeeShiftRepository:
             "now": now_utc(),
         }
 
-        if employee_id is not None:
+        if employee_id is not _NO_UPDATE:
             sets.append("employee_id = :employee_id")
             params["employee_id"] = employee_id
 
