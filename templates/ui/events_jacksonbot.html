@@ -1799,7 +1799,7 @@
                     </td>
                     <td>
                         <div class="contact-dropdown-container" id="producer-${event.event_id}">
-                            <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'producer', 'מפיק')">
+                            <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'producer', 'producer')">
                                 <div style="flex: 1;">
                                     <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.producer_name || 'Select producer')}</div>
                                     ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.producer_phone)}</div>` : ''}
@@ -1811,7 +1811,7 @@
                     <td>
                         <div style="display: flex; align-items: center; gap: 0.5rem;">
                             <div class="contact-dropdown-container" id="technical-${event.event_id}" style="flex: 1;">
-                                <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'טכני')">
+                                <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'technical')">
                                     <div style="flex: 1;">
                                         <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || 'Select technical')}</div>
                                         ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}

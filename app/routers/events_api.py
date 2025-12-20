@@ -700,7 +700,7 @@ async def sse_events(org_id: int = Query(1)):
 
 @router.get("/contacts/by-role")
 async def get_contacts_by_role(
-    role: Optional[str] = Query(None, description="Filter by role (e.g., 'מפיק', 'טכני')"),
+    role: Optional[str] = Query(None, description="Filter by role (e.g., 'producer', 'technical'; Hebrew supported)"),
     search: Optional[str] = Query(None, description="Search by name or phone"),
     org_id: int = Query(1),
     hoh: HOHService = Depends(get_hoh_service),
@@ -710,12 +710,23 @@ async def get_contacts_by_role(
     Returns contacts with name, phone, and role.
     """
     try:
+        # Normalize role (support English + Hebrew)
+        role_map = {
+            "producer": "producer",
+            "מפיק": "producer",
+            "technical": "technical",
+            "טכני": "technical",
+        }
+        role_key = None
+        if role:
+            role_key = role_map.get(role.strip().lower(), role.strip().lower())
+
         # Get all contacts by role
         contacts_by_role = hoh.list_contacts_by_role(org_id=org_id)
-        
+
         # If role filter is specified, only return that role
-        if role:
-            contacts = contacts_by_role.get(role, [])
+        if role_key:
+            contacts = contacts_by_role.get(role_key, [])
         else:
             # Return all contacts
             contacts = []
