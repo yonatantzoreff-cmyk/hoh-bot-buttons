@@ -1572,7 +1572,7 @@ class EmployeeShiftRepository:
         self,
         org_id: int,
         event_id: int,
-        employee_id: int,
+        employee_id: Optional[int],  # PHASE 2: Make nullable to allow empty shifts
         call_time,
         shift_role: Optional[str] = None,
         notes: Optional[str] = None,
@@ -1580,6 +1580,7 @@ class EmployeeShiftRepository:
         """
         יוצר משמרת חדשה לעובד באירוע מסוים.
         call_time = datetime (timezone-aware) לשעת כניסה.
+        PHASE 2: employee_id can be None for unassigned shifts.
         """
         q = text("""
             INSERT INTO employee_shifts (
@@ -1600,7 +1601,7 @@ class EmployeeShiftRepository:
                 {
                     "org_id": org_id,
                     "event_id": event_id,
-                    "employee_id": employee_id,
+                    "employee_id": employee_id,  # Can be None
                     "call_time": call_time,
                     "shift_role": shift_role,
                     "notes": notes,
@@ -1611,16 +1612,18 @@ class EmployeeShiftRepository:
             return shift_id
 
     def list_shifts_for_event(self, org_id: int, event_id: int):
-        """רשימת כל המשמרות באירוע מסוים"""
+        """רשימת כל המשמרות באירוע מסוים (PHASE 2: Handles unassigned shifts)"""
         q = text("""
-            SELECT s.*, e.name AS employee_name, e.phone AS employee_phone
+            SELECT s.*, 
+                   COALESCE(e.name, '(Unassigned)') AS employee_name, 
+                   e.phone AS employee_phone
             FROM employee_shifts s
-            JOIN employees e
+            LEFT JOIN employees e
               ON e.employee_id = s.employee_id
              AND e.org_id = s.org_id
             WHERE s.org_id = :org_id
               AND s.event_id = :event_id
-            ORDER BY s.call_time, e.name
+            ORDER BY s.call_time, COALESCE(e.name, 'ZZZZ')
         """)
 
         with get_session() as session:

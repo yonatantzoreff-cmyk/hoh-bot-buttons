@@ -582,6 +582,35 @@
             border-left: 3px solid var(--accent-color);
         }
 
+        /* PHASE 5: Resizable columns */
+        .events-table th .resize-handle {
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 5px;
+            height: 100%;
+            cursor: col-resize;
+            user-select: none;
+            z-index: 10;
+            background: transparent;
+        }
+
+        .events-table th .resize-handle:hover,
+        .events-table th .resize-handle.resizing {
+            background: var(--accent-color);
+        }
+
+        .events-table th.resizing {
+            cursor: col-resize;
+            user-select: none;
+        }
+
+        /* Prevent text selection during resize */
+        body.resizing-column {
+            user-select: none;
+            cursor: col-resize;
+        }
+
         .events-table th[data-col="expander"] {
             cursor: default;
         }
@@ -1678,6 +1707,9 @@
             // Restore column order from localStorage
             restoreColumnOrder();
 
+            // PHASE 5: Initialize column resize
+            initColumnResize();
+
             // Note: Shifts are loaded on-demand when user expands the section
         }
 
@@ -2506,12 +2538,13 @@
         // PHASE 3: Add shift inline (no modal) with defaults from event
         async function addShift(eventId, defaultDate, defaultTime) {
             try {
-                // Create shift immediately with defaults: date=event_date, time=load_in_time
+                // PHASE 2: Create shift immediately with defaults: date=event_date, time=load_in_time
+                // Send employee_id as null (not employee_name) to create unassigned shift for later assignment
                 const response = await fetch(`/api/events/${eventId}/shifts?org_id=${ORG_ID}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        employee_name: '',  // Empty - user will select from dropdown
+                        employee_id: null,  // PHASE 2: null = empty shift (no employee creation)
                         shift_date: defaultDate || null,
                         shift_time: defaultTime || null,
                         notes: ''
@@ -2929,6 +2962,131 @@
 
             // Initialize drag and drop after restoring
             initColumnDragDrop();
+        }
+
+        // PHASE 5: Column Resize Management
+        let resizeState = {
+            isResizing: false,
+            startX: 0,
+            startWidth: 0,
+            currentTh: null,
+        };
+
+        function initColumnResize() {
+            // Add resize handles to all table headers (except expander)
+            document.querySelectorAll('.events-table thead th').forEach(th => {
+                // Skip expander column
+                if (th.getAttribute('data-col') === 'expander') {
+                    return;
+                }
+
+                // Check if resize handle already exists
+                if (th.querySelector('.resize-handle')) {
+                    return;
+                }
+
+                // Create resize handle
+                const resizeHandle = document.createElement('div');
+                resizeHandle.className = 'resize-handle';
+                resizeHandle.addEventListener('mousedown', (e) => startResize(e, th));
+                th.appendChild(resizeHandle);
+            });
+
+            // Restore saved column widths
+            restoreColumnWidths();
+        }
+
+        function startResize(e, th) {
+            // Prevent drag and sort while resizing
+            e.stopPropagation();
+            e.preventDefault();
+
+            resizeState.isResizing = true;
+            resizeState.currentTh = th;
+            resizeState.startX = e.pageX;
+            resizeState.startWidth = th.offsetWidth;
+
+            // Add visual feedback
+            th.classList.add('resizing');
+            document.body.classList.add('resizing-column');
+            
+            // Find the resize handle
+            const handle = th.querySelector('.resize-handle');
+            if (handle) {
+                handle.classList.add('resizing');
+            }
+
+            // Add global mouse listeners
+            document.addEventListener('mousemove', doResize);
+            document.addEventListener('mouseup', stopResize);
+        }
+
+        function doResize(e) {
+            if (!resizeState.isResizing) return;
+
+            const diff = e.pageX - resizeState.startX;
+            const MIN_COLUMN_WIDTH = 50;  // Minimum column width in pixels
+            const MAX_COLUMN_WIDTH = 600; // Maximum column width in pixels
+            const newWidth = Math.max(MIN_COLUMN_WIDTH, Math.min(MAX_COLUMN_WIDTH, resizeState.startWidth + diff));
+            
+            resizeState.currentTh.style.width = newWidth + 'px';
+            resizeState.currentTh.style.minWidth = newWidth + 'px';
+            resizeState.currentTh.style.maxWidth = newWidth + 'px';
+        }
+
+        function stopResize(e) {
+            if (!resizeState.isResizing) return;
+
+            resizeState.isResizing = false;
+            
+            // Remove visual feedback
+            if (resizeState.currentTh) {
+                resizeState.currentTh.classList.remove('resizing');
+                const handle = resizeState.currentTh.querySelector('.resize-handle');
+                if (handle) {
+                    handle.classList.remove('resizing');
+                }
+            }
+            document.body.classList.remove('resizing-column');
+
+            // Remove global mouse listeners
+            document.removeEventListener('mousemove', doResize);
+            document.removeEventListener('mouseup', stopResize);
+
+            // Save column widths to localStorage
+            saveColumnWidths();
+
+            resizeState.currentTh = null;
+        }
+
+        function saveColumnWidths() {
+            const widths = {};
+            document.querySelectorAll('.events-table thead th').forEach(th => {
+                const col = th.getAttribute('data-col');
+                if (col && col !== 'expander' && th.style.width) {
+                    widths[col] = th.style.width;
+                }
+            });
+            localStorage.setItem('events.columnWidths', JSON.stringify(widths));
+        }
+
+        function restoreColumnWidths() {
+            const saved = localStorage.getItem('events.columnWidths');
+            if (!saved) return;
+
+            try {
+                const widths = JSON.parse(saved);
+                document.querySelectorAll('.events-table thead th').forEach(th => {
+                    const col = th.getAttribute('data-col');
+                    if (col && widths[col]) {
+                        th.style.width = widths[col];
+                        th.style.minWidth = widths[col];
+                        th.style.maxWidth = widths[col];
+                    }
+                });
+            } catch (e) {
+                console.error('Failed to restore column widths:', e);
+            }
         }
 
         // Toast Notifications

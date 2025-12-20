@@ -807,6 +807,10 @@ class HOHService:
     async def send_init_for_event(
         self, event_id: int, org_id: int = 1, contact_id: Optional[int] = None
     ) -> None:
+        """
+        Send INIT WhatsApp message for an event.
+        PHASE 4: Send to technical_contact if exists and has valid phone, otherwise producer.
+        """
         event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
         if not event:
             raise ValueError("Event not found")
@@ -815,13 +819,56 @@ class HOHService:
         if not org:
             raise ValueError("Org not found")
 
-        producer_contact_id = contact_id or event.get("producer_contact_id")
-        if not producer_contact_id:
-            raise ValueError("Event missing producer_contact_id; cannot send INIT")
+        # PHASE 4: Determine recipient - Technical first, then Producer
+        recipient_contact_id = None
+        recipient_type = None
+        
+        if contact_id:
+            # Explicit contact_id provided (override)
+            recipient_contact_id = contact_id
+            recipient_type = "explicit"
+        else:
+            # PHASE 4: Prefer technical_contact, fallback to producer
+            technical_contact_id = event.get("technical_contact_id")
+            producer_contact_id = event.get("producer_contact_id")
+            
+            # Try technical first
+            if technical_contact_id:
+                technical_contact = self.contacts.get_contact_by_id(
+                    org_id=org_id, contact_id=technical_contact_id
+                )
+                if technical_contact:
+                    technical_phone = self._get_contact_value(technical_contact, "phone")
+                    if technical_phone and technical_phone.strip():
+                        recipient_contact_id = technical_contact_id
+                        recipient_type = "technical"
+                        logger.info(
+                            "MESSAGE_ROUTING: Sending to technical contact",
+                            extra={
+                                "event_id": event_id,
+                                "contact_id": technical_contact_id,
+                                "phone": technical_phone,
+                            }
+                        )
+            
+            # Fallback to producer if no valid technical
+            if not recipient_contact_id and producer_contact_id:
+                recipient_contact_id = producer_contact_id
+                recipient_type = "producer"
+                logger.info(
+                    "MESSAGE_ROUTING: Sending to producer contact (no valid technical)",
+                    extra={
+                        "event_id": event_id,
+                        "contact_id": producer_contact_id,
+                    }
+                )
+        
+        if not recipient_contact_id:
+            raise ValueError("Event missing contact_id; cannot send INIT (no technical or producer)")
 
-        contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=producer_contact_id)
+        contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=recipient_contact_id)
         if not contact:
-            raise ValueError("Producer contact not found")
+            raise ValueError(f"{recipient_type.capitalize()} contact not found")
 
         original_phone = self._get_contact_value(contact, "phone")
         normalized_phone = normalize_phone_to_e164_il(original_phone)
@@ -830,10 +877,10 @@ class HOHService:
 
         if normalized_phone != original_phone:
             self.contacts.update_contact_phone(
-                org_id=org_id, contact_id=producer_contact_id, phone=normalized_phone
+                org_id=org_id, contact_id=recipient_contact_id, phone=normalized_phone
             )
 
-        conversation_id = self._ensure_conversation(org_id, event_id, producer_contact_id)
+        conversation_id = self._ensure_conversation(org_id, event_id, recipient_contact_id)
 
         event_date = event.get("event_date")
         show_time = event.get("show_time")
@@ -843,7 +890,7 @@ class HOHService:
         # show_time_str = show_time.strftime("%H:%M") if show_time else ""
         
         init_vars = {
-            "1": self._get_contact_value(contact, "name") or "Producer",
+            "1": self._get_contact_value(contact, "name") or recipient_type.capitalize(),
             "2": event.get("name") or "",
             "3": event_date_str,
             "4": show_time,
@@ -862,17 +909,29 @@ class HOHService:
             "content_sid": CONTENT_SID_INIT,
             "variables": init_vars,
             "twilio_message_sid": whatsapp_sid,
+            "recipient_type": recipient_type,  # PHASE 4: Track recipient type
+            "recipient_phone": normalized_phone,
         }
 
         self.messages.log_message(
             org_id=org_id,
             conversation_id=conversation_id,
             event_id=event_id,
-            contact_id=producer_contact_id,
+            contact_id=recipient_contact_id,
             direction="outgoing",
-            body=f"INIT sent for event {event_id}",
+            body=f"INIT sent for event {event_id} to {recipient_type}",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
+        )
+        
+        logger.info(
+            "MESSAGE_ROUTING: INIT sent successfully",
+            extra={
+                "event_id": event_id,
+                "recipient_type": recipient_type,
+                "recipient_contact_id": recipient_contact_id,
+                "whatsapp_sid": whatsapp_sid,
+            }
         )
 
     async def send_ranges_for_event(self, org_id: int, event_id: int, contact_id: int) -> None:
@@ -1601,6 +1660,21 @@ class HOHService:
         conversation_id: int,
         org_id: int,
     ) -> None:
+        """
+        PHASE 1: Handle "אני לא יודע" (NOT_SURE) action.
+        Updates event status to 'follow_up', calculates next_followup_at,
+        and sends acknowledgment message to client.
+        """
+        logger.info(
+            "FOLLOW_UP: Detected 'אני לא יודע' action",
+            extra={
+                "event_id": event_id,
+                "contact_id": contact_id,
+                "conversation_id": conversation_id,
+                "action": "follow_up_detected",
+            }
+        )
+        
         followup_at = now_utc() + timedelta(hours=72)
         conversation = self.conversations.get_open_conversation(
             org_id=org_id, event_id=event_id, contact_id=contact_id
@@ -1613,24 +1687,73 @@ class HOHService:
             pending_data_fields=pending_fields,
         )
 
-        # PHASE 2: Update event status to follow_up and set next_followup_at
-        self.events.update_event(
-            org_id=org_id,
-            event_id=event_id,
-            status="follow_up",
-            next_followup_at=followup_at,
-        )
-
+        # PHASE 1: Update event status to follow_up and set next_followup_at
+        try:
+            self.events.update_event(
+                org_id=org_id,
+                event_id=event_id,
+                status="follow_up",
+                next_followup_at=followup_at,
+            )
+            logger.info(
+                "FOLLOW_UP: Event status updated to 'follow_up'",
+                extra={
+                    "event_id": event_id,
+                    "next_followup_at": followup_at.isoformat(),
+                }
+            )
+        except Exception as e:
+            logger.error(
+                "FOLLOW_UP: Failed to update event status",
+                exc_info=e,
+                extra={"event_id": event_id}
+            )
+            # Continue with sending ack even if DB update fails
+        
         contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
         if not contact:
+            logger.error(
+                "FOLLOW_UP: Contact not found, cannot send acknowledgment",
+                extra={"contact_id": contact_id, "event_id": event_id}
+            )
             return
 
-        twilio_resp = twilio_client.send_content_message(
-            to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
-            content_sid=CONTENT_SID_NOT_SURE,
-            content_variables={},
-        )
-        whatsapp_sid = getattr(twilio_resp, "sid", None)
+        # Send acknowledgment message to client
+        try:
+            twilio_resp = twilio_client.send_content_message(
+                to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
+                content_sid=CONTENT_SID_NOT_SURE,
+                content_variables={},
+            )
+            whatsapp_sid = getattr(twilio_resp, "sid", None)
+            
+            if whatsapp_sid:
+                logger.info(
+                    "FOLLOW_UP: Acknowledgment message sent successfully",
+                    extra={
+                        "event_id": event_id,
+                        "contact_id": contact_id,
+                        "whatsapp_sid": whatsapp_sid,
+                        "action": "follow_up_ack_sent",
+                    }
+                )
+            else:
+                logger.warning(
+                    "FOLLOW_UP: Message sent but no SID returned",
+                    extra={"event_id": event_id, "contact_id": contact_id}
+                )
+        except Exception as e:
+            logger.error(
+                "FOLLOW_UP: Failed to send acknowledgment message",
+                exc_info=e,
+                extra={
+                    "event_id": event_id,
+                    "contact_id": contact_id,
+                    "phone": self._get_contact_value(contact, "phone"),
+                }
+            )
+            # Don't raise - we want to log the message even if send fails
+            whatsapp_sid = None
 
         raw_payload = {
             "content_sid": CONTENT_SID_NOT_SURE,
@@ -1638,16 +1761,28 @@ class HOHService:
             "twilio_message_sid": whatsapp_sid,
         }
 
-        self.messages.log_message(
-            org_id=org_id,
-            conversation_id=conversation_id,
-            event_id=event_id,
-            contact_id=contact_id,
-            direction="outgoing",
-            body="Sent NOT SURE message",
-            whatsapp_msg_sid=whatsapp_sid,
-            raw_payload=raw_payload,
-        )
+        # Log the outgoing message
+        try:
+            self.messages.log_message(
+                org_id=org_id,
+                conversation_id=conversation_id,
+                event_id=event_id,
+                contact_id=contact_id,
+                direction="outgoing",
+                body="Sent NOT SURE message",
+                whatsapp_msg_sid=whatsapp_sid,
+                raw_payload=raw_payload,
+            )
+            logger.info(
+                "FOLLOW_UP: Message logged successfully",
+                extra={"event_id": event_id, "message_id": whatsapp_sid}
+            )
+        except Exception as e:
+            logger.error(
+                "FOLLOW_UP: Failed to log outgoing message",
+                exc_info=e,
+                extra={"event_id": event_id}
+            )
 
     async def _handle_not_contact(
         self,
