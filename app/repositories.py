@@ -1614,14 +1614,16 @@ class EmployeeShiftRepository:
     def list_shifts_for_event(self, org_id: int, event_id: int):
         """רשימת כל המשמרות באירוע מסוים (PHASE 2: Handles unassigned shifts)"""
         q = text("""
-            SELECT s.*, e.name AS employee_name, e.phone AS employee_phone
+            SELECT s.*, 
+                   COALESCE(e.name, '(Unassigned)') AS employee_name, 
+                   e.phone AS employee_phone
             FROM employee_shifts s
             LEFT JOIN employees e
               ON e.employee_id = s.employee_id
              AND e.org_id = s.org_id
             WHERE s.org_id = :org_id
               AND s.event_id = :event_id
-            ORDER BY s.call_time, COALESCE(e.name, '')
+            ORDER BY s.call_time, COALESCE(e.name, 'ZZZZ')
         """)
 
         with get_session() as session:

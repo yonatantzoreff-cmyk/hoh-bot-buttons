@@ -2539,7 +2539,7 @@
         async function addShift(eventId, defaultDate, defaultTime) {
             try {
                 // PHASE 2: Create shift immediately with defaults: date=event_date, time=load_in_time
-                // Send employee_id as null (not employee_name) to avoid creating employees
+                // Send employee_id as null (not employee_name) to create unassigned shift for later assignment
                 const response = await fetch(`/api/events/${eventId}/shifts?org_id=${ORG_ID}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -3025,7 +3025,9 @@
             if (!resizeState.isResizing) return;
 
             const diff = e.pageX - resizeState.startX;
-            const newWidth = Math.max(50, Math.min(600, resizeState.startWidth + diff)); // Min 50px, max 600px
+            const MIN_COLUMN_WIDTH = 50;  // Minimum column width in pixels
+            const MAX_COLUMN_WIDTH = 600; // Maximum column width in pixels
+            const newWidth = Math.max(MIN_COLUMN_WIDTH, Math.min(MAX_COLUMN_WIDTH, resizeState.startWidth + diff));
             
             resizeState.currentTh.style.width = newWidth + 'px';
             resizeState.currentTh.style.minWidth = newWidth + 'px';

@@ -2,7 +2,8 @@
 -- PHASE 2: Allow shifts without assigned employees
 -- This enables "Add Shift" to create empty shifts that can be filled later
 
--- Remove the NOT NULL constraint and the UNIQUE constraint
+-- Remove the existing foreign key constraint so we can modify the column
+-- We'll re-add it with the same behavior but allowing NULL values
 ALTER TABLE employee_shifts 
     DROP CONSTRAINT IF EXISTS employee_shifts_employee_id_fkey;
 
