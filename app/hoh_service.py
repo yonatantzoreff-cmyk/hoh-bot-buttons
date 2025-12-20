@@ -106,10 +106,11 @@ class HOHService:
         יצירת עובד חדש במערכת.
         מחזיר את רשומת העובד כ-dict.
         """
+        normalized_phone = normalize_phone_to_e164_il(phone) if phone is not None else None
         employee_id = self.employees.create_employee(
             org_id=org_id,
             name=name,
-            phone=phone,
+            phone=normalized_phone,
             role=role,
             notes=notes,
             is_active=is_active,
@@ -132,9 +133,10 @@ class HOHService:
         מחפש עובד לפי טלפון.
         אם לא קיים – יוצר אחד חדש.
         """
+        normalized_phone = normalize_phone_to_e164_il(phone)
         existing = self.employees.get_employee_by_phone(
             org_id=org_id,
-            phone=phone,
+            phone=normalized_phone,
         )
         if existing:
             return existing
@@ -142,7 +144,7 @@ class HOHService:
         return self.create_employee(
             org_id=org_id,
             name=name,
-            phone=phone,
+            phone=normalized_phone,
             role=role,
             notes=notes,
             is_active=True,
@@ -218,11 +220,12 @@ class HOHService:
         """
         עדכון עובד.
         """
+        normalized_phone = normalize_phone_to_e164_il(phone) if phone is not None else None
         self.employees.update_employee(
             org_id=org_id,
             employee_id=employee_id,
             name=name,
-            phone=phone,
+            phone=normalized_phone,
             role=role,
             notes=notes,
         )

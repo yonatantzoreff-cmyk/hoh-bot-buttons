@@ -1415,6 +1415,7 @@ class EmployeeRepository:
         is_active: bool = True,
     ) -> int:
         """יוצר עובד חדש ומחזיר employee_id"""
+        normalized_phone = normalize_phone_to_e164_il(phone)
         q = text("""
             INSERT INTO employees (org_id, name, phone, role, notes, is_active)
             VALUES (:org_id, :name, :phone, :role, :notes, :is_active)
@@ -1427,7 +1428,7 @@ class EmployeeRepository:
                 {
                     "org_id": org_id,
                     "name": name,
-                    "phone": phone,
+                    "phone": normalized_phone,
                     "role": role,
                     "notes": notes,
                     "is_active": is_active,
@@ -1459,6 +1460,7 @@ class EmployeeRepository:
 
     def get_employee_by_phone(self, org_id: int, phone: str):
         """מחזיר עובד לפי טלפון בתוך אותו org, או None"""
+        normalized_phone = normalize_phone_to_e164_il(phone)
         q = text("""
             SELECT *
             FROM employees
@@ -1471,7 +1473,7 @@ class EmployeeRepository:
                 q,
                 {
                     "org_id": org_id,
-                    "phone": phone,
+                    "phone": normalized_phone,
                 },
             )
             row = res.mappings().first()
@@ -1535,8 +1537,9 @@ class EmployeeRepository:
             params["name"] = name
 
         if phone is not None:
+            normalized_phone = normalize_phone_to_e164_il(phone)
             sets.append("phone = :phone")
-            params["phone"] = phone
+            params["phone"] = normalized_phone
 
         if role is not None:
             sets.append("role = :role")
