@@ -1601,6 +1601,21 @@ class HOHService:
         conversation_id: int,
         org_id: int,
     ) -> None:
+        """
+        PHASE 1: Handle "אני לא יודע" (NOT_SURE) action.
+        Updates event status to 'follow_up', calculates next_followup_at,
+        and sends acknowledgment message to client.
+        """
+        logger.info(
+            "FOLLOW_UP: Detected 'אני לא יודע' action",
+            extra={
+                "event_id": event_id,
+                "contact_id": contact_id,
+                "conversation_id": conversation_id,
+                "action": "follow_up_detected",
+            }
+        )
+        
         followup_at = now_utc() + timedelta(hours=72)
         conversation = self.conversations.get_open_conversation(
             org_id=org_id, event_id=event_id, contact_id=contact_id
@@ -1613,24 +1628,73 @@ class HOHService:
             pending_data_fields=pending_fields,
         )
 
-        # PHASE 2: Update event status to follow_up and set next_followup_at
-        self.events.update_event(
-            org_id=org_id,
-            event_id=event_id,
-            status="follow_up",
-            next_followup_at=followup_at,
-        )
-
+        # PHASE 1: Update event status to follow_up and set next_followup_at
+        try:
+            self.events.update_event(
+                org_id=org_id,
+                event_id=event_id,
+                status="follow_up",
+                next_followup_at=followup_at,
+            )
+            logger.info(
+                "FOLLOW_UP: Event status updated to 'follow_up'",
+                extra={
+                    "event_id": event_id,
+                    "next_followup_at": followup_at.isoformat(),
+                }
+            )
+        except Exception as e:
+            logger.error(
+                "FOLLOW_UP: Failed to update event status",
+                exc_info=e,
+                extra={"event_id": event_id}
+            )
+            # Continue with sending ack even if DB update fails
+        
         contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
         if not contact:
+            logger.error(
+                "FOLLOW_UP: Contact not found, cannot send acknowledgment",
+                extra={"contact_id": contact_id, "event_id": event_id}
+            )
             return
 
-        twilio_resp = twilio_client.send_content_message(
-            to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
-            content_sid=CONTENT_SID_NOT_SURE,
-            content_variables={},
-        )
-        whatsapp_sid = getattr(twilio_resp, "sid", None)
+        # Send acknowledgment message to client
+        try:
+            twilio_resp = twilio_client.send_content_message(
+                to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
+                content_sid=CONTENT_SID_NOT_SURE,
+                content_variables={},
+            )
+            whatsapp_sid = getattr(twilio_resp, "sid", None)
+            
+            if whatsapp_sid:
+                logger.info(
+                    "FOLLOW_UP: Acknowledgment message sent successfully",
+                    extra={
+                        "event_id": event_id,
+                        "contact_id": contact_id,
+                        "whatsapp_sid": whatsapp_sid,
+                        "action": "follow_up_ack_sent",
+                    }
+                )
+            else:
+                logger.warning(
+                    "FOLLOW_UP: Message sent but no SID returned",
+                    extra={"event_id": event_id, "contact_id": contact_id}
+                )
+        except Exception as e:
+            logger.error(
+                "FOLLOW_UP: Failed to send acknowledgment message",
+                exc_info=e,
+                extra={
+                    "event_id": event_id,
+                    "contact_id": contact_id,
+                    "phone": self._get_contact_value(contact, "phone"),
+                }
+            )
+            # Don't raise - we want to log the message even if send fails
+            whatsapp_sid = None
 
         raw_payload = {
             "content_sid": CONTENT_SID_NOT_SURE,
@@ -1638,16 +1702,28 @@ class HOHService:
             "twilio_message_sid": whatsapp_sid,
         }
 
-        self.messages.log_message(
-            org_id=org_id,
-            conversation_id=conversation_id,
-            event_id=event_id,
-            contact_id=contact_id,
-            direction="outgoing",
-            body="Sent NOT SURE message",
-            whatsapp_msg_sid=whatsapp_sid,
-            raw_payload=raw_payload,
-        )
+        # Log the outgoing message
+        try:
+            self.messages.log_message(
+                org_id=org_id,
+                conversation_id=conversation_id,
+                event_id=event_id,
+                contact_id=contact_id,
+                direction="outgoing",
+                body="Sent NOT SURE message",
+                whatsapp_msg_sid=whatsapp_sid,
+                raw_payload=raw_payload,
+            )
+            logger.info(
+                "FOLLOW_UP: Message logged successfully",
+                extra={"event_id": event_id, "message_id": whatsapp_sid}
+            )
+        except Exception as e:
+            logger.error(
+                "FOLLOW_UP: Failed to log outgoing message",
+                exc_info=e,
+                extra={"event_id": event_id}
+            )
 
     async def _handle_not_contact(
         self,

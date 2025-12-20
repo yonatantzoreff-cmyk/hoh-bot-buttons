@@ -366,8 +366,8 @@ async def list_shifts_for_event(
 
 
 class ShiftCreateRequest(BaseModel):
-    """Request model for creating a shift."""
-    employee_name: str = Field(..., description="Employee name")
+    """Request model for creating a shift (PHASE 2: Fixed to prevent employee creation)."""
+    employee_id: Optional[int] = Field(None, description="Employee ID (from dropdown, nullable)")
     shift_date: Optional[str] = Field(None, description="Shift date (YYYY-MM-DD)")
     shift_time: Optional[str] = Field(None, description="Shift time (HH:MM)")
     notes: Optional[str] = None
@@ -381,7 +381,12 @@ async def create_shift_for_event(
     hoh: HOHService = Depends(get_hoh_service),
 ):
     """
-    Create a new shift for an event (PHASE 4 - Task 7).
+    Create a new shift for an event (PHASE 2: Fixed to NOT create employees).
+    
+    IMPORTANT: This endpoint ONLY creates shifts. It does NOT create employees.
+    - If employee_id is provided, it must be a valid existing employee ID
+    - If employee_id is None/null, an empty shift is created (to be filled later)
+    - The unique constraint on employees(org_id, phone) is preserved
     """
     try:
         from app.time_utils import parse_local_time_to_utc
@@ -392,20 +397,18 @@ async def create_shift_for_event(
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         
-        # Find or create employee by name
-        # First try to find existing employee
-        employees = hoh.employees.list_employees(org_id=org_id)
-        employee = next((e for e in employees if e["name"] == shift_data.employee_name), None)
+        # PHASE 2: Accept employee_id directly (nullable)
+        # Do NOT create employees here - employees must be selected from existing ones
+        employee_id = shift_data.employee_id
         
-        if not employee:
-            # Create new employee with placeholder phone
-            employee_id = hoh.employees.create_employee(
-                org_id=org_id,
-                name=shift_data.employee_name,
-                phone="",  # Empty string as placeholder (can be updated later)
-            )
-        else:
-            employee_id = employee["employee_id"]
+        # If employee_id is provided, verify it exists
+        if employee_id is not None:
+            employee = hoh.employees.get_employee_by_id(org_id=org_id, employee_id=employee_id)
+            if not employee:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=f"Employee ID {employee_id} not found"
+                )
         
         # Determine call_time
         # Default to event's date and load_in_time
@@ -424,14 +427,24 @@ async def create_shift_for_event(
         # Parse to UTC datetime
         call_time_utc = parse_local_time_to_utc(date_type.fromisoformat(shift_date), shift_time)
         
-        # Create shift
+        # Create shift (employee_id can be None)
         shift_id = hoh.employee_shifts.create_shift(
             org_id=org_id,
             event_id=event_id,
-            employee_id=employee_id,
+            employee_id=employee_id,  # Can be None for empty shifts
             call_time=call_time_utc,
             shift_role=None,
             notes=shift_data.notes,
+        )
+        
+        logger.info(
+            "SHIFT: Created shift successfully",
+            extra={
+                "shift_id": shift_id,
+                "event_id": event_id,
+                "employee_id": employee_id,
+                "is_empty": employee_id is None,
+            }
         )
         
         return {
@@ -478,25 +491,36 @@ async def update_shift(
         # Build update parameters
         update_params = {}
         
-        # Handle employee change (PHASE 5: prefer employee_id from dropdown)
+        # Handle employee change (PHASE 2: Do NOT create employees)
         if updates.employee_id is not None:
             # Direct employee ID provided from dropdown
-            update_params["employee_id"] = updates.employee_id
-        elif updates.employee_name is not None:
-            # Legacy: Find or create employee by name
-            employees = hoh.employees.list_employees(org_id=org_id)
-            employee = next((e for e in employees if e["name"] == updates.employee_name), None)
-            
-            if not employee:
-                # Create new employee with placeholder phone
-                employee_id = hoh.employees.create_employee(
-                    org_id=org_id,
-                    name=updates.employee_name,
-                    phone="",  # Empty string as placeholder
-                )
-                update_params["employee_id"] = employee_id
+            # Verify employee exists if not None (0 means unassign)
+            if updates.employee_id > 0:
+                employee = hoh.employees.get_employee_by_id(org_id=org_id, employee_id=updates.employee_id)
+                if not employee:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Employee ID {updates.employee_id} not found"
+                    )
+                update_params["employee_id"] = updates.employee_id
             else:
+                # Unassign employee (set to None)
+                update_params["employee_id"] = None
+        elif updates.employee_name is not None:
+            # Legacy text input: Only find existing, do NOT create
+            if updates.employee_name.strip():
+                employees = hoh.employees.list_employees(org_id=org_id)
+                employee = next((e for e in employees if e["name"] == updates.employee_name), None)
+                
+                if not employee:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=f"Employee '{updates.employee_name}' not found. Please select from existing employees."
+                    )
                 update_params["employee_id"] = employee["employee_id"]
+            else:
+                # Empty name = unassign
+                update_params["employee_id"] = None
         
         # Handle date/time changes
         if updates.shift_date is not None or updates.shift_time is not None:

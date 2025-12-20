@@ -2506,12 +2506,13 @@
         // PHASE 3: Add shift inline (no modal) with defaults from event
         async function addShift(eventId, defaultDate, defaultTime) {
             try {
-                // Create shift immediately with defaults: date=event_date, time=load_in_time
+                // PHASE 2: Create shift immediately with defaults: date=event_date, time=load_in_time
+                // Send employee_id as null (not employee_name) to avoid creating employees
                 const response = await fetch(`/api/events/${eventId}/shifts?org_id=${ORG_ID}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        employee_name: '',  // Empty - user will select from dropdown
+                        employee_id: null,  // PHASE 2: null = empty shift (no employee creation)
                         shift_date: defaultDate || null,
                         shift_time: defaultTime || null,
                         notes: ''
