@@ -483,8 +483,87 @@
         /* Main Container */
         .container {
             padding: 0 2rem 2rem;
-            max-width: 1600px;
-            margin: 0 auto;
+            width: calc(100% - 4rem);
+            max-width: none;
+            margin: 0 auto 2rem;
+        }
+
+        .hall-tabs {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            overflow: visible;
+        }
+
+        .hall-tab-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 1rem 1.5rem 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 80px;
+            background: var(--bg-primary);
+            z-index: 10;
+        }
+
+        .hall-tab {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.55rem 0.9rem;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: var(--shadow);
+        }
+
+        .hall-tab:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .hall-tab.active {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+            color: white;
+            box-shadow: var(--shadow-hover);
+        }
+
+        .hall-tab-name {
+            font-weight: 700;
+        }
+
+        .hall-tab-count {
+            background: rgba(255, 255, 255, 0.2);
+            color: inherit;
+            padding: 0.15rem 0.55rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .hall-tab.active .hall-tab-count {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .hall-tab-panels {
+            padding: 0 1.5rem 1.5rem;
+            overflow: visible;
+        }
+
+        .hall-tab-panel {
+            display: none;
+            overflow: visible;
+        }
+
+        .hall-tab-panel.active {
+            display: block;
         }
 
         /* Hall Section */
@@ -493,7 +572,7 @@
             border-radius: 12px;
             box-shadow: var(--shadow);
             margin-bottom: 1.5rem;
-            overflow: hidden;
+            overflow: visible;
         }
 
         .hall-header {
@@ -509,6 +588,14 @@
 
         .hall-header:hover {
             background: var(--bg-secondary);
+        }
+
+        .hall-header.static {
+            cursor: default;
+        }
+
+        .hall-header.static:hover {
+            background: var(--bg-tertiary);
         }
 
         .hall-title {
@@ -527,16 +614,6 @@
             border-radius: 12px;
             font-size: 0.85rem;
             font-weight: 600;
-        }
-
-        .collapse-icon {
-            font-size: 1.2rem;
-            color: var(--text-muted);
-            transition: transform 0.3s;
-        }
-
-        .collapse-icon.collapsed {
-            transform: rotate(-90deg);
         }
 
         .hall-body {
@@ -1378,6 +1455,25 @@
             .events-table td {
                 padding: 0.7rem;
             }
+
+            .container {
+                width: calc(100% - 2rem);
+                padding: 0 1rem 1rem;
+            }
+
+            .hall-tab-list {
+                position: static;
+                padding: 0.75rem 1rem 0.5rem;
+            }
+
+            .hall-tab {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .hall-tab-panels {
+                padding: 0 1rem 1rem;
+            }
         }
     </style>
 </head>
@@ -1497,11 +1593,13 @@
     <script>
         // Global state
         let currentMonth = '';
+        let activeHall = '';
         let currentTheme = 'light';
         let dirtyRows = new Map();
         let eventSource = null;
         let notificationEventSource = null;
         const ORG_ID = 1;
+        const HALL_STORAGE_KEY = 'events.activeHall';
         let notificationSound = null;
         let audioContext = null;
         let isMuted = false;
@@ -1669,40 +1767,58 @@
                 });
             });
 
-            container.innerHTML = Object.entries(data.halls).map(([hallName, events]) => `
-                <div class="hall-section">
-                    <div class="hall-header" onclick="toggleHall(this)">
-                        <div class="hall-title">
-                            ${hallName}
-                            <span class="hall-count">${events.length} events</span>
-                        </div>
-                        <div class="collapse-icon">▼</div>
+            const hallEntries = Object.entries(data.halls);
+            const storedHall = localStorage.getItem(HALL_STORAGE_KEY);
+            if (storedHall && data.halls[storedHall]) {
+                activeHall = storedHall;
+            } else if (!activeHall || !data.halls[activeHall]) {
+                activeHall = hallEntries[0][0];
+                localStorage.setItem(HALL_STORAGE_KEY, activeHall);
+            }
+
+            container.innerHTML = `
+                <div class="hall-tabs">
+                    <div class="hall-tab-list">
+                        ${hallEntries.map(([hallName, events]) => `
+                            <button type="button" class="hall-tab ${hallName === activeHall ? 'active' : ''}" data-hall="${escapeHtml(hallName)}" onclick="selectHallTabFromButton(this)">
+                                <span class="hall-tab-name">${escapeHtml(hallName)}</span>
+                                <span class="hall-tab-count">${events.length}</span>
+                            </button>
+                        `).join('')}
                     </div>
-                    <div class="hall-body">
-                        <table class="events-table" data-hall="${hallName}">
-                            <thead>
-                                <tr id="header-row-${hallName.replace(/\s+/g, '-')}">
-                                    <th data-col="expander" style="width: 40px;"></th>
-                                    <th class="sortable" draggable="true" data-col="name" onclick="sortTable(this, 'name')">Name</th>
-                                    <th class="sortable sorted-asc" draggable="true" data-col="event_date" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date</th>
-                                    <th draggable="true" data-col="day" style="width: 80px;">Day</th>
-                                    <th class="sortable" draggable="true" data-col="show_time" onclick="sortTable(this, 'show_time')">Show Time</th>
-                                    <th class="sortable" draggable="true" data-col="load_in_time" onclick="sortTable(this, 'load_in_time')">Load In</th>
-                                    <th draggable="true" data-col="status">Status</th>
-                                    <th draggable="true" data-col="delivery">Delivery</th>
-                                    <th draggable="true" data-col="producer">Producer</th>
-                                    <th draggable="true" data-col="technical">Technical</th>
-                                    <th draggable="true" data-col="notes">Notes</th>
-                                    <th draggable="true" data-col="actions">Actions</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                ${events.map(event => renderEventRow(event)).join('')}
-                            </tbody>
-                        </table>
+                    <div class="hall-tab-panels">
+                        ${hallEntries.map(([hallName, events]) => `
+                            <div class="hall-tab-panel ${hallName === activeHall ? 'active' : ''}" data-hall="${escapeHtml(hallName)}">
+                                <div class="hall-section">
+                                    <div class="hall-body">
+                                        <table class="events-table" data-hall="${escapeHtml(hallName)}">
+                                            <thead>
+                                                <tr id="header-row-${hallName.replace(/\s+/g, '-')}">
+                                                    <th data-col="expander" style="width: 40px;"></th>
+                                                    <th class="sortable" draggable="true" data-col="name" onclick="sortTable(this, 'name')">Name</th>
+                                                    <th class="sortable sorted-asc" draggable="true" data-col="event_date" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date</th>
+                                                    <th draggable="true" data-col="day" style="width: 80px;">Day</th>
+                                                    <th class="sortable" draggable="true" data-col="show_time" onclick="sortTable(this, 'show_time')">Show Time</th>
+                                                    <th class="sortable" draggable="true" data-col="load_in_time" onclick="sortTable(this, 'load_in_time')">Load In</th>
+                                                    <th draggable="true" data-col="status">Status</th>
+                                                    <th draggable="true" data-col="delivery">Delivery</th>
+                                                    <th draggable="true" data-col="producer">Producer</th>
+                                                    <th draggable="true" data-col="technical">Technical</th>
+                                                    <th draggable="true" data-col="notes">Notes</th>
+                                                    <th draggable="true" data-col="actions">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${events.map(event => renderEventRow(event)).join('')}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
                     </div>
                 </div>
-            `).join('');
+            `;
 
             // Restore column order from localStorage
             restoreColumnOrder();
@@ -1711,6 +1827,26 @@
             initColumnResize();
 
             // Note: Shifts are loaded on-demand when user expands the section
+        }
+
+        function selectHallTabFromButton(button) {
+            const hallName = button.dataset.hall;
+            selectHallTab(hallName);
+        }
+
+        function selectHallTab(hallName) {
+            if (!hallName) return;
+
+            activeHall = hallName;
+            localStorage.setItem(HALL_STORAGE_KEY, hallName);
+
+            document.querySelectorAll('.hall-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.hall === hallName);
+            });
+
+            document.querySelectorAll('.hall-tab-panel').forEach(panel => {
+                panel.classList.toggle('active', panel.dataset.hall === hallName);
+            });
         }
 
         // PHASE 5: Get day of week in English (e.g., "Sun", "Mon", "Tue", etc.)
@@ -1863,14 +1999,6 @@
                     </td>
                 </tr>
             `;
-        }
-
-        // Hall Collapse
-        function toggleHall(header) {
-            const body = header.nextElementSibling;
-            const icon = header.querySelector('.collapse-icon');
-            body.classList.toggle('hidden');
-            icon.classList.toggle('collapsed');
         }
 
         // Dirty Tracking
@@ -3449,17 +3577,10 @@
                 return;
             }
             
-            // Find the hall section containing this event
-            const hallSection = eventRow.closest('.hall-section');
-            if (hallSection) {
-                const hallBody = hallSection.querySelector('.hall-body');
-                // Expand the hall if collapsed
-                if (hallBody && hallBody.style.display === 'none') {
-                    const hallHeader = hallSection.querySelector('.hall-header');
-                    if (hallHeader) {
-                        toggleHall(hallHeader);
-                    }
-                }
+            // Activate the hall tab containing this event
+            const hallPanel = eventRow.closest('.hall-tab-panel');
+            if (hallPanel && !hallPanel.classList.contains('active')) {
+                selectHallTab(hallPanel.dataset.hall);
             }
             
             // Scroll to the event row
