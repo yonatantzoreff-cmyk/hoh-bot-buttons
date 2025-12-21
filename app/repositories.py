@@ -173,6 +173,8 @@ class EventRepository:
         load_in_time=_NO_UPDATE,
         producer_contact_id: Optional[int] = _NO_UPDATE,
         technical_contact_id: Optional[int] = _NO_UPDATE,
+        status: Optional[str] = _NO_UPDATE,
+        next_followup_at=_NO_UPDATE,
         notes: Optional[str] = _NO_UPDATE,
     ) -> None:
         sets = ["updated_at = :now"]
@@ -205,6 +207,14 @@ class EventRepository:
         if technical_contact_id is not _NO_UPDATE:
             sets.append("technical_contact_id = :technical_contact_id")
             params["technical_contact_id"] = technical_contact_id
+
+        if status is not _NO_UPDATE:
+            sets.append("status = :status")
+            params["status"] = status
+
+        if next_followup_at is not _NO_UPDATE:
+            sets.append("next_followup_at = :next_followup_at")
+            params["next_followup_at"] = next_followup_at
 
         if notes is not _NO_UPDATE:
             sets.append("notes = :notes")
@@ -268,6 +278,7 @@ class EventRepository:
                 e.technical_contact_id,
                 tech.name AS technical_name,
                 tech.phone AS technical_phone,
+                e.next_followup_at,
                 e.created_at
             FROM events e
             LEFT JOIN halls h ON e.hall_id = h.hall_id
