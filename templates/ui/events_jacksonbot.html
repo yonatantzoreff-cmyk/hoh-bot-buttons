@@ -1790,12 +1790,6 @@
                         ${hallEntries.map(([hallName, events]) => `
                             <div class="hall-tab-panel ${hallName === activeHall ? 'active' : ''}" data-hall="${escapeHtml(hallName)}">
                                 <div class="hall-section">
-                                    <div class="hall-header static">
-                                        <div class="hall-title">
-                                            ${escapeHtml(hallName)}
-                                            <span class="hall-count">${events.length} events</span>
-                                        </div>
-                                    </div>
                                     <div class="hall-body">
                                         <table class="events-table" data-hall="${escapeHtml(hallName)}">
                                             <thead>
