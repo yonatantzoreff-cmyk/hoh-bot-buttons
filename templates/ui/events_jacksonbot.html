@@ -628,10 +628,14 @@
         .events-table {
             width: 100%;
             border-collapse: collapse;
+            table-layout: fixed;
         }
 
         .events-table thead {
             background: var(--bg-secondary);
+            position: sticky;
+            top: 120px;
+            z-index: 6;
         }
 
         .events-table th {
@@ -645,6 +649,7 @@
             user-select: none;
             position: relative;
             border-bottom: 2px solid var(--border-color);
+            background: var(--bg-secondary);
         }
 
         .events-table th:hover {
@@ -733,6 +738,7 @@
             padding: 1rem;
             border-bottom: 1px solid var(--border-color);
             vertical-align: middle;
+            background: var(--bg-primary);
         }
 
         .events-table tr {
@@ -990,6 +996,24 @@
             vertical-align: middle;
         }
 
+        .sticky-col {
+            position: sticky;
+            z-index: 5;
+            background: var(--bg-primary);
+        }
+
+        .sticky-left-0 { left: 0; }
+        .sticky-left-1 { left: 44px; }
+        .sticky-left-2 { left: 164px; }
+        .sticky-left-3 { left: 304px; }
+
+        .sticky-right-1 { right: 120px; }
+        .sticky-right-0 { right: 0; }
+
+        .events-table thead th.sticky-col {
+            z-index: 7;
+        }
+
         .expander-btn {
             background: none;
             border: none;
@@ -1073,6 +1097,288 @@
 
         .add-shift-btn {
             margin-top: 0.75rem;
+        }
+
+        .table-toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 0.75rem;
+            position: sticky;
+            top: 64px;
+            z-index: 8;
+            padding: 0.5rem 0.25rem;
+            background: linear-gradient(var(--bg-secondary), var(--bg-secondary));
+        }
+
+        .density-toggle {
+            display: inline-flex;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            overflow: hidden;
+        }
+
+        .density-btn {
+            padding: 0.4rem 0.9rem;
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-weight: 600;
+        }
+
+        .density-btn.active {
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        .columns-control {
+            position: relative;
+        }
+
+        .columns-btn {
+            padding: 0.45rem 0.9rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .columns-menu {
+            position: absolute;
+            right: 0;
+            top: 110%;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: var(--shadow-hover);
+            padding: 0.5rem 0.75rem;
+            min-width: 180px;
+            display: none;
+            z-index: 10;
+        }
+
+        .columns-menu.visible {
+            display: block;
+        }
+
+        .columns-menu label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.4rem 0.25rem;
+            cursor: pointer;
+            color: var(--text-primary);
+        }
+
+        .cell-stack {
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+            font-size: 0.9rem;
+        }
+
+        .cell-subtext {
+            color: var(--text-muted);
+            font-size: 0.82rem;
+        }
+
+        .contact-line {
+            display: flex;
+            align-items: center;
+            gap: 0.35rem;
+            justify-content: space-between;
+        }
+
+        .contact-name {
+            color: var(--text-primary);
+            font-weight: 600;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .contact-role {
+            color: var(--text-muted);
+            font-size: 0.82rem;
+        }
+
+        .phone-icon {
+            cursor: pointer;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .notes-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.75rem;
+            border-radius: 14px;
+            background: var(--chip-bg);
+            color: var(--chip-text);
+            font-weight: 600;
+            font-size: 0.85rem;
+        }
+
+        .empty-cell {
+            color: var(--text-muted);
+        }
+
+        .actions-wrapper {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .kebab-btn {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 32px;
+            height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.1rem;
+        }
+
+        .kebab-menu {
+            position: absolute;
+            right: 0;
+            top: 110%;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            box-shadow: var(--shadow-hover);
+            min-width: 160px;
+            display: none;
+            z-index: 20;
+        }
+
+        .kebab-menu.visible {
+            display: block;
+        }
+
+        .kebab-menu button {
+            width: 100%;
+            background: transparent;
+            border: none;
+            text-align: left;
+            padding: 0.75rem;
+            cursor: pointer;
+            color: var(--text-primary);
+            font-weight: 600;
+        }
+
+        .kebab-menu button:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .density-compact .events-table th,
+        .density-compact .events-table td {
+            padding: 0.65rem 0.75rem;
+        }
+
+        .density-compact .cell-stack {
+            gap: 0.15rem;
+        }
+
+        .density-compact .status-chip {
+            padding: 0.25rem 0.65rem;
+        }
+
+        .event-drawer {
+            position: fixed;
+            top: 0;
+            right: -520px;
+            width: 520px;
+            height: 100%;
+            background: var(--bg-primary);
+            box-shadow: -4px 0 16px rgba(0,0,0,0.25);
+            z-index: 1200;
+            transition: right 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            border-left: 1px solid var(--border-color);
+        }
+
+        .event-drawer.visible {
+            right: 0;
+        }
+
+        .drawer-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.35);
+            z-index: 1100;
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s;
+        }
+
+        .drawer-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .drawer-header {
+            padding: 1.25rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .drawer-title {
+            font-size: 1.2rem;
+            font-weight: 700;
+        }
+
+        .drawer-body {
+            padding: 1.25rem 1.5rem;
+            overflow-y: auto;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .drawer-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.35rem;
+        }
+
+        .form-group label {
+            color: var(--text-secondary);
+            font-weight: 600;
+            font-size: 0.9rem;
+        }
+
+        .drawer-row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 1rem;
+        }
+
+        .readonly-text {
+            color: var(--text-primary);
+            font-weight: 600;
         }
         
         /* Reminder Bell Colors */
@@ -1590,12 +1896,74 @@
         </div>
     </div>
 
+    <div class="drawer-overlay" id="drawerOverlay" onclick="closeEventDrawer()"></div>
+    <div class="event-drawer" id="eventDrawer" onclick="event.stopPropagation()">
+        <div class="drawer-header">
+            <div>
+                <div class="drawer-title" id="drawerTitle">Edit Event</div>
+                <div class="cell-subtext" id="drawerSubtitle"></div>
+            </div>
+            <button class="action-icon" onclick="closeEventDrawer()" aria-label="Close drawer">✖</button>
+        </div>
+        <div class="drawer-body">
+            <div class="drawer-row">
+                <div class="form-group">
+                    <label for="drawerName">Name</label>
+                    <input type="text" class="inline-edit" id="drawerName" oninput="trackDrawerChange('name', this.value)">
+                </div>
+                <div class="form-group">
+                    <label for="drawerDate">Date</label>
+                    <input type="date" class="inline-edit" id="drawerDate" onchange="trackDrawerChange('event_date', this.value)">
+                </div>
+            </div>
+            <div class="drawer-row">
+                <div class="form-group">
+                    <label for="drawerShowTime">Show Time</label>
+                    <input type="time" class="inline-edit" id="drawerShowTime" onchange="trackDrawerChange('show_time', this.value)">
+                </div>
+                <div class="form-group">
+                    <label for="drawerLoadIn">Load-in</label>
+                    <input type="time" class="inline-edit" id="drawerLoadIn" onchange="trackDrawerChange('load_in_time', this.value)">
+                </div>
+            </div>
+            <div class="drawer-row">
+                <div class="form-group">
+                    <label>Producer</label>
+                    <div id="drawerProducer"></div>
+                </div>
+                <div class="form-group">
+                    <label>Technical</label>
+                    <div id="drawerTechnical"></div>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="drawerNotes">Notes</label>
+                <textarea id="drawerNotes" class="inline-edit" rows="3" oninput="trackDrawerChange('notes', this.value)"></textarea>
+            </div>
+            <div class="drawer-row">
+                <div class="form-group">
+                    <label>Status</label>
+                    <div id="drawerStatus" class="readonly-text"></div>
+                </div>
+                <div class="form-group">
+                    <label>Delivery</label>
+                    <div id="drawerDelivery" class="readonly-text"></div>
+                </div>
+            </div>
+        </div>
+        <div class="drawer-footer">
+            <button class="btn btn-secondary" onclick="closeEventDrawer()">Cancel</button>
+            <button class="btn btn-primary" id="drawerSaveBtn" onclick="saveDrawerChanges()">Save</button>
+        </div>
+    </div>
+
     <script>
         // Global state
         let currentMonth = '';
         let activeHall = '';
         let currentTheme = 'light';
         let dirtyRows = new Map();
+        let eventsState = null;
         let eventSource = null;
         let notificationEventSource = null;
         const ORG_ID = 1;
@@ -1603,6 +1971,17 @@
         let notificationSound = null;
         let audioContext = null;
         let isMuted = false;
+        let columnVisibility = {
+            times: true,
+            contacts: true,
+            notes: true,
+            delivery: true
+        };
+        let densityPreference = 'comfortable';
+        let activeDrawerEvent = null;
+        let drawerChanges = {};
+        let columnsMenuOpen = false;
+        let openKebabId = null;
         
         // Constants
         const EVENT_LOAD_TIMEOUT = 1000; // ms to wait for events to load before scrolling
@@ -1611,6 +1990,9 @@
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadTheme();
+            loadDensityPreference();
+            loadColumnVisibility();
+            applyDensityPreference();
             generateMonthSelector();
             
             // Load saved month or default to current
@@ -1623,6 +2005,15 @@
             connectSSE();
             initNotifications();
             checkDeepLink();
+
+            document.addEventListener('click', (e) => {
+                if (columnsMenuOpen && !e.target.closest('.columns-control')) {
+                    closeColumnsMenu();
+                }
+                if (openKebabId && !e.target.closest('.kebab-menu') && !e.target.closest('.kebab-btn')) {
+                    closeKebabMenu(openKebabId);
+                }
+            });
         });
 
         // Theme Management
@@ -1649,6 +2040,59 @@
             } else {
                 icon.textContent = '🌙';
                 toggle.title = 'Switch to dark mode';
+            }
+        }
+
+        function loadDensityPreference() {
+            densityPreference = localStorage.getItem('events.tableDensity') || 'comfortable';
+        }
+
+        function applyDensityPreference() {
+            document.body.classList.toggle('density-compact', densityPreference === 'compact');
+        }
+
+        function setDensity(mode) {
+            densityPreference = mode;
+            localStorage.setItem('events.tableDensity', mode);
+            applyDensityPreference();
+            if (eventsState) {
+                renderEvents(eventsState);
+            }
+        }
+
+        function loadColumnVisibility() {
+            const saved = localStorage.getItem('events.columnVisibility');
+            if (saved) {
+                try {
+                    const parsed = JSON.parse(saved);
+                    columnVisibility = { ...columnVisibility, ...parsed };
+                } catch (e) {
+                    console.warn('Failed to parse column visibility preferences', e);
+                }
+            }
+        }
+
+        function setColumnVisibility(column, visible) {
+            columnVisibility[column] = visible;
+            localStorage.setItem('events.columnVisibility', JSON.stringify(columnVisibility));
+            if (eventsState) {
+                renderEvents(eventsState);
+            }
+        }
+
+        function toggleColumnsMenu(event) {
+            event.stopPropagation();
+            const menu = document.getElementById('columnsMenu');
+            if (!menu) return;
+            menu.classList.toggle('visible');
+            columnsMenuOpen = menu.classList.contains('visible');
+        }
+
+        function closeColumnsMenu() {
+            const menu = document.getElementById('columnsMenu');
+            if (menu) {
+                menu.classList.remove('visible');
+                columnsMenuOpen = false;
             }
         }
 
@@ -1746,6 +2190,7 @@
         // Render Events
         function renderEvents(data) {
             const container = document.getElementById('eventsContainer');
+            eventsState = data;
             
             if (!data.halls || Object.keys(data.halls).length === 0) {
                 container.innerHTML = `
@@ -1776,7 +2221,38 @@
                 localStorage.setItem(HALL_STORAGE_KEY, activeHall);
             }
 
+            const headerColumns = `
+                <th data-col="expander" class="sticky-col sticky-left-0" style="width: 44px;"></th>
+                <th class="sortable sticky-col sticky-left-1" draggable="true" data-col="status" style="min-width: 120px;" onclick="sortTable(this, 'status')">Status</th>
+                <th class="sortable sorted-asc sticky-col sticky-left-2" draggable="true" data-col="event_date" data-default-sort="true" style="min-width: 140px;" onclick="sortTable(this, 'event_date')">Date</th>
+                <th class="sortable sticky-col sticky-left-3" draggable="true" data-col="name" style="min-width: 200px;" onclick="sortTable(this, 'name')">Name</th>
+                ${columnVisibility.times ? `<th class="sortable" draggable="true" data-col="times" style="min-width: 180px;" onclick="sortTable(this, 'show_time')">Times</th>` : ''}
+                ${columnVisibility.contacts ? `<th draggable="true" data-col="contacts" style="min-width: 210px;">Contacts</th>` : ''}
+                ${columnVisibility.notes ? `<th draggable="true" data-col="notes" style="min-width: 110px;">Notes</th>` : ''}
+                ${columnVisibility.delivery ? `<th draggable="true" data-col="delivery" class="sticky-col sticky-right-1" style="min-width: 120px;">Delivery</th>` : ''}
+                <th draggable="true" data-col="actions" class="sticky-col sticky-right-0" style="min-width: 110px;">Actions</th>
+            `;
+
+            const columnsMenu = `
+                <div class="columns-menu" id="columnsMenu">
+                    <label><input type="checkbox" ${columnVisibility.times ? 'checked' : ''} onchange="setColumnVisibility('times', this.checked)"> Times</label>
+                    <label><input type="checkbox" ${columnVisibility.contacts ? 'checked' : ''} onchange="setColumnVisibility('contacts', this.checked)"> Contacts</label>
+                    <label><input type="checkbox" ${columnVisibility.notes ? 'checked' : ''} onchange="setColumnVisibility('notes', this.checked)"> Notes</label>
+                    <label><input type="checkbox" ${columnVisibility.delivery ? 'checked' : ''} onchange="setColumnVisibility('delivery', this.checked)"> Delivery</label>
+                </div>
+            `;
+
             container.innerHTML = `
+                <div class="table-toolbar">
+                    <div class="density-toggle">
+                        <button class="density-btn ${densityPreference === 'comfortable' ? 'active' : ''}" onclick="setDensity('comfortable')">Comfortable</button>
+                        <button class="density-btn ${densityPreference === 'compact' ? 'active' : ''}" onclick="setDensity('compact')">Compact</button>
+                    </div>
+                    <div class="columns-control">
+                        <button class="columns-btn" onclick="toggleColumnsMenu(event)">Columns ▾</button>
+                        ${columnsMenu}
+                    </div>
+                </div>
                 <div class="hall-tabs">
                     <div class="hall-tab-list">
                         ${hallEntries.map(([hallName, events]) => `
@@ -1800,22 +2276,11 @@
                                         <table class="events-table" data-hall="${escapeHtml(hallName)}">
                                             <thead>
                                                 <tr id="header-row-${hallName.replace(/\s+/g, '-')}">
-                                                    <th data-col="expander" style="width: 40px;"></th>
-                                                    <th class="sortable" draggable="true" data-col="name" onclick="sortTable(this, 'name')">Name</th>
-                                                    <th class="sortable sorted-asc" draggable="true" data-col="event_date" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date</th>
-                                                    <th draggable="true" data-col="day" style="width: 80px;">Day</th>
-                                                    <th class="sortable" draggable="true" data-col="show_time" onclick="sortTable(this, 'show_time')">Show Time</th>
-                                                    <th class="sortable" draggable="true" data-col="load_in_time" onclick="sortTable(this, 'load_in_time')">Load In</th>
-                                                    <th draggable="true" data-col="status">Status</th>
-                                                    <th draggable="true" data-col="delivery">Delivery</th>
-                                                    <th draggable="true" data-col="producer">Producer</th>
-                                                    <th draggable="true" data-col="technical">Technical</th>
-                                                    <th draggable="true" data-col="notes">Notes</th>
-                                                    <th draggable="true" data-col="actions">Actions</th>
+                                                    ${headerColumns}
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                ${events.map(event => renderEventRow(event)).join('')}
+                                                ${events.map(event => renderEventRow(event, hallName)).join('')}
                                             </tbody>
                                         </table>
                                     </div>
@@ -1893,103 +2358,94 @@
             return `<span class="status-chip ${statusClass}">${status}</span>`;
         }
 
-        function renderEventRow(event) {
-            // Event status mapping (PHASE 3):
-            // - draft: Event created, no message sent yet
-            // - pending: Message sent, waiting for response
-            // - confirmed: Load-in time received and confirmed
-            // - follow_up: Client clicked "still don't know" (עדיין לא יודע)
-            // - contact_required: Client is not the contact person, forwarded contact info
-            const statusClass = (event.status || 'draft').toLowerCase();
-            // Use pre-formatted times from backend (Israel timezone)
+        function renderEventRow(event, hallName) {
             const showTime = event.show_time_display || '';
             const loadInTime = event.load_in_time_display || '';
-            const eventDate = event.event_date || '';
             const defaultTime = event.load_in_time_display || '';
+            const statusClass = (event.status || 'draft').toLowerCase();
+            const columnCount = 5 +
+                (columnVisibility.times ? 1 : 0) +
+                (columnVisibility.contacts ? 1 : 0) +
+                (columnVisibility.notes ? 1 : 0) +
+                (columnVisibility.delivery ? 1 : 0);
+
+            const phoneIcon = (phone) => phone ? `<span class="phone-icon" title="${escapeHtml(phone)}" onclick="copyToClipboard(event, '${escapeHtml(phone).replace(/'/g, "\\'")}')">📞</span>` : '';
 
             return `
-                <tr data-event-id="${event.event_id}" class="event-row">
-                    <td class="expander-cell">
-                        <button class="expander-btn" onclick="toggleRowDetails(${event.event_id})" id="expander-${event.event_id}" aria-label="Toggle shifts">
+                <tr data-event-id="${event.event_id}" data-hall="${escapeHtml(hallName)}" data-name="${escapeHtml(event.name || '')}" data-event-date="${event.event_date || ''}" data-show-time="${escapeHtml(showTime)}" data-load-in-time="${escapeHtml(loadInTime)}" data-status="${escapeHtml(statusClass)}" class="event-row" onclick="handleRowClick(event, ${event.event_id}, '${escapeHtml(hallName)}')">
+                    <td class="expander-cell sticky-col sticky-left-0">
+                        <button class="expander-btn" onclick="event.stopPropagation(); toggleRowDetails(${event.event_id})" id="expander-${event.event_id}" aria-label="Toggle shifts">
                             ▶
                         </button>
                     </td>
-                    <td>
-                        <input type="text" class="inline-edit" value="${escapeHtml(event.name || '')}" 
-                               onchange="markDirty(${event.event_id}, 'name', this.value)">
-                    </td>
-                    <td>
-                        <input type="date" class="inline-edit" value="${event.event_date || ''}" 
-                               onchange="markDirty(${event.event_id}, 'event_date', this.value)">
-                    </td>
-                    <td style="text-align: center; color: var(--text-secondary); font-size: 0.9rem;">
-                        ${getDayOfWeek(event.event_date)}
-                    </td>
-                    <td>
-                        <input type="time" class="inline-edit" value="${event.show_time_display}" 
-                               onchange="markDirty(${event.event_id}, 'show_time', this.value)">
-                    </td>
-                    <td>
-                        <input type="time" class="inline-edit" value="${event.load_in_time_display}" 
-                               onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
-                    </td>
-                    <td>
+                    <td class="sticky-col sticky-left-1">
                         ${renderStatusChip(event)}
                     </td>
-                    <td>
-                        ${renderDeliveryStatusChip(event.latest_delivery_status)}
-                    </td>
-                    <td>
-                        <div class="contact-dropdown-container" id="producer-${event.event_id}">
-                            <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'producer', 'producer')">
-                                <div style="flex: 1;">
-                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.producer_name || 'Select producer')}</div>
-                                    ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.producer_phone)}</div>` : ''}
-                                </div>
-                                <span style="color: var(--text-muted);">▼</span>
-                            </div>
+                    <td class="sticky-col sticky-left-2">
+                        <div class="cell-stack">
+                            <span>${event.event_date || '—'}</span>
+                            <span class="cell-subtext">${getDayOfWeek(event.event_date)}</span>
                         </div>
                     </td>
-                    <td>
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <div class="contact-dropdown-container" id="technical-${event.event_id}" style="flex: 1;">
-                                <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'technical')">
-                                    <div style="flex: 1;">
-                                        <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || 'Select technical')}</div>
-                                        ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
+                    <td class="sticky-col sticky-left-3">
+                        <div class="cell-stack">
+                            <span style="font-weight:700;">${escapeHtml(event.name || '')}</span>
+                            ${event.hall_name ? `<span class="cell-subtext">${escapeHtml(event.hall_name)}</span>` : ''}
+                        </div>
+                    </td>
+                    ${columnVisibility.times ? `
+                        <td>
+                            <div class="cell-stack">
+                                <span>Show ${showTime || '—'}</span>
+                                <span class="cell-subtext">Load-in ${loadInTime || '—'}</span>
+                            </div>
+                        </td>` : ''}
+                    ${columnVisibility.contacts ? `
+                        <td>
+                            <div class="cell-stack">
+                                <div class="contact-line">
+                                    <div>
+                                        <div class="contact-role">Producer</div>
+                                        <div class="contact-name">${escapeHtml(event.producer_name || '—')}</div>
                                     </div>
-                                    <span style="color: var(--text-muted);">▼</span>
+                                    ${phoneIcon(event.producer_phone)}
+                                </div>
+                                <div class="contact-line">
+                                    <div>
+                                        <div class="contact-role">Technical</div>
+                                        <div class="contact-name">${escapeHtml(event.technical_name || '—')}</div>
+                                    </div>
+                                    ${phoneIcon(event.technical_phone)}
                                 </div>
                             </div>
-                            <button class="btn btn-sm" 
-                                    onclick="showSuggestions(${event.event_id}, this)" 
-                                    title="הצעות טכנאים"
-                                    style="padding: 0.3rem 0.6rem; font-size: 0.85rem; white-space: nowrap;">
-                                💡
-                            </button>
-                        </div>
-                    </td>
-                    <td>
-                        <input type="text" class="inline-edit" value="${escapeHtml(event.notes || '')}" 
-                               onchange="markDirty(${event.event_id}, 'notes', this.value)">
-                    </td>
-                    <td>
-                        <div class="actions-container">
-                            <button class="action-icon delete" 
-                                    onclick="deleteEvent(${event.event_id})"
-                                    title="Delete event">
-                                🗑️
-                            </button>
+                        </td>` : ''}
+                    ${columnVisibility.notes ? `
+                        <td>
+                            ${event.notes ? `<span class="notes-pill" title="${escapeHtml(event.notes)}">📝 Notes</span>` : '<span class="empty-cell">—</span>'}
+                        </td>` : ''}
+                    ${columnVisibility.delivery ? `
+                        <td class="sticky-col sticky-right-1">
+                            ${renderDeliveryStatusChip(event.latest_delivery_status)}
+                        </td>` : ''}
+                    <td class="sticky-col sticky-right-0" style="position: sticky;">
+                        <div class="actions-wrapper">
                             <button class="action-icon whatsapp ${event.init_sent_at ? 'sent' : ''}" 
-                                    onclick="sendWhatsApp(${event.event_id})"
+                                    onclick="event.stopPropagation(); sendWhatsApp(${event.event_id})"
                                     title="${event.init_sent_at ? 'נשלח לאחרונה: ' + escapeHtml(event.init_sent_at_display) : 'טרם נשלח'}">
                                 📱
                             </button>
+                            <div class="actions-container" style="position: relative;">
+                                <button class="kebab-btn" onclick="toggleKebabMenu(event, ${event.event_id})" aria-label="More actions">⋯</button>
+                                <div class="kebab-menu" id="kebab-${event.event_id}">
+                                    <button onclick="openEventDrawer(${event.event_id}, '${escapeHtml(hallName)}'); closeKebabMenu(${event.event_id});">✏️ Edit</button>
+                                    <button onclick="deleteEvent(${event.event_id}); closeKebabMenu(${event.event_id});">🗑️ Delete</button>
+                                </div>
+                            </div>
                         </div>
                     </td>
                 </tr>
                 <tr class="row-details" id="details-${event.event_id}" data-event-id="${event.event_id}">
-                    <td colspan="12" style="padding: 0;">
+                    <td colspan="${columnCount}" style="padding: 0;">
                         <div class="row-details-content">
                             <div id="shifts-container-${event.event_id}">
                                 <div style="text-align: center; padding: 1rem; color: var(--text-muted);">
@@ -2007,6 +2463,41 @@
             `;
         }
 
+        function handleRowClick(e, eventId, hallName) {
+            if (e.target.closest('.kebab-btn') || e.target.closest('.kebab-menu') || e.target.closest('.action-icon') || e.target.closest('.expander-btn')) {
+                return;
+            }
+            openEventDrawer(eventId, hallName);
+        }
+
+        function toggleKebabMenu(e, eventId) {
+            e.stopPropagation();
+            if (openKebabId && openKebabId !== eventId) {
+                closeKebabMenu(openKebabId);
+            }
+            const menu = document.getElementById(`kebab-${eventId}`);
+            if (!menu) return;
+            menu.classList.toggle('visible');
+            openKebabId = menu.classList.contains('visible') ? eventId : null;
+        }
+
+        function closeKebabMenu(eventId) {
+            const menu = document.getElementById(`kebab-${eventId}`);
+            if (menu) {
+                menu.classList.remove('visible');
+            }
+            if (openKebabId === eventId) {
+                openKebabId = null;
+            }
+        }
+
+        function copyToClipboard(e, text) {
+            e.stopPropagation();
+            if (!text) return;
+            navigator.clipboard?.writeText(text);
+            showToast('Copied phone', 'success');
+        }
+
         // Dirty Tracking
         function markDirty(eventId, field, value) {
             if (!dirtyRows.has(eventId)) {
@@ -2020,6 +2511,17 @@
 
             // Show save button
             document.getElementById('saveBtn').classList.add('visible');
+        }
+
+        function trackDrawerChange(field, value) {
+            const originalValue = activeDrawerEvent?.original ? activeDrawerEvent.original[field] ?? '' : undefined;
+            if (originalValue !== undefined && originalValue == value) {
+                delete drawerChanges[field];
+            } else {
+                drawerChanges[field] = value;
+            }
+            const saveBtn = document.getElementById('drawerSaveBtn');
+            if (saveBtn) saveBtn.disabled = false;
         }
 
         // Save Changes
@@ -2088,41 +2590,142 @@
                 showToast(`Saved ${successCount}, failed ${errorCount}. Please retry failed items.`, 'error');
             }
         }
+
+        function getEventFromState(eventId, hallName) {
+            if (!eventsState || !eventsState.halls) return null;
+            let targetHall = hallName && eventsState.halls[hallName] ? hallName : null;
+            if (!targetHall) {
+                targetHall = Object.keys(eventsState.halls).find(h => eventsState.halls[h].some(ev => ev.event_id === eventId));
+            }
+            if (!targetHall) return null;
+            return eventsState.halls[targetHall].find(ev => ev.event_id === eventId) || null;
+        }
+
+        function renderDrawerContact(targetId, event, fieldType) {
+            const container = document.getElementById(targetId);
+            if (!container || !event) return;
+            const nameKey = fieldType === 'producer' ? 'producer_name' : 'technical_name';
+            const phoneKey = fieldType === 'producer' ? 'producer_phone' : 'technical_phone';
+            const phone = event[phoneKey] || '';
+            const copyButton = phone ? `<button class="btn btn-sm" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" onclick="copyToClipboard(event, '${escapeHtml(phone).replace(/'/g, "\\'")}')">Copy</button>` : '';
+            container.innerHTML = `
+                <div class="contact-dropdown-container" id="${fieldType}-${event.event_id}">
+                    <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, '${fieldType}', '${fieldType}')">
+                        <div style="flex: 1;">
+                            <div style="font-weight: 600; font-size: 0.95rem;">${escapeHtml(event[nameKey] || `Select ${fieldType}`)}</div>
+                            ${phone ? `<div style="font-size: 0.85rem; color: var(--text-muted); display:flex; align-items:center; gap:0.5rem;">${escapeHtml(phone)} ${copyButton}</div>` : ''}
+                        </div>
+                        <span style="color: var(--text-muted);">▼</span>
+                    </div>
+                </div>
+            `;
+        }
+
+        function openEventDrawer(eventId, hallName) {
+            const eventData = getEventFromState(eventId, hallName);
+            if (!eventData) return;
+
+            activeDrawerEvent = { eventId, hallName, original: { ...eventData } };
+            drawerChanges = {};
+
+            document.getElementById('drawerTitle').textContent = eventData.name || 'Edit Event';
+            document.getElementById('drawerSubtitle').textContent = eventData.event_date ? `${eventData.event_date} • ${getDayOfWeek(eventData.event_date)}` : '';
+            document.getElementById('drawerName').value = eventData.name || '';
+            document.getElementById('drawerDate').value = eventData.event_date || '';
+            document.getElementById('drawerShowTime').value = eventData.show_time_display || '';
+            document.getElementById('drawerLoadIn').value = eventData.load_in_time_display || '';
+            document.getElementById('drawerNotes').value = eventData.notes || '';
+            document.getElementById('drawerStatus').innerHTML = renderStatusChip(eventData);
+            document.getElementById('drawerDelivery').innerHTML = renderDeliveryStatusChip(eventData.latest_delivery_status);
+
+            renderDrawerContact('drawerProducer', eventData, 'producer');
+            renderDrawerContact('drawerTechnical', eventData, 'technical');
+
+            document.getElementById('drawerOverlay').classList.add('visible');
+            document.getElementById('eventDrawer').classList.add('visible');
+            const saveBtn = document.getElementById('drawerSaveBtn');
+            if (saveBtn) saveBtn.disabled = true;
+        }
+
+        function closeEventDrawer() {
+            document.getElementById('drawerOverlay').classList.remove('visible');
+            document.getElementById('eventDrawer').classList.remove('visible');
+            activeDrawerEvent = null;
+            drawerChanges = {};
+            closeContactDropdown();
+        }
+
+        async function saveDrawerChanges() {
+            if (!activeDrawerEvent) return;
+            const { eventId, hallName, original } = activeDrawerEvent;
+            const payload = { ...drawerChanges };
+
+            if (payload.event_date) {
+                payload.event_date = payload.event_date;
+            }
+
+            if (Object.keys(payload).length === 0) {
+                closeEventDrawer();
+                return;
+            }
+
+            const saveBtn = document.getElementById('drawerSaveBtn');
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<span class="spinner"></span>';
+            }
+
+            try {
+                const response = await fetch(`/api/events/${eventId}?org_id=${ORG_ID}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (response.ok) {
+                    const result = await response.json();
+                    const updatedEvent = result.event || { ...original, ...payload };
+                    updateEventInState(updatedEvent, hallName);
+                    renderEvents(eventsState);
+                    showToast('Event saved', 'success');
+                    closeEventDrawer();
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to save event: ${error.detail || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error saving event:', error);
+                showToast('Failed to save event', 'error');
+            } finally {
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = 'Save';
+                }
+            }
+        }
+
+        function updateEventInState(eventData, hallName) {
+            if (!eventsState || !eventsState.halls) return;
+            let targetHall = hallName && eventsState.halls[hallName] ? hallName : null;
+            if (!targetHall && eventData.hall_name) {
+                targetHall = Object.keys(eventsState.halls).find(h => h === eventData.hall_name);
+            }
+            if (!targetHall) {
+                targetHall = Object.keys(eventsState.halls).find(h => eventsState.halls[h].some(ev => ev.event_id === eventData.event_id));
+            }
+            if (!targetHall) return;
+            const idx = eventsState.halls[targetHall].findIndex(ev => ev.event_id === eventData.event_id);
+            if (idx !== -1) {
+                eventsState.halls[targetHall][idx] = { ...eventsState.halls[targetHall][idx], ...eventData };
+            }
+        }
         
         // Update event row with new data from server
         function updateEventRow(eventId, eventData) {
-            const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
-            if (!row) return;
-            
-            // Update input values with server data
-            const inputs = row.querySelectorAll('.inline-edit');
-            inputs.forEach(input => {
-                const onchange = input.getAttribute('onchange');
-                if (!onchange) return;
-                
-                // Extract field name from onchange attribute
-                const fieldMatch = onchange.match(/markDirty\([^,]+,\s*['"]([^'"]+)['"]/);
-                if (!fieldMatch) return;
-                
-                const field = fieldMatch[1];
-                
-                // Update value based on field
-                if (field === 'name' && eventData.name !== undefined) {
-                    input.value = eventData.name;
-                } else if (field === 'event_date' && eventData.event_date) {
-                    input.value = eventData.event_date;
-                } else if (field === 'show_time' && eventData.show_time_display !== undefined) {
-                    input.value = eventData.show_time_display;
-                } else if (field === 'load_in_time' && eventData.load_in_time_display !== undefined) {
-                    input.value = eventData.load_in_time_display;
-                } else if (field === 'notes' && eventData.notes !== undefined) {
-                    input.value = eventData.notes;
-                } else if (field === 'producer_name' && eventData.producer_name !== undefined) {
-                    input.value = eventData.producer_name;
-                } else if (field === 'technical_name' && eventData.technical_name !== undefined) {
-                    input.value = eventData.technical_name;
-                }
-            });
+            updateEventInState(eventData);
+            if (eventsState) {
+                renderEvents(eventsState);
+            }
         }
 
         // Contact Dropdown (PHASE 4)
@@ -2247,7 +2850,9 @@
         function selectContact(eventId, fieldType, contactId, name, phone) {
             // Update the UI
             const container = document.getElementById(`${fieldType}-${eventId}`);
+            if (!container) return;
             const trigger = container.querySelector('.contact-dropdown-trigger');
+            if (!trigger) return;
             trigger.innerHTML = `
                 <div style="flex: 1;">
                     <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(name)}</div>
@@ -2255,11 +2860,19 @@
                 </div>
                 <span style="color: var(--text-muted);">▼</span>
             `;
-            
-            // Mark as dirty
-            markDirty(eventId, `${fieldType}_contact_id`, contactId);
-            markDirty(eventId, `${fieldType}_name`, name);
-            markDirty(eventId, `${fieldType}_phone`, phone);
+
+            // If editing inside drawer, track changes there
+            const isDrawer = !!container.closest('#eventDrawer');
+            if (isDrawer && activeDrawerEvent && activeDrawerEvent.eventId === eventId) {
+                trackDrawerChange(`${fieldType}_contact_id`, contactId);
+                trackDrawerChange(`${fieldType}_name`, name);
+                trackDrawerChange(`${fieldType}_phone`, phone);
+            } else {
+                // Mark as dirty for legacy inline editing
+                markDirty(eventId, `${fieldType}_contact_id`, contactId);
+                markDirty(eventId, `${fieldType}_name`, name);
+                markDirty(eventId, `${fieldType}_phone`, phone);
+            }
             
             // Close dropdown
             closeContactDropdown();
@@ -2333,9 +2946,15 @@
             `;
             
             // Mark as dirty with contact_id
-            markDirty(eventId, 'technical_contact_id', contactId);
-            markDirty(eventId, 'technical_name', name);
-            markDirty(eventId, 'technical_phone', phone);
+            if (activeDrawerEvent && activeDrawerEvent.eventId === eventId) {
+                trackDrawerChange('technical_contact_id', contactId);
+                trackDrawerChange('technical_name', name);
+                trackDrawerChange('technical_phone', phone);
+            } else {
+                markDirty(eventId, 'technical_contact_id', contactId);
+                markDirty(eventId, 'technical_name', name);
+                markDirty(eventId, 'technical_phone', phone);
+            }
 
             document.querySelector('.suggestions-popover')?.remove();
             showToast(`Suggestion applied: ${name}. Remember to save!`, 'success');
@@ -2856,7 +3475,12 @@
         function sortTable(th, field) {
             const table = th.closest('table');
             const tbody = table.querySelector('tbody');
-            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const rows = Array.from(tbody.querySelectorAll('tr.event-row'));
+            const detailsMap = new Map();
+            rows.forEach(row => {
+                const details = row.nextElementSibling && row.nextElementSibling.classList.contains('row-details') ? row.nextElementSibling : null;
+                detailsMap.set(row.dataset.eventId, details);
+            });
 
             // Determine sort direction (toggle between asc/desc)
             let direction = 'asc';
@@ -2871,13 +3495,33 @@
 
             // Sort rows
             rows.sort((a, b) => {
-                let aVal = a.querySelector(`input[onchange*="${field}"]`)?.value || '';
-                let bVal = b.querySelector(`input[onchange*="${field}"]`)?.value || '';
+                let aVal = '';
+                let bVal = '';
 
-                // Handle date/time fields - convert to timestamps for proper sorting
-                if (field === 'event_date' || field === 'show_time' || field === 'load_in_time') {
+                if (field === 'event_date') {
+                    aVal = a.dataset.eventDate || '';
+                    bVal = b.dataset.eventDate || '';
                     aVal = aVal ? new Date(aVal).getTime() : 0;
                     bVal = bVal ? new Date(bVal).getTime() : 0;
+                } else if (field === 'show_time') {
+                    const parseTime = (val) => {
+                        if (!val) return 0;
+                        const [h, m] = val.split(':').map(Number);
+                        return h * 60 + (m || 0);
+                    };
+                    aVal = parseTime(a.dataset.showTime);
+                    bVal = parseTime(b.dataset.showTime);
+                } else if (field === 'load_in_time') {
+                    const parseTime = (val) => {
+                        if (!val) return 0;
+                        const [h, m] = val.split(':').map(Number);
+                        return h * 60 + (m || 0);
+                    };
+                    aVal = parseTime(a.dataset.loadInTime);
+                    bVal = parseTime(b.dataset.loadInTime);
+                } else {
+                    aVal = (a.dataset[field] || '').toLowerCase();
+                    bVal = (b.dataset[field] || '').toLowerCase();
                 }
 
                 if (direction === 'asc') {
@@ -2888,7 +3532,13 @@
             });
 
             // Re-append sorted rows to DOM
-            rows.forEach(row => tbody.appendChild(row));
+            rows.forEach(row => {
+                tbody.appendChild(row);
+                const detailsRow = detailsMap.get(row.dataset.eventId);
+                if (detailsRow) {
+                    tbody.appendChild(detailsRow);
+                }
+            });
 
             // Update sort indicator on clicked column
             th.classList.add(direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
