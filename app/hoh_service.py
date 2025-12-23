@@ -1290,10 +1290,6 @@ class HOHService:
         conversation = None
         event = None
 
-        if interactive_value and not event_id:
-            logger.warning("Interactive payload missing event id", extra={"payload": payload})
-            return
-
         if event_id:
             event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
             if event:
@@ -1320,6 +1316,13 @@ class HOHService:
                     event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
 
         if not conversation or not event_id or not event:
+            # Special case: if we have an interactive value but couldn't resolve context,
+            # this might be a button click on an old message - log and exit
+            if interactive_value:
+                logger.warning(
+                    "Interactive payload missing event id or conversation context",
+                    extra={"payload": payload, "has_interactive": bool(interactive_value)}
+                )
             return
 
         conversation_id = conversation.get("conversation_id")
@@ -1673,15 +1676,25 @@ class HOHService:
                         whatsapp_msg_sid=whatsapp_sid,
                         raw_payload={"resend_reason": "guard_validation"},
                     )
-            elif last_prompt_key == "init" or not last_prompt_key:
-                # Fallback to init
+            elif last_prompt_key == "init":
+                # After INIT, don't resend INIT - user should use the buttons in the original INIT message
+                # The warning message has already been sent by the caller
+                logger.info(
+                    "STATE_GUARD: Not resending INIT, user should use buttons from original message",
+                    extra={"event_id": event_id, "contact_id": contact_id}
+                )
+            elif not last_prompt_key:
+                # No prompt key set - fallback to init (shouldn't happen normally)
+                logger.warning(
+                    "STATE_GUARD: No last_prompt_key set, sending init as fallback",
+                    extra={"event_id": event_id, "contact_id": contact_id}
+                )
                 await self.send_init_for_event(event_id=event_id, org_id=org_id, contact_id=contact_id)
             else:
                 logger.warning(
-                    "STATE_GUARD: Unknown prompt key, sending init",
+                    "STATE_GUARD: Unknown prompt key",
                     extra={"last_prompt_key": last_prompt_key}
                 )
-                await self.send_init_for_event(event_id=event_id, org_id=org_id, contact_id=contact_id)
         except Exception as e:
             logger.error(
                 "STATE_GUARD: Failed to resend prompt",
