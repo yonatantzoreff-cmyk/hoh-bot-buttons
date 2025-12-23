@@ -1961,6 +1961,14 @@
                                     style="padding: 0.3rem 0.6rem; font-size: 0.85rem; white-space: nowrap;">
                                 💡
                             </button>
+                            ${event.technical_contact_id ? `
+                            <button class="btn btn-sm btn-outline-info" 
+                                    onclick="sendTechReminder(${event.event_id})" 
+                                    title="שלח תזכורת טכנית עם פרטי עובד פותח"
+                                    style="padding: 0.3rem 0.6rem; font-size: 0.75rem; white-space: nowrap;">
+                                שלח תזכורת
+                            </button>
+                            ` : ''}
                         </div>
                     </td>
                     <td>
@@ -2786,6 +2794,27 @@
                 console.error('Error deleting event:', error);
                 showToast('Failed to delete event', 'error');
             }
+        }
+
+        // Send technical reminder with opening employee details
+        async function sendTechReminder(eventId) {
+            showConfirmModal(
+                'שלח תזכורת טכנית',
+                'האם לשלוח תזכורת עם שעות הקמה ופרטי העובד הפותח לטכנאי של אירוע זה?',
+                async () => {
+                    try {
+                        // Create a form and submit it (to handle redirect properly)
+                        const form = document.createElement('form');
+                        form.method = 'POST';
+                        form.action = `/ui/send_tech_reminder_employee/${eventId}`;
+                        document.body.appendChild(form);
+                        form.submit();
+                    } catch (error) {
+                        console.error('Error sending tech reminder:', error);
+                        showToast('Failed to send tech reminder', 'error');
+                    }
+                }
+            );
         }
 
         // Send WhatsApp (PHASE 3 - Task 5B)
