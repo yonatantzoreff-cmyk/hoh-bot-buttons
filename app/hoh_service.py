@@ -1248,6 +1248,10 @@ class HOHService:
                 data.get("ListResponse.SelectionTitle"),
                 data.get("ButtonText"),
                 data.get("ListItemTitle"),
+                # Additional fields for list responses
+                data.get("ListId"),
+                data.get("Title"),
+                data.get("Description"),
             ]
 
             for value in candidates:
@@ -1332,8 +1336,9 @@ class HOHService:
         # ============================================================
         # Determine message type
         # An interactive message is one that has interactive_value (button/list selection)
-        # We check if it's a recognized action_id OR if it's any interactive value
-        is_interactive = bool(interactive_value)  # Any button/list selection counts as interactive
+        # OR if Twilio indicates it's an interactive message type
+        message_type = payload.get("MessageType", "").lower()
+        is_interactive = bool(interactive_value) or message_type in ("button", "list", "interactive")
         is_contact_share = self._is_contact_share(payload)
         is_text_only = not is_interactive and not is_contact_share and bool(message_body)
         
@@ -1351,6 +1356,9 @@ class HOHService:
                 "is_contact_share": is_contact_share,
                 "is_text_only": is_text_only,
                 "last_prompt_key": last_prompt_key,
+                "interactive_value": interactive_value[:50] if interactive_value else None,
+                "message_body": message_body[:50] if message_body else None,
+                "message_type": payload.get("MessageType"),
             }
         )
         
@@ -1374,7 +1382,8 @@ class HOHService:
                 }
             )
             
-            # Send error message
+            # Send error message only - do NOT resend template
+            # User should use buttons from the message they already have
             contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
             if contact:
                 try:
@@ -1385,14 +1394,7 @@ class HOHService:
                 except Exception as e:
                     logger.error("STATE_GUARD: Failed to send error message", exc_info=e)
             
-            # Resend last prompt
-            await self._resend_last_prompt(
-                org_id=org_id,
-                event_id=event_id,
-                contact_id=contact_id,
-                conversation_id=conversation_id,
-                last_prompt_key=last_prompt_key,
-            )
+            # Don't resend template - user should use existing message
             return
         
         # GUARD RULE: Contact required
