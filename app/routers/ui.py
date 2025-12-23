@@ -1276,6 +1276,134 @@ async def send_shift_reminder(
     return RedirectResponse(url="/ui/events", status_code=303)
 
 
+@router.post("/ui/send_tech_reminder_employee/{event_id}")
+async def send_tech_reminder_employee(
+    event_id: int,
+    hoh: HOHService = Depends(get_hoh_service)
+):
+    """
+    Send a technical reminder (with opening employee) to the technical contact for this event.
+    This is a manual send triggered by the UI button.
+    """
+    try:
+        from app.credentials import CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT
+        
+        # Validate env var exists
+        if not CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT:
+            raise ValueError(
+                "Missing CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT environment variable. "
+                "Please configure it in your environment."
+            )
+        
+        # Build the payload using backend logic
+        payload = hoh.build_tech_reminder_employee_payload(org_id=1, event_id=event_id)
+        
+        to_phone = payload["to_phone"]
+        variables = payload["variables"]
+        opening_employee_metadata = payload["opening_employee_metadata"]
+        
+        # Get event and technical contact for logging
+        event = hoh.get_event_with_contacts(org_id=1, event_id=event_id)
+        technical_contact_id = event.get("technical_contact_id")
+        
+        # Ensure conversation exists
+        conversation_id = hoh._ensure_conversation(
+            org_id=1,
+            event_id=event_id,
+            contact_id=technical_contact_id
+        )
+        
+        logger.info(
+            f"Sending tech reminder for event {event_id} to {to_phone}, "
+            f"opening employee: {opening_employee_metadata.get('employee_name')}"
+        )
+        
+        # Send via Twilio
+        twilio_resp = twilio_client.send_content_message(
+            to=to_phone,
+            content_sid=CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT,
+            content_variables=variables,
+        )
+        
+        whatsapp_sid = getattr(twilio_resp, "sid", None)
+        
+        # Log the message to the database
+        raw_payload = {
+            "content_sid": CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT,
+            "variables": variables,
+            "twilio_message_sid": whatsapp_sid,
+            "event_id": event_id,
+            "opening_employee": opening_employee_metadata,
+        }
+        
+        hoh.messages.log_message(
+            org_id=1,
+            conversation_id=conversation_id,
+            event_id=event_id,
+            contact_id=technical_contact_id,
+            direction="outgoing",
+            body=f"Tech reminder sent for event {event.get('name', '')} with opening employee {opening_employee_metadata.get('employee_name')}",
+            whatsapp_msg_sid=whatsapp_sid,
+            raw_payload=raw_payload,
+        )
+        
+        logger.info(f"Tech reminder sent successfully for event {event_id}, SID: {whatsapp_sid}")
+        
+        # Return success with a success message parameter
+        return RedirectResponse(url="/ui/events?reminder_sent=true", status_code=303)
+        
+    except ValueError as ve:
+        # User-friendly error for missing data
+        logger.warning(f"Cannot send tech reminder for event {event_id}: {ve}")
+        error_html = f"""
+        <!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>Error - Cannot Send Reminder</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+          </head>
+          <body class="bg-light">
+            <div class="container py-5">
+              <div class="alert alert-warning" role="alert">
+                <h4 class="alert-heading">לא ניתן לשלוח תזכורת</h4>
+                <p>{escape(str(ve))}</p>
+                <hr>
+                <a href="/ui/events" class="btn btn-primary">חזרה לאירועים</a>
+              </div>
+            </div>
+          </body>
+        </html>
+        """
+        return HTMLResponse(content=error_html, status_code=400)
+        
+    except Exception as exc:
+        # Unexpected error
+        logger.exception(f"Failed to send tech reminder for event {event_id}: {exc}")
+        error_html = f"""
+        <!doctype html>
+        <html lang="en">
+          <head>
+            <meta charset="utf-8">
+            <title>Error - System Error</title>
+            <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+          </head>
+          <body class="bg-light">
+            <div class="container py-5">
+              <div class="alert alert-danger" role="alert">
+                <h4 class="alert-heading">שגיאת מערכת</h4>
+                <p>אירעה שגיאה בלתי צפויה בעת שליחת התזכורת.</p>
+                <p><strong>פרטים:</strong> {escape(str(exc))}</p>
+                <hr>
+                <a href="/ui/events" class="btn btn-primary">חזרה לאירועים</a>
+              </div>
+            </div>
+          </body>
+        </html>
+        """
+        return HTMLResponse(content=error_html, status_code=500)
+
+
 @router.get("/ui/calendar-import", response_class=HTMLResponse)
 async def calendar_import_page() -> HTMLResponse:
     """Calendar import page with staging events management."""

@@ -412,6 +412,121 @@ class HOHService:
 
         return variables
 
+    def build_tech_reminder_employee_payload(
+        self, org_id: int, event_id: int
+    ) -> dict:
+        """
+        Build the payload for tech reminder employee template.
+        
+        Returns a dict with:
+          - to_phone: technical contact phone as "whatsapp:+972..."
+          - variables: dict {"1": ..., "2": ..., ..., "7": ...}
+          - opening_employee_metadata: dict with employee info
+        
+        Raises ValueError if:
+          - Event not found
+          - No technical contact
+          - No technical contact phone
+          - No shifts assigned OR cannot determine earliest employee
+        """
+        
+        # 1. Fetch event with contacts
+        event = self.get_event_with_contacts(org_id=org_id, event_id=event_id)
+        if not event:
+            raise ValueError(f"Event {event_id} not found")
+        
+        # 2. Validate technical contact
+        technical_contact_id = event.get("technical_contact_id")
+        if not technical_contact_id:
+            raise ValueError("Event has no technical contact assigned")
+        
+        technical_phone = event.get("technical_phone")
+        technical_name = event.get("technical_name") or ""
+        
+        if not technical_phone or not technical_phone.strip():
+            raise ValueError("Technical contact has no phone number")
+        
+        # Normalize technical phone to E.164
+        normalized_tech_phone = normalize_phone_to_e164_il(technical_phone)
+        if not normalized_tech_phone:
+            raise ValueError("Technical contact phone is invalid")
+        
+        # Technical phone for `to` must be whatsapp:+972...
+        to_phone = f"whatsapp:{normalized_tech_phone}"
+        
+        # 3. Get event details
+        event_name = event.get("name") or ""
+        event_date = event.get("event_date")
+        event_date_display = event_date.strftime("%d/%m/%Y") if event_date else ""
+        
+        load_in_time_dt = event.get("load_in_time")
+        load_in_time_display = self._format_time_israel(load_in_time_dt) if load_in_time_dt else "—"
+        
+        show_time_dt = event.get("show_time")
+        show_time_display = self._format_time_israel(show_time_dt) if show_time_dt else "—"
+        
+        # 4. Find opening employee (earliest call_time)
+        shifts = self.employee_shifts.list_shifts_for_event(
+            org_id=org_id,
+            event_id=event_id,
+        )
+        
+        if not shifts:
+            raise ValueError("No employees assigned to this event. Cannot send reminder.")
+        
+        # Find shift with earliest call_time
+        opening_shift = None
+        earliest_time = None
+        
+        for shift in shifts:
+            call_time = shift.get("call_time")
+            if call_time:
+                if earliest_time is None or call_time < earliest_time:
+                    earliest_time = call_time
+                    opening_shift = shift
+        
+        if not opening_shift:
+            raise ValueError("Cannot determine opening employee (no valid call_time in shifts)")
+        
+        employee_name = opening_shift.get("employee_name") or ""
+        employee_phone = opening_shift.get("employee_phone") or ""
+        
+        # 5. Extract first names
+        tech_first_name = technical_name.split()[0] if technical_name.strip() else "טכנאי"
+        employee_first_name = employee_name.split()[0] if employee_name.strip() else "עובד"
+        
+        # 6. Format employee phone to E.164
+        if employee_phone:
+            normalized_emp_phone = normalize_phone_to_e164_il(employee_phone)
+        else:
+            normalized_emp_phone = "—"
+        
+        # 7. Build variables dict (must be "1", "2", ... "7")
+        variables = {
+            "1": tech_first_name,                # Technical contact first name
+            "2": event_name,                      # Event name
+            "3": event_date_display,              # Event date (DD/MM/YYYY)
+            "4": load_in_time_display,            # Load-in time (HH:MM)
+            "5": show_time_display,               # Show time (HH:MM)
+            "6": employee_first_name,             # Opening employee first name
+            "7": normalized_emp_phone,            # Opening employee phone (E.164)
+        }
+        
+        # 8. Build metadata for logging/debugging
+        opening_employee_metadata = {
+            "employee_id": opening_shift.get("employee_id"),
+            "employee_name": employee_name,
+            "employee_phone": normalized_emp_phone,
+            "call_time": earliest_time.isoformat() if earliest_time else None,
+            "shift_id": opening_shift.get("shift_id"),
+        }
+        
+        return {
+            "to_phone": to_phone,
+            "variables": variables,
+            "opening_employee_metadata": opening_employee_metadata,
+        }
+
     # region Event + contact bootstrap -------------------------------------------------
     def create_event_with_producer_conversation(
         self,
