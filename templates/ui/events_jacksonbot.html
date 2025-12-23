@@ -1623,6 +1623,15 @@
             connectSSE();
             initNotifications();
             checkDeepLink();
+            
+            // Check for success message after sending tech reminder
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('reminder_sent') === 'true') {
+                showToast('התזכורת נשלחה בהצלחה!', 'success');
+                // Clean URL without reloading
+                const cleanUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, cleanUrl);
+            }
         });
 
         // Theme Management
@@ -1964,9 +1973,9 @@
                             ${event.technical_contact_id ? `
                             <button class="btn btn-sm btn-outline-info" 
                                     onclick="sendTechReminder(${event.event_id})" 
-                                    title="שלח תזכורת טכנית עם פרטי עובד פותח"
-                                    style="padding: 0.3rem 0.6rem; font-size: 0.75rem; white-space: nowrap;">
-                                שלח תזכורת
+                                    title="${event.tech_reminder_sent_at_display ? 'נשלח לאחרונה: ' + escapeHtml(event.tech_reminder_sent_at_display) : 'שלח תזכורת טכנית עם פרטי עובד פותח'}"
+                                    style="padding: 0.3rem 0.6rem; font-size: 0.85rem; white-space: nowrap;">
+                                🔔
                             </button>
                             ` : ''}
                         </div>
@@ -2798,23 +2807,17 @@
 
         // Send technical reminder with opening employee details
         async function sendTechReminder(eventId) {
-            showConfirmModal(
-                'שלח תזכורת טכנית',
-                'האם לשלוח תזכורת עם שעות הקמה ופרטי העובד הפותח לטכנאי של אירוע זה?',
-                async () => {
-                    try {
-                        // Create a form and submit it (to handle redirect properly)
-                        const form = document.createElement('form');
-                        form.method = 'POST';
-                        form.action = `/ui/send_tech_reminder_employee/${eventId}`;
-                        document.body.appendChild(form);
-                        form.submit();
-                    } catch (error) {
-                        console.error('Error sending tech reminder:', error);
-                        showToast('Failed to send tech reminder', 'error');
-                    }
-                }
-            );
+            try {
+                // Send directly without confirmation dialog
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = `/ui/send_tech_reminder_employee/${eventId}`;
+                document.body.appendChild(form);
+                form.submit();
+            } catch (error) {
+                console.error('Error sending tech reminder:', error);
+                showToast('Failed to send tech reminder', 'error');
+            }
         }
 
         // Send WhatsApp (PHASE 3 - Task 5B)

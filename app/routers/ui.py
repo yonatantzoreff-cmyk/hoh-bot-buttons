@@ -1302,6 +1302,17 @@ async def send_tech_reminder_employee(
         variables = payload["variables"]
         opening_employee_metadata = payload["opening_employee_metadata"]
         
+        # Get event and technical contact for logging
+        event = hoh.get_event_with_contacts(org_id=1, event_id=event_id)
+        technical_contact_id = event.get("technical_contact_id")
+        
+        # Ensure conversation exists
+        conversation_id = hoh._ensure_conversation(
+            org_id=1,
+            event_id=event_id,
+            contact_id=technical_contact_id
+        )
+        
         logger.info(
             f"Sending tech reminder for event {event_id} to {to_phone}, "
             f"opening employee: {opening_employee_metadata.get('employee_name')}"
@@ -1315,10 +1326,31 @@ async def send_tech_reminder_employee(
         )
         
         whatsapp_sid = getattr(twilio_resp, "sid", None)
+        
+        # Log the message to the database
+        raw_payload = {
+            "content_sid": CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT,
+            "variables": variables,
+            "twilio_message_sid": whatsapp_sid,
+            "event_id": event_id,
+            "opening_employee": opening_employee_metadata,
+        }
+        
+        hoh.messages.log_message(
+            org_id=1,
+            conversation_id=conversation_id,
+            event_id=event_id,
+            contact_id=technical_contact_id,
+            direction="outgoing",
+            body=f"Tech reminder sent for event {event.get('name', '')} with opening employee {opening_employee_metadata.get('employee_name')}",
+            whatsapp_msg_sid=whatsapp_sid,
+            raw_payload=raw_payload,
+        )
+        
         logger.info(f"Tech reminder sent successfully for event {event_id}, SID: {whatsapp_sid}")
         
-        # Return success (redirect back to events page)
-        return RedirectResponse(url="/ui/events", status_code=303)
+        # Return success with a success message parameter
+        return RedirectResponse(url="/ui/events?reminder_sent=true", status_code=303)
         
     except ValueError as ve:
         # User-friendly error for missing data

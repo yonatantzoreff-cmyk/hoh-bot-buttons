@@ -113,7 +113,26 @@ async def list_events(
                 # PHASE 2: Add next_followup_at for follow-up tooltip
                 "next_followup_at": event.get("next_followup_at").isoformat() if event.get("next_followup_at") else None,
                 "next_followup_at_display": format_datetime_for_display(event.get("next_followup_at")) if event.get("next_followup_at") else "",
+                # Tech reminder last sent time
+                "tech_reminder_sent_at": None,
+                "tech_reminder_sent_at_display": "",
             })
+        
+        # Fetch tech reminder last sent times for all events
+        from app.credentials import CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT
+        if CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT:
+            for hall_name, hall_events in halls.items():
+                for event_data in hall_events:
+                    event_id = event_data.get("event_id")
+                    if event_id:
+                        tech_reminder_sent_at = hoh.messages.get_last_sent_at_for_content(
+                            org_id=org_id,
+                            event_id=event_id,
+                            content_sid=CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT
+                        )
+                        if tech_reminder_sent_at:
+                            event_data["tech_reminder_sent_at"] = tech_reminder_sent_at.isoformat()
+                            event_data["tech_reminder_sent_at_display"] = format_datetime_for_display(tech_reminder_sent_at)
         
         return {
             "month": month,
