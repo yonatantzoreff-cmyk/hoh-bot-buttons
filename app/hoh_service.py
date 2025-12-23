@@ -1331,7 +1331,9 @@ class HOHService:
         # STATE MACHINE GUARD - EARLY VALIDATION
         # ============================================================
         # Determine message type
-        is_interactive = bool(interactive_value and _looks_like_action_id(interactive_value))
+        # An interactive message is one that has interactive_value (button/list selection)
+        # We check if it's a recognized action_id OR if it's any interactive value
+        is_interactive = bool(interactive_value)  # Any button/list selection counts as interactive
         is_contact_share = self._is_contact_share(payload)
         is_text_only = not is_interactive and not is_contact_share and bool(message_body)
         
@@ -1416,7 +1418,7 @@ class HOHService:
                 )
                 
                 if len(phone_numbers) == 0:
-                    # No phone found - block and resend
+                    # No phone found - send error message (no resend needed, message is clear)
                     logger.warning(
                         "STATE_GUARD: No phone in text, contact required",
                         extra={"event_id": event_id, "body": message_body[:50]}
@@ -1427,22 +1429,16 @@ class HOHService:
                         try:
                             twilio_client.send_text(
                                 to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
-                                body="יש לצרף איש קשר",
+                                body="יש לצרף איש קשר או לכתוב שם מלא וטלפון בהודעה אחת",
                             )
                         except Exception as e:
                             logger.error("STATE_GUARD: Failed to send error message", exc_info=e)
                     
-                    await self._resend_last_prompt(
-                        org_id=org_id,
-                        event_id=event_id,
-                        contact_id=contact_id,
-                        conversation_id=conversation_id,
-                        last_prompt_key="contact_prompt",
-                    )
+                    # Don't resend - the message already contains full instructions
                     return
                 
                 elif len(phone_numbers) >= 2:
-                    # Multiple phones found - block and resend
+                    # Multiple phones found - send error message (no resend needed)
                     logger.warning(
                         "STATE_GUARD: Multiple phones in text, need exactly one",
                         extra={"event_id": event_id, "phone_count": len(phone_numbers)}
@@ -1453,18 +1449,12 @@ class HOHService:
                         try:
                             twilio_client.send_text(
                                 to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
-                                body="נא לשלוח מספר אחד או לצרף איש קשר",
+                                body="יש לצרף איש קשר או לכתוב שם מלא וטלפון בהודעה אחת",
                             )
                         except Exception as e:
                             logger.error("STATE_GUARD: Failed to send error message", exc_info=e)
                     
-                    await self._resend_last_prompt(
-                        org_id=org_id,
-                        event_id=event_id,
-                        contact_id=contact_id,
-                        conversation_id=conversation_id,
-                        last_prompt_key="contact_prompt",
-                    )
+                    # Don't resend - the message already contains full instructions
                     return
                 
                 else:
@@ -1657,22 +1647,21 @@ class HOHService:
                 range_id = pending.get("last_range_id") or 1
                 await self.send_halves_for_event_range(org_id, event_id, contact_id, range_id)
             elif last_prompt_key == "contact_prompt":
-                # Resend contact request template
+                # Resend contact request text (not template)
                 contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
                 if contact:
-                    twilio_resp = twilio_client.send_content_message(
+                    twilio_resp = twilio_client.send_text(
                         to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
-                        content_sid=CONTENT_SID_CONTACT,
-                        content_variables={},
+                        body="יש לצרף איש קשר או לכתוב שם מלא וטלפון בהודעה אחת",
                     )
-                    whatsapp_sid = getattr(twilio_resp, "sid", None)
+                    whatsapp_sid = getattr(twilio_resp, "sid", None) if twilio_resp else None
                     self.messages.log_message(
                         org_id=org_id,
                         conversation_id=conversation_id,
                         event_id=event_id,
                         contact_id=contact_id,
                         direction="outgoing",
-                        body="Resent contact request (guard)",
+                        body="Resent contact request text (guard)",
                         whatsapp_msg_sid=whatsapp_sid,
                         raw_payload={"resend_reason": "guard_validation"},
                     )
@@ -2154,12 +2143,12 @@ class HOHService:
             org_id=org_id, event_id=event_id, status="contact_required"
         )
 
-        twilio_resp = twilio_client.send_content_message(
+        # Send simple text message instead of template
+        twilio_resp = twilio_client.send_text(
             to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
-            content_sid=CONTENT_SID_CONTACT,
-            content_variables={},
+            body="יש לצרף איש קשר או לכתוב שם מלא וטלפון בהודעה אחת",
         )
-        whatsapp_sid = getattr(twilio_resp, "sid", None)
+        whatsapp_sid = getattr(twilio_resp, "sid", None) if twilio_resp else None
 
         conversation = self.conversations.get_open_conversation(
             org_id=org_id, event_id=event_id, contact_id=contact_id
@@ -2173,8 +2162,8 @@ class HOHService:
         )
 
         raw_payload = {
-            "content_sid": CONTENT_SID_CONTACT,
-            "variables": {},
+            "type": "contact_request_text",
+            "body": "יש לצרף איש קשר או לכתוב שם מלא וטלפון בהודעה אחת",
             "twilio_message_sid": whatsapp_sid,
         }
 
@@ -2184,7 +2173,7 @@ class HOHService:
             event_id=event_id,
             contact_id=contact_id,
             direction="outgoing",
-            body="Sent NOT CONTACT template",
+            body="Sent contact request text (NOT CONTACT flow)",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
         )
@@ -2195,7 +2184,7 @@ class HOHService:
             conversation_id=conversation_id,
             expected_input="contact_required",
             last_prompt_key="contact_prompt",
-            last_template_sid=CONTENT_SID_CONTACT,
+            last_template_sid=None,  # No template, just text
             last_template_vars={},
         )
 
