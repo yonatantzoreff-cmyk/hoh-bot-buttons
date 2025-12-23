@@ -7,9 +7,24 @@ Covers:
 - PHASE 3: Contacts endpoint includes phone numbers
 """
 
+import os
 import pytest
 from unittest.mock import Mock, patch, MagicMock
 from datetime import datetime, timedelta
+
+# Set up test environment before imports
+os.environ.setdefault("DATABASE_URL", "sqlite+pysqlite:///:memory:")
+os.environ.setdefault("TWILIO_ACCOUNT_SID", "test-sid")
+os.environ.setdefault("TWILIO_AUTH_TOKEN", "test-token")
+os.environ.setdefault("TWILIO_MESSAGING_SERVICE_SID", "MGXXXX")
+os.environ.setdefault("CONTENT_SID_INIT", "HXINIT")
+os.environ.setdefault("CONTENT_SID_RANGES", "HXRANGE")
+os.environ.setdefault("CONTENT_SID_HALVES", "HXHALF")
+os.environ.setdefault("CONTENT_SID_CONFIRM", "HXCONFIRM")
+os.environ.setdefault("CONTENT_SID_NOT_SURE", "HXNOTSURE")
+os.environ.setdefault("CONTENT_SID_CONTACT", "HXCONTACT")
+os.environ.setdefault("CONTENT_SID_SHIFT_REMINDER", "HXSHIFT")
+
 from app.hoh_service import HOHService
 from app.repositories import EmployeeShiftRepository, ContactRepository
 from app.time_utils import now_utc
@@ -167,6 +182,7 @@ async def test_message_routing_prefers_technical():
          patch.object(hoh.events, 'get_event_by_id') as mock_get_event, \
          patch.object(hoh.contacts, 'get_contact_by_id') as mock_get_contact, \
          patch.object(hoh, '_ensure_conversation') as mock_ensure_conv, \
+         patch.object(hoh.conversations, 'update_conversation_state'), \
          patch.object(hoh.messages, 'log_message'), \
          patch('app.hoh_service.twilio_client') as mock_twilio:
         
@@ -214,6 +230,7 @@ async def test_message_routing_fallback_to_producer():
          patch.object(hoh.events, 'get_event_by_id') as mock_get_event, \
          patch.object(hoh.contacts, 'get_contact_by_id') as mock_get_contact, \
          patch.object(hoh, '_ensure_conversation') as mock_ensure_conv, \
+         patch.object(hoh.conversations, 'update_conversation_state'), \
          patch.object(hoh.messages, 'log_message'), \
          patch('app.hoh_service.twilio_client') as mock_twilio:
         
