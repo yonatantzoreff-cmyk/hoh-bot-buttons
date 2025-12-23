@@ -723,6 +723,71 @@ class ConversationRepository:
                     "now": now_utc(),
                 },
             )
+    
+    def update_conversation_state(
+        self,
+        org_id: int,
+        conversation_id: int,
+        *,
+        expected_input: Optional[str] = None,
+        last_prompt_key: Optional[str] = None,
+        last_template_sid: Optional[str] = None,
+        last_template_vars: Optional[dict] = None,
+    ) -> None:
+        """Update conversation state machine fields."""
+        sets = ["updated_at = :now"]
+        params = {
+            "org_id": org_id,
+            "conversation_id": conversation_id,
+            "now": now_utc(),
+        }
+        
+        if expected_input is not None:
+            sets.append("expected_input = :expected_input")
+            params["expected_input"] = expected_input
+        
+        if last_prompt_key is not None:
+            sets.append("last_prompt_key = :last_prompt_key")
+            params["last_prompt_key"] = last_prompt_key
+        
+        if last_template_sid is not None:
+            sets.append("last_template_sid = :last_template_sid")
+            params["last_template_sid"] = last_template_sid
+        
+        if last_template_vars is not None:
+            sets.append("last_template_vars = :last_template_vars")
+            params["last_template_vars"] = json.dumps(last_template_vars, ensure_ascii=False)
+        
+        if len(sets) == 1:  # Only updated_at
+            return
+        
+        query = text(
+            f"""
+            UPDATE conversations
+            SET {', '.join(sets)}
+            WHERE org_id = :org_id AND conversation_id = :conversation_id
+            """
+        )
+        
+        with get_session() as session:
+            session.execute(query, params)
+    
+    def get_conversation_by_id(self, org_id: int, conversation_id: int):
+        """Get conversation by ID with all state fields."""
+        query = text(
+            """
+            SELECT *
+            FROM conversations
+            WHERE org_id = :org_id AND conversation_id = :conversation_id
+            """
+        )
+        
+        with get_session() as session:
+            result = session.execute(
+                query,
+                {"org_id": org_id, "conversation_id": conversation_id}
+            )
+            return result.mappings().first()
 
 
 class MessageRepository:

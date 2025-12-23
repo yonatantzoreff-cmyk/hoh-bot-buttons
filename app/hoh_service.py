@@ -1044,6 +1044,16 @@ class HOHService:
             raw_payload=raw_payload,
         )
         
+        # Update conversation state after successful send
+        self.conversations.update_conversation_state(
+            org_id=org_id,
+            conversation_id=conversation_id,
+            expected_input="interactive",
+            last_prompt_key="init",
+            last_template_sid=CONTENT_SID_INIT,
+            last_template_vars=init_vars,
+        )
+        
         logger.info(
             "MESSAGE_ROUTING: INIT sent successfully",
             extra={
@@ -1094,6 +1104,16 @@ class HOHService:
             body="Sent ranges list",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
+        )
+        
+        # Update conversation state after successful send
+        self.conversations.update_conversation_state(
+            org_id=org_id,
+            conversation_id=conversation_id,
+            expected_input="interactive",
+            last_prompt_key="ranges",
+            last_template_sid=CONTENT_SID_RANGES,
+            last_template_vars=variables,
         )
 
     async def send_halves_for_event_range(
@@ -1158,6 +1178,16 @@ class HOHService:
             body=f"Sent halves for range {range_id}",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
+        )
+        
+        # Update conversation state after successful send
+        self.conversations.update_conversation_state(
+            org_id=org_id,
+            conversation_id=conversation_id,
+            expected_input="interactive",
+            last_prompt_key="halves",
+            last_template_sid=CONTENT_SID_HALVES,
+            last_template_vars=variables,
         )
 
     async def send_confirm_for_slot(
@@ -1224,6 +1254,17 @@ class HOHService:
             body=f"Sent confirm for slot {slot_label}",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
+        )
+        
+        # Update conversation state after successful send
+        # Confirmation requires button click (confirm or go back)
+        self.conversations.update_conversation_state(
+            org_id=org_id,
+            conversation_id=conversation_id,
+            expected_input="interactive",
+            last_prompt_key="confirm",
+            last_template_sid=CONTENT_SID_CONFIRM,
+            last_template_vars=variables,
         )
 
     async def run_due_followups(self, org_id: int = 1) -> int:
@@ -1322,6 +1363,10 @@ class HOHService:
                 data.get("ListResponse.SelectionTitle"),
                 data.get("ButtonText"),
                 data.get("ListItemTitle"),
+                # Additional fields for list responses
+                data.get("ListId"),
+                data.get("Title"),
+                data.get("Description"),
             ]
 
             for value in candidates:
@@ -1364,10 +1409,6 @@ class HOHService:
         conversation = None
         event = None
 
-        if interactive_value and not event_id:
-            logger.warning("Interactive payload missing event id", extra={"payload": payload})
-            return
-
         if event_id:
             event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
             if event:
@@ -1394,9 +1435,164 @@ class HOHService:
                     event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
 
         if not conversation or not event_id or not event:
+            # Special case: if we have an interactive value but couldn't resolve context,
+            # this might be a button click on an old message - log and exit
+            if interactive_value:
+                logger.warning(
+                    "Interactive payload missing event id or conversation context",
+                    extra={"payload": payload, "has_interactive": bool(interactive_value)}
+                )
             return
 
         conversation_id = conversation.get("conversation_id")
+        
+        # ============================================================
+        # STATE MACHINE GUARD - EARLY VALIDATION
+        # ============================================================
+        # Determine message type
+        # An interactive message is one that has interactive_value (button/list selection)
+        # OR if Twilio indicates it's an interactive message type
+        message_type = payload.get("MessageType", "").lower()
+        is_interactive = bool(interactive_value) or message_type in ("button", "list", "interactive")
+        is_contact_share = self._is_contact_share(payload)
+        is_text_only = not is_interactive and not is_contact_share and bool(message_body)
+        
+        # Get current conversation state
+        expected_input = conversation.get("expected_input", "interactive")
+        last_prompt_key = conversation.get("last_prompt_key")
+        
+        logger.info(
+            "STATE_GUARD: Message analysis",
+            extra={
+                "event_id": event_id,
+                "contact_id": contact_id,
+                "expected_input": expected_input,
+                "is_interactive": is_interactive,
+                "is_contact_share": is_contact_share,
+                "is_text_only": is_text_only,
+                "last_prompt_key": last_prompt_key,
+                "interactive_value": interactive_value[:50] if interactive_value else None,
+                "message_body": message_body[:50] if message_body else None,
+                "message_type": payload.get("MessageType"),
+            }
+        )
+        
+        # GUARD RULE: Paused state - ignore all messages
+        if expected_input == "paused":
+            logger.info(
+                "STATE_GUARD: Conversation paused, ignoring message",
+                extra={"event_id": event_id, "contact_id": contact_id}
+            )
+            return
+        
+        # GUARD RULE: Interactive expected + text only received
+        if expected_input == "interactive" and is_text_only:
+            logger.warning(
+                "STATE_GUARD: Blocked text input, interactive expected",
+                extra={
+                    "event_id": event_id,
+                    "contact_id": contact_id,
+                    "last_prompt_key": last_prompt_key,
+                    "body": message_body[:50],
+                }
+            )
+            
+            # Send error message only - do NOT resend template
+            # User should use buttons from the message they already have
+            contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+            if contact:
+                try:
+                    # Different message for confirmation stage
+                    if last_prompt_key == "confirm":
+                        error_message = "נא לאשר או לחזור אחורה"
+                    else:
+                        error_message = "נא להשתמש בכפתורים"
+                    
+                    twilio_client.send_text(
+                        to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
+                        body=error_message,
+                    )
+                except Exception as e:
+                    logger.error("STATE_GUARD: Failed to send error message", exc_info=e)
+            
+            # Don't resend template - user should use existing message
+            return
+        
+        # GUARD RULE: Contact required
+        if expected_input == "contact_required":
+            if is_contact_share:
+                # Valid contact share - continue normal flow
+                logger.info(
+                    "STATE_GUARD: Valid contact share received",
+                    extra={"event_id": event_id, "contact_id": contact_id}
+                )
+            elif is_text_only:
+                # Text received - try to extract phone number
+                phone_numbers = self._extract_phone_numbers_from_text(message_body)
+                
+                logger.info(
+                    "STATE_GUARD: Extracted phones from text",
+                    extra={
+                        "event_id": event_id,
+                        "contact_id": contact_id,
+                        "phone_count": len(phone_numbers),
+                        "body": message_body[:50],
+                    }
+                )
+                
+                if len(phone_numbers) == 0:
+                    # No phone found - send error message (no resend needed, message is clear)
+                    logger.warning(
+                        "STATE_GUARD: No phone in text, contact required",
+                        extra={"event_id": event_id, "body": message_body[:50]}
+                    )
+                    
+                    contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+                    if contact:
+                        try:
+                            twilio_client.send_text(
+                                to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
+                                body="יש לצרף איש קשר או לכתוב שם מלא וטלפון בהודעה אחת",
+                            )
+                        except Exception as e:
+                            logger.error("STATE_GUARD: Failed to send error message", exc_info=e)
+                    
+                    # Don't resend - the message already contains full instructions
+                    return
+                
+                elif len(phone_numbers) >= 2:
+                    # Multiple phones found - send error message (no resend needed)
+                    logger.warning(
+                        "STATE_GUARD: Multiple phones in text, need exactly one",
+                        extra={"event_id": event_id, "phone_count": len(phone_numbers)}
+                    )
+                    
+                    contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+                    if contact:
+                        try:
+                            twilio_client.send_text(
+                                to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
+                                body="יש לצרף איש קשר או לכתוב שם מלא וטלפון בהודעה אחת",
+                            )
+                        except Exception as e:
+                            logger.error("STATE_GUARD: Failed to send error message", exc_info=e)
+                    
+                    # Don't resend - the message already contains full instructions
+                    return
+                
+                else:
+                    # Exactly 1 phone - treat as contact share
+                    logger.info(
+                        "STATE_GUARD: Single phone in text, treating as contact share",
+                        extra={"event_id": event_id, "phone": phone_numbers[0]}
+                    )
+                    # Create synthetic payload for contact handling
+                    payload["Contacts[0][PhoneNumber]"] = phone_numbers[0]
+                    payload["Contacts[0][Name]"] = message_body.split()[0] if message_body else phone_numbers[0]
+        
+        # ============================================================
+        # END STATE MACHINE GUARD
+        # ============================================================
 
         received_at = now_utc()
         body_text = message_body or interactive_value
@@ -1514,6 +1710,111 @@ class HOHService:
             return
 
     @staticmethod
+    def _is_contact_share(payload: dict) -> bool:
+        """Check if payload contains a contact share (vCard or Twilio Contacts)."""
+        if not payload:
+            return False
+        
+        # Check for Twilio Contacts array
+        if payload.get("Contacts[0][PhoneNumber]") or payload.get("Contacts[0][WaId]"):
+            return True
+        
+        # Check for vCard media
+        try:
+            num_media = int(payload.get("NumMedia") or payload.get("numMedia") or 0)
+        except (TypeError, ValueError):
+            num_media = 0
+        
+        if num_media > 0:
+            for idx in range(num_media):
+                content_type = (
+                    payload.get(f"MediaContentType{idx}")
+                    or payload.get(f"mediaContentType{idx}")
+                    or ""
+                )
+                filename = (
+                    payload.get(f"MediaFilename{idx}")
+                    or payload.get(f"mediaFilename{idx}")
+                    or ""
+                )
+                if "vcard" in content_type.lower() or filename.lower().endswith(".vcf"):
+                    return True
+        
+        return False
+    
+    async def _resend_last_prompt(
+        self,
+        org_id: int,
+        event_id: int,
+        contact_id: int,
+        conversation_id: int,
+        last_prompt_key: Optional[str],
+    ) -> None:
+        """Resend the last prompt to user based on last_prompt_key."""
+        logger.info(
+            "STATE_GUARD: Resending last prompt",
+            extra={
+                "event_id": event_id,
+                "contact_id": contact_id,
+                "last_prompt_key": last_prompt_key,
+            }
+        )
+        
+        try:
+            if last_prompt_key == "ranges":
+                await self.send_ranges_for_event(org_id, event_id, contact_id)
+            elif last_prompt_key == "halves":
+                # Get range_id from pending_data_fields
+                conversation = self.conversations.get_conversation_by_id(org_id, conversation_id)
+                pending = (conversation or {}).get("pending_data_fields") or {}
+                range_id = pending.get("last_range_id") or 1
+                await self.send_halves_for_event_range(org_id, event_id, contact_id, range_id)
+            elif last_prompt_key == "contact_prompt":
+                # Resend contact request text (not template)
+                contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+                if contact:
+                    twilio_resp = twilio_client.send_text(
+                        to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
+                        body="יש לצרף איש קשר או לכתוב שם מלא וטלפון בהודעה אחת",
+                    )
+                    whatsapp_sid = getattr(twilio_resp, "sid", None) if twilio_resp else None
+                    self.messages.log_message(
+                        org_id=org_id,
+                        conversation_id=conversation_id,
+                        event_id=event_id,
+                        contact_id=contact_id,
+                        direction="outgoing",
+                        body="Resent contact request text (guard)",
+                        whatsapp_msg_sid=whatsapp_sid,
+                        raw_payload={"resend_reason": "guard_validation"},
+                    )
+            elif last_prompt_key == "init":
+                # After INIT, don't resend INIT - user should use the buttons in the original INIT message
+                # The warning message has already been sent by the caller
+                logger.info(
+                    "STATE_GUARD: Not resending INIT, user should use buttons from original message",
+                    extra={"event_id": event_id, "contact_id": contact_id}
+                )
+            elif not last_prompt_key:
+                # No prompt key set - fallback to init (shouldn't happen normally)
+                logger.warning(
+                    "STATE_GUARD: No last_prompt_key set, sending init as fallback",
+                    extra={"event_id": event_id, "contact_id": contact_id}
+                )
+                await self.send_init_for_event(event_id=event_id, org_id=org_id, contact_id=contact_id)
+            else:
+                logger.warning(
+                    "STATE_GUARD: Unknown prompt key",
+                    extra={"last_prompt_key": last_prompt_key}
+                )
+        except Exception as e:
+            logger.error(
+                "STATE_GUARD: Failed to resend prompt",
+                exc_info=e,
+                extra={"last_prompt_key": last_prompt_key, "event_id": event_id}
+            )
+
+    @staticmethod
     def _parse_contact_from_text(text: str) -> tuple[str, str]:
         """Try to pull a phone/name combination from free text (CSV, lines, etc)."""
 
@@ -1543,6 +1844,31 @@ class HOHService:
                 name_candidate = stripped_text.split()[0]
 
         return phone_candidate, name_candidate
+    
+    @staticmethod
+    def _extract_phone_numbers_from_text(text: str) -> list[str]:
+        """
+        Extract all phone numbers from text.
+        Returns list of normalized phone numbers (E.164 format).
+        Used for contact_required state validation.
+        """
+        if not text:
+            return []
+        
+        # Find all potential phone numbers
+        # Patterns: +972..., 972..., 05..., 5...
+        phone_pattern = r"[+]?[\d][\d\s()\-]{7,}"
+        matches = re.findall(phone_pattern, text)
+        
+        normalized_phones = []
+        for match in matches:
+            # Try to normalize
+            normalized = normalize_phone_to_e164_il(match.strip())
+            # Validate it looks like a real phone (starts with + and has reasonable length)
+            if normalized and normalized.startswith("+") and len(normalized) >= 10:
+                normalized_phones.append(normalized)
+        
+        return normalized_phones
 
     @staticmethod
     def _extract_contact_details(payload: dict, body_text: str) -> tuple[str, str]:
@@ -1903,6 +2229,27 @@ class HOHService:
                 exc_info=e,
                 extra={"event_id": event_id}
             )
+        
+        # Update conversation state to paused - no more automation
+        try:
+            self.conversations.update_conversation_state(
+                org_id=org_id,
+                conversation_id=conversation_id,
+                expected_input="paused",
+                last_prompt_key="not_sure",
+                last_template_sid=CONTENT_SID_NOT_SURE,
+                last_template_vars={},
+            )
+            logger.info(
+                "FOLLOW_UP: Conversation state set to paused",
+                extra={"event_id": event_id, "conversation_id": conversation_id}
+            )
+        except Exception as e:
+            logger.error(
+                "FOLLOW_UP: Failed to update conversation state",
+                exc_info=e,
+                extra={"event_id": event_id}
+            )
 
     async def _handle_not_contact(
         self,
@@ -1919,12 +2266,12 @@ class HOHService:
             org_id=org_id, event_id=event_id, status="contact_required"
         )
 
-        twilio_resp = twilio_client.send_content_message(
+        # Send simple text message instead of template
+        twilio_resp = twilio_client.send_text(
             to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
-            content_sid=CONTENT_SID_CONTACT,
-            content_variables={},
+            body="יש לצרף איש קשר או לכתוב שם מלא וטלפון בהודעה אחת",
         )
-        whatsapp_sid = getattr(twilio_resp, "sid", None)
+        whatsapp_sid = getattr(twilio_resp, "sid", None) if twilio_resp else None
 
         conversation = self.conversations.get_open_conversation(
             org_id=org_id, event_id=event_id, contact_id=contact_id
@@ -1938,8 +2285,8 @@ class HOHService:
         )
 
         raw_payload = {
-            "content_sid": CONTENT_SID_CONTACT,
-            "variables": {},
+            "type": "contact_request_text",
+            "body": "יש לצרף איש קשר או לכתוב שם מלא וטלפון בהודעה אחת",
             "twilio_message_sid": whatsapp_sid,
         }
 
@@ -1949,9 +2296,19 @@ class HOHService:
             event_id=event_id,
             contact_id=contact_id,
             direction="outgoing",
-            body="Sent NOT CONTACT template",
+            body="Sent contact request text (NOT CONTACT flow)",
             whatsapp_msg_sid=whatsapp_sid,
             raw_payload=raw_payload,
+        )
+        
+        # Update conversation state to expect contact
+        self.conversations.update_conversation_state(
+            org_id=org_id,
+            conversation_id=conversation_id,
+            expected_input="contact_required",
+            last_prompt_key="contact_prompt",
+            last_template_sid=None,  # No template, just text
+            last_template_vars={},
         )
 
     async def _apply_confirmed_slot(
