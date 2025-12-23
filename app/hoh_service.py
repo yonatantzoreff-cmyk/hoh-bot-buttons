@@ -1142,11 +1142,11 @@ class HOHService:
         )
         
         # Update conversation state after successful send
-        # Confirmation allows free text response (for final thank you)
+        # Confirmation requires button click (confirm or go back)
         self.conversations.update_conversation_state(
             org_id=org_id,
             conversation_id=conversation_id,
-            expected_input="free_text_allowed",
+            expected_input="interactive",
             last_prompt_key="confirm",
             last_template_sid=CONTENT_SID_CONFIRM,
             last_template_vars=variables,
@@ -1387,9 +1387,15 @@ class HOHService:
             contact = self.contacts.get_contact_by_id(org_id=org_id, contact_id=contact_id)
             if contact:
                 try:
+                    # Different message for confirmation stage
+                    if last_prompt_key == "confirm":
+                        error_message = "נא לאשר או לחזור אחורה"
+                    else:
+                        error_message = "נא להשתמש בכפתורים"
+                    
                     twilio_client.send_text(
                         to=normalize_phone_to_e164_il(self._get_contact_value(contact, "phone")),
-                        body="נא להשתמש בכפתורים",
+                        body=error_message,
                     )
                 except Exception as e:
                     logger.error("STATE_GUARD: Failed to send error message", exc_info=e)
