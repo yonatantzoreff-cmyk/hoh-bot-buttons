@@ -44,6 +44,12 @@ class EventPatchRequest(BaseModel):
     status: Optional[str] = None
 
 
+class ContactCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    phone: str = Field(..., min_length=3)
+    role: str = Field(..., description="producer | technical")
+
+
 class TechnicalSuggestion(BaseModel):
     """A suggested technical contact based on producer history."""
     contact_id: int
@@ -737,6 +743,34 @@ async def get_contacts_by_role(
     
     except Exception as e:
         logger.exception("Failed to get contacts by role")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/contacts")
+async def create_contact(
+    payload: ContactCreateRequest,
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """Create a new contact and return the created record."""
+    try:
+        contact_id = hoh.create_contact(
+            org_id=org_id,
+            name=payload.name.strip(),
+            phone=payload.phone.strip(),
+            role=payload.role.strip(),
+        )
+        contact = hoh.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+        return {
+            "contact": {
+                "contact_id": contact_id,
+                "name": contact.get("name"),
+                "phone": contact.get("phone"),
+                "role": contact.get("role"),
+            }
+        }
+    except Exception as e:
+        logger.exception("Failed to create contact")
         raise HTTPException(status_code=500, detail=str(e))
 
 

@@ -1874,6 +1874,34 @@
         </div>
     </div>
 
+    <!-- Add Contact Modal -->
+    <div class="modal-overlay" id="addContactModal" onclick="closeAddContactModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3>הוספת איש קשר</h3>
+            </div>
+            <div class="modal-body" style="display: grid; gap: 0.75rem;">
+                <label style="display: grid; gap: 0.35rem;">שם
+                    <input type="text" id="addContactName" class="inline-edit" placeholder="שם מלא">
+                </label>
+                <label style="display: grid; gap: 0.35rem;">טלפון (E.164)
+                    <input type="text" id="addContactPhone" class="inline-edit" placeholder="+972..." >
+                </label>
+                <label style="display: grid; gap: 0.35rem;">תפקיד
+                    <select id="addContactRole" class="inline-edit">
+                        <option value="producer">Producer</option>
+                        <option value="technical">Technical</option>
+                    </select>
+                </label>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0;">הטלפון ינורמל אוטומטית לפורמט +972.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeAddContactModal()">ביטול</button>
+                <button class="btn btn-primary" onclick="submitAddContact()">שמור</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Confirmation Modal -->
     <div class="modal-overlay" id="confirmModal" onclick="closeConfirmModal()">
         <div class="modal-dialog" onclick="event.stopPropagation()">
@@ -1939,6 +1967,8 @@
         const EVENT_LOAD_TIMEOUT = 1000; // ms to wait for events to load before scrolling
         const NAVIGATION_SCROLL_DELAY = 500; // ms to wait before scrolling after navigation
         let activeColumnMenu = null;
+        let activeAddContactEventId = null;
+        let activeAddContactRole = 'producer';
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -2412,7 +2442,6 @@
                                         </div>
                                     </div>
                                 </div>
-                                <button class="btn btn-sm" onclick="openContactsPage()" title="הוספת איש קשר" style="padding: 0.3rem 0.6rem;">➕</button>
                             </div>
                             <div class="contact-row">
                                 <div style="min-width: 0;">
@@ -2736,8 +2765,76 @@
             }
         }
 
-        function openContactsPage() {
-            window.open('/ui/contacts', '_blank');
+        function normalizePhoneToE164IL(phone) {
+            if (!phone) return '';
+            let digits = phone.replace(/\D+/g, '');
+            if (!digits) return '';
+            if (phone.trim().startsWith('+')) {
+                digits = '+' + digits;
+            } else if (digits.startsWith('972')) {
+                digits = '+' + digits;
+            } else if (digits.startsWith('0')) {
+                digits = '+972' + digits.slice(1);
+            } else {
+                digits = '+' + digits;
+            }
+            return digits;
+        }
+
+        function openAddContactModal(eventId, defaultRole = 'producer') {
+            activeAddContactEventId = eventId;
+            activeAddContactRole = defaultRole;
+            document.getElementById('addContactName').value = '';
+            document.getElementById('addContactPhone').value = '';
+            document.getElementById('addContactRole').value = defaultRole;
+            document.getElementById('addContactModal').classList.add('visible');
+        }
+
+        function closeAddContactModal() {
+            document.getElementById('addContactModal').classList.remove('visible');
+            activeAddContactEventId = null;
+        }
+
+        async function submitAddContact() {
+            const name = document.getElementById('addContactName').value.trim();
+            const rawPhone = document.getElementById('addContactPhone').value.trim();
+            const role = document.getElementById('addContactRole').value;
+
+            if (!name || !rawPhone) {
+                showToast('נא למלא שם וטלפון', 'error');
+                return;
+            }
+
+            const phone = normalizePhoneToE164IL(rawPhone);
+            if (!phone.startsWith('+') || phone.length < 8) {
+                showToast('טלפון לא תקין, השתמש בפורמט +972...', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/contacts?org_id=${ORG_ID}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, phone, role }),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.detail || 'Failed to create contact');
+                }
+
+                const data = await response.json();
+                showToast('איש הקשר נוסף בהצלחה', 'success');
+                closeAddContactModal();
+
+                // Refresh dropdowns for the active event/role if open
+                if (activeAddContactEventId) {
+                    loadContactsForDropdown(activeAddContactEventId, role === 'producer' ? 'producer' : 'technical', role);
+                }
+            } catch (e) {
+                console.error('Failed to add contact', e);
+                showToast('יצירת איש הקשר נכשלה', 'error');
+            }
         }
 
         function attachRowClickHandlers() {
@@ -2798,7 +2895,7 @@
                         </label>
                     </div>
                     <div class="panel-actions">
-                        <button class="btn btn-primary" onclick="openContactsPage()">הוספת איש קשר</button>
+                        <button class="btn btn-primary" onclick="openAddContactModal(${event.event_id})">הוספת איש קשר</button>
                         <button class="btn btn-secondary" onclick="showSuggestions(${event.event_id}, this)">הצעות טכנאים</button>
                     </div>
                 </div>
