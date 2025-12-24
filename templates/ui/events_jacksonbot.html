@@ -815,6 +815,80 @@
             color: #be185d;
         }
 
+        .status-select-container {
+            position: relative;
+            min-width: 170px;
+        }
+
+        .status-select-trigger {
+            width: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.5rem;
+            padding: 0.25rem 0.5rem 0.25rem 0.35rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            cursor: pointer;
+            transition: box-shadow 0.2s, border-color 0.2s;
+        }
+
+        .status-select-trigger:hover {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0, 133, 255, 0.08);
+        }
+
+        .status-select-caret {
+            color: var(--text-muted);
+            font-size: 0.8rem;
+        }
+
+        .status-select-menu {
+            position: absolute;
+            top: calc(100% + 6px);
+            left: 0;
+            width: 100%;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            box-shadow: var(--shadow-hover);
+            z-index: 20;
+            display: none;
+            max-height: 260px;
+            overflow-y: auto;
+        }
+
+        .status-select-menu.open {
+            display: block;
+        }
+
+        .status-option {
+            width: 100%;
+            background: transparent;
+            border: none;
+            padding: 0.5rem 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            cursor: pointer;
+            text-align: left;
+            transition: background 0.2s;
+        }
+
+        .status-option:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .status-option.selected {
+            background: var(--bg-tertiary);
+        }
+
+        .status-option-label {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+        }
+
         [data-theme="dark"] .status-chip.draft {
             background: #3d4157;
             color: #c4c7d7;
@@ -1603,6 +1677,8 @@
         let notificationSound = null;
         let audioContext = null;
         let isMuted = false;
+        const STATUS_OPTIONS = ['draft', 'pending', 'confirmed', 'cancelled', 'follow_up', 'contact_required'];
+        let activeStatusMenu = null;
         
         // Constants
         const EVENT_LOAD_TIMEOUT = 1000; // ms to wait for events to load before scrolling
@@ -1896,6 +1972,61 @@
             return `<span class="status-chip ${statusClass}">${status}</span>`;
         }
 
+        function toggleStatusMenu(eventId) {
+            const menu = document.getElementById(`status-menu-${eventId}`);
+            const trigger = document.querySelector(`#status-select-${eventId} .status-select-trigger`);
+            if (!menu || !trigger) return;
+
+            const isOpen = menu.classList.contains('open');
+            closeStatusMenu();
+
+            if (!isOpen) {
+                menu.classList.add('open');
+                trigger.setAttribute('aria-expanded', 'true');
+                activeStatusMenu = menu;
+            }
+        }
+
+        function closeStatusMenu() {
+            if (activeStatusMenu) {
+                const trigger = activeStatusMenu.previousElementSibling;
+                if (trigger) {
+                    trigger.setAttribute('aria-expanded', 'false');
+                }
+                activeStatusMenu.classList.remove('open');
+                activeStatusMenu = null;
+            }
+        }
+
+        document.addEventListener('click', (event) => {
+            if (activeStatusMenu) {
+                const container = activeStatusMenu.closest('.status-select-container');
+                if (container && !container.contains(event.target)) {
+                    closeStatusMenu();
+                }
+            }
+        });
+
+        function selectStatus(eventId, status) {
+            updateStatusTrigger(eventId, status);
+            markDirty(eventId, 'status', status);
+            closeStatusMenu();
+        }
+
+        function updateStatusTrigger(eventId, status) {
+            const trigger = document.querySelector(`#status-select-${eventId} .status-select-trigger`);
+            const menu = document.getElementById(`status-menu-${eventId}`);
+            if (!trigger) return;
+
+            trigger.innerHTML = `${renderStatusChip({ status })}<span class="status-select-caret">▼</span>`;
+
+            if (menu) {
+                menu.querySelectorAll('.status-option').forEach(option => {
+                    option.classList.toggle('selected', option.dataset.value === status);
+                });
+            }
+        }
+
         function renderEventRow(event) {
             // Event status mapping (PHASE 3):
             // - draft: Event created, no message sent yet
@@ -1903,7 +2034,8 @@
             // - confirmed: Load-in time received and confirmed
             // - follow_up: Client clicked "still don't know" (עדיין לא יודע)
             // - contact_required: Client is not the contact person, forwarded contact info
-            const statusClass = (event.status || 'draft').toLowerCase();
+            const statusValue = (event.status || 'draft');
+            const statusClass = statusValue.toLowerCase();
             // Use pre-formatted times from backend (Israel timezone)
             const showTime = event.show_time_display || '';
             const loadInTime = event.load_in_time_display || '';
@@ -1937,7 +2069,20 @@
                                onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
                     </td>
                     <td>
-                        ${renderStatusChip(event)}
+                        <div class="status-select-container" id="status-select-${event.event_id}">
+                            <button type="button" class="status-select-trigger" onclick="toggleStatusMenu(${event.event_id})" aria-haspopup="listbox" aria-expanded="false">
+                                ${renderStatusChip(event)}
+                                <span class="status-select-caret">▼</span>
+                            </button>
+                            <div class="status-select-menu" id="status-menu-${event.event_id}" role="listbox" aria-label="Select status">
+                                ${STATUS_OPTIONS.map(statusOption => `
+                                    <button type="button" class="status-option ${statusOption === statusValue ? 'selected' : ''}" role="option" data-value="${statusOption}" onclick="selectStatus(${event.event_id}, '${statusOption}')">
+                                        ${renderStatusChip({ status: statusOption })}
+                                        <span class="status-option-label">${statusOption.replace('_', ' ')}</span>
+                                    </button>
+                                `).join('')}
+                            </div>
+                        </div>
                     </td>
                     <td>
                         ${renderDeliveryStatusChip(event.latest_delivery_status)}
@@ -2134,6 +2279,11 @@
                     input.value = eventData.technical_name;
                 }
             });
+
+            // Update status selector
+            if (eventData.status !== undefined) {
+                updateStatusTrigger(eventId, eventData.status || 'draft');
+            }
         }
 
         // Contact Dropdown (PHASE 4)
