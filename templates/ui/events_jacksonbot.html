@@ -25,6 +25,9 @@
             --chip-text: #0073e6;
             --shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
             --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.12);
+            --row-base-height: 64px;
+            --today-outline: #1faa59;
+            --panel-width: 440px;
         }
 
         [data-theme="dark"] {
@@ -45,6 +48,7 @@
             --chip-text: #66b3ff;
             --shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
             --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
+            --today-outline: #20c977;
         }
 
         * {
@@ -645,6 +649,7 @@
             user-select: none;
             position: relative;
             border-bottom: 2px solid var(--border-color);
+            min-height: calc(var(--row-base-height) * 1.5);
         }
 
         .events-table th:hover {
@@ -730,9 +735,10 @@
         }
 
         .events-table td {
-            padding: 1rem;
+            padding: 0.75rem 0.9rem;
             border-bottom: 1px solid var(--border-color);
             vertical-align: middle;
+            min-height: calc(var(--row-base-height) * 1.5);
         }
 
         .events-table tr {
@@ -750,6 +756,222 @@
 
         [data-theme="dark"] .events-table tbody tr.dirty {
             background: #3d3420;
+        }
+
+        .events-table tbody tr.today-event {
+            outline: 3px solid var(--today-outline);
+            outline-offset: -3px;
+        }
+
+        .event-cell {
+            display: grid;
+            gap: 0.5rem;
+        }
+
+        .event-cell.compact {
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            align-items: center;
+        }
+
+        .info-pill {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 0.5rem 0.75rem;
+            display: grid;
+            gap: 0.2rem;
+            min-height: calc(var(--row-base-height) * 1.5);
+        }
+
+        .info-pill small {
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .info-pill strong {
+            font-size: 1rem;
+            color: var(--text-primary);
+        }
+
+        .contact-block {
+            display: grid;
+            gap: 0.5rem;
+        }
+
+        .contact-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .contact-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .row-meta {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .row-meta .meta-chip {
+            background: var(--bg-tertiary);
+            padding: 0.25rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+        }
+
+        .table-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.5rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0.5rem 0.75rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-ghost:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .column-menu {
+            position: absolute;
+            right: 0;
+            margin-top: 0.25rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            box-shadow: var(--shadow-hover);
+            padding: 0.75rem;
+            display: none;
+            z-index: 20;
+            min-width: 220px;
+        }
+
+        .column-menu.open {
+            display: block;
+        }
+
+        .column-menu label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.35rem 0.25rem;
+            cursor: pointer;
+        }
+
+        .column-menu label:hover {
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+        }
+
+        .hidden-col {
+            display: none !important;
+        }
+
+        /* Side Panel */
+        .side-panel-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.35);
+            backdrop-filter: blur(2px);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+            z-index: 110;
+        }
+
+        .side-panel-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .side-panel {
+            position: fixed;
+            top: 0;
+            right: calc(-1 * var(--panel-width));
+            width: var(--panel-width);
+            height: 100%;
+            background: var(--bg-primary);
+            box-shadow: -4px 0 14px rgba(0, 0, 0, 0.15);
+            transition: right 0.25s ease;
+            z-index: 120;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .side-panel.visible {
+            right: 0;
+        }
+
+        .side-panel-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .side-panel-body {
+            padding: 1rem 1.25rem 2rem;
+            overflow-y: auto;
+            flex: 1;
+            display: grid;
+            gap: 1rem;
+        }
+
+        .panel-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            display: grid;
+            gap: 0.5rem;
+        }
+
+        .panel-section h4 {
+            margin-bottom: 0.25rem;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .panel-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .panel-grid {
+            display: grid;
+            gap: 0.65rem;
+        }
+
+        .panel-grid.two-col {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        @media (max-width: 1024px) {
+            .side-panel {
+                width: 100%;
+            }
         }
 
         /* Inline Edit Fields */
@@ -1626,6 +1848,18 @@
         <div id="toastMessage"></div>
     </div>
 
+    <div class="side-panel-overlay" id="sidePanelOverlay" onclick="closeEventPanel()"></div>
+    <div class="side-panel" id="eventSidePanel">
+        <div class="side-panel-header">
+            <div>
+                <h3 style="margin: 0; font-size: 1.1rem;">פרטי אירוע</h3>
+            </div>
+            <button class="btn btn-secondary" onclick="closeEventPanel()">✕</button>
+        </div>
+        <div class="side-panel-body" id="sidePanelBody">
+        </div>
+    </div>
+
     <!-- Confirmation Modal -->
     <div class="modal-overlay" id="confirmModal" onclick="closeConfirmModal()">
         <div class="modal-dialog" onclick="event.stopPropagation()">
@@ -1669,6 +1903,18 @@
         let notificationEventSource = null;
         const ORG_ID = 1;
         const HALL_STORAGE_KEY = 'events.activeHall';
+        const COLUMN_VISIBILITY_KEY = 'events.columnVisibility';
+        const TABLE_COLUMNS = [
+            { key: 'status', label: 'Status' },
+            { key: 'info', label: 'General Info' },
+            { key: 'name', label: 'Event' },
+            { key: 'contacts', label: 'Contacts' },
+            { key: 'notes', label: 'Notes' },
+            { key: 'delivery', label: 'Message' },
+            { key: 'actions', label: 'Actions' },
+        ];
+        let columnVisibility = {};
+        let eventsCache = new Map();
         let notificationSound = null;
         let audioContext = null;
         let isMuted = false;
@@ -1682,6 +1928,7 @@
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadTheme();
+            loadColumnVisibility();
             generateMonthSelector();
             
             // Load saved month or default to current
@@ -1856,6 +2103,9 @@
                 localStorage.setItem(HALL_STORAGE_KEY, activeHall);
             }
 
+            // Reset and repopulate events cache
+            eventsCache = new Map();
+
             container.innerHTML = `
                 <div class="hall-tabs">
                     <div class="hall-tab-list">
@@ -1874,25 +2124,37 @@
                             <div class="hall-tab-panel ${hallName === activeHall ? 'active' : ''}" data-hall="${escapeHtml(hallName)}">
                                 <div class="hall-section">
                                     <div class="hall-body">
+                                        <div class="table-toolbar">
+                                            <div style="position: relative;">
+                                                <button type="button" class="btn-ghost" onclick="toggleColumnMenu('${escapeHtml(hallName)}')">Columns ▾</button>
+                                                <div class="column-menu" id="column-menu-${hallName.replace(/\s+/g, '-')}">
+                                                    ${TABLE_COLUMNS.map(col => `
+                                                        <label>
+                                                            <input type="checkbox" ${columnVisibility[col.key] !== false ? 'checked' : ''} onchange="setColumnVisibility('${col.key}', this.checked)">
+                                                            ${col.label}
+                                                        </label>
+                                                    `).join('')}
+                                                </div>
+                                            </div>
+                                        </div>
                                         <table class="events-table" data-hall="${escapeHtml(hallName)}">
                                             <thead>
                                                 <tr id="header-row-${hallName.replace(/\s+/g, '-')}">
                                                     <th data-col="expander" style="width: 40px;"></th>
-                                                    <th class="sortable" draggable="true" data-col="name" onclick="sortTable(this, 'name')">Name</th>
-                                                    <th class="sortable sorted-asc" draggable="true" data-col="event_date" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date</th>
-                                                    <th draggable="true" data-col="day" style="width: 80px;">Day</th>
-                                                    <th class="sortable" draggable="true" data-col="show_time" onclick="sortTable(this, 'show_time')">Show Time</th>
-                                                    <th class="sortable" draggable="true" data-col="load_in_time" onclick="sortTable(this, 'load_in_time')">Load In</th>
-                                                    <th draggable="true" data-col="status">Status</th>
-                                                    <th draggable="true" data-col="delivery">Delivery</th>
-                                                    <th draggable="true" data-col="producer">Producer</th>
-                                                    <th draggable="true" data-col="technical">Technical</th>
+                                                    <th class="sortable" draggable="true" data-col="status" onclick="sortTable(this, 'status')">Status</th>
+                                                    <th class="sortable sorted-asc" draggable="true" data-col="info" data-default-sort="true" onclick="sortTable(this, 'event_date')">General Info</th>
+                                                    <th class="sortable" draggable="true" data-col="name" onclick="sortTable(this, 'name')">Event</th>
+                                                    <th draggable="true" data-col="contacts">Contacts</th>
                                                     <th draggable="true" data-col="notes">Notes</th>
+                                                    <th draggable="true" data-col="delivery">Message</th>
                                                     <th draggable="true" data-col="actions">Actions</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                ${events.map(event => renderEventRow(event)).join('')}
+                                                ${events.map(event => {
+                                                    eventsCache.set(event.event_id, event);
+                                                    return renderEventRow(event);
+                                                }).join('')}
                                             </tbody>
                                         </table>
                                     </div>
@@ -1908,6 +2170,12 @@
 
             // PHASE 5: Initialize column resize
             initColumnResize();
+
+            // Apply column visibility preferences
+            applyColumnVisibility();
+
+            // Enable row click for side panel
+            attachRowClickHandlers();
 
             // Note: Shifts are loaded on-demand when user expands the section
         }
@@ -1943,6 +2211,13 @@
             } catch (e) {
                 return '—';
             }
+        }
+
+        function getTodayISODate() {
+            const now = new Date();
+            const tzOffset = now.getTimezoneOffset() * 60000;
+            const local = new Date(now - tzOffset);
+            return local.toISOString().split('T')[0];
         }
 
         // Render delivery status chip with proper colors (PHASE 1)
@@ -2026,6 +2301,11 @@
                 });
             }
 
+            const row = trigger.closest('tr.event-row');
+            if (row) {
+                row.setAttribute('data-status', (status || '').toLowerCase());
+            }
+
             updateHallConfirmedCounts();
         }
 
@@ -2043,34 +2323,16 @@
             const loadInTime = event.load_in_time_display || '';
             const eventDate = event.event_date || '';
             const defaultTime = event.load_in_time_display || '';
+            const isTodayEvent = eventDate === getTodayISODate();
 
             return `
-                <tr data-event-id="${event.event_id}" class="event-row">
-                    <td class="expander-cell">
+                <tr data-event-id="${event.event_id}" class="event-row ${isTodayEvent ? 'today-event' : ''}" data-event_date="${eventDate}" data-show_time="${showTime}" data-load_in_time="${loadInTime}" data-status="${statusClass}">
+                    <td class="expander-cell" data-col="expander">
                         <button class="expander-btn" onclick="toggleRowDetails(${event.event_id})" id="expander-${event.event_id}" aria-label="Toggle shifts">
                             ▶
                         </button>
                     </td>
-                    <td>
-                        <input type="text" class="inline-edit" value="${escapeHtml(event.name || '')}" 
-                               onchange="markDirty(${event.event_id}, 'name', this.value)">
-                    </td>
-                    <td>
-                        <input type="date" class="inline-edit" value="${event.event_date || ''}" 
-                               onchange="markDirty(${event.event_id}, 'event_date', this.value)">
-                    </td>
-                    <td style="text-align: center; color: var(--text-secondary); font-size: 0.9rem;">
-                        ${getDayOfWeek(event.event_date)}
-                    </td>
-                    <td>
-                        <input type="time" class="inline-edit" value="${event.show_time_display}" 
-                               onchange="markDirty(${event.event_id}, 'show_time', this.value)">
-                    </td>
-                    <td>
-                        <input type="time" class="inline-edit" value="${event.load_in_time_display}" 
-                               onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
-                    </td>
-                    <td>
+                    <td data-col="status">
                         <div class="status-select-container" id="status-select-${event.event_id}" data-status="${statusClass}">
                             <button type="button" class="status-select-trigger" onclick="toggleStatusMenu(${event.event_id})" aria-haspopup="listbox" aria-expanded="false">
                                 ${renderStatusChip(event)}
@@ -2085,68 +2347,109 @@
                             </div>
                         </div>
                     </td>
-                    <td>
-                        ${renderDeliveryStatusChip(event.latest_delivery_status)}
-                    </td>
-                    <td>
-                        <div class="contact-dropdown-container" id="producer-${event.event_id}">
-                            <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'producer', 'producer')">
-                                <div style="flex: 1;">
-                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.producer_name || 'Select producer')}</div>
-                                    ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.producer_phone)}</div>` : ''}
+                    <td data-col="info">
+                        <div class="info-pill">
+                            <div class="row-meta">
+                                <span class="meta-chip">${eventDate || '—'}</span>
+                                <span class="meta-chip">${getDayOfWeek(event.event_date)}</span>
+                            </div>
+                            <div class="event-cell compact">
+                                <div>
+                                    <small>Show Time</small>
+                                    <input type="time" class="inline-edit" data-field="show_time" value="${showTime}" 
+                                           onchange="markDirty(${event.event_id}, 'show_time', this.value)">
                                 </div>
-                                <span style="color: var(--text-muted);">▼</span>
+                                <div>
+                                    <small>Load In</small>
+                                    <input type="time" class="inline-edit" data-field="load_in_time" value="${loadInTime}" 
+                                           onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
+                                </div>
+                                <div>
+                                    <small>Date</small>
+                                    <input type="date" class="inline-edit" data-field="event_date" value="${eventDate}" 
+                                           onchange="markDirty(${event.event_id}, 'event_date', this.value)">
+                                </div>
                             </div>
                         </div>
                     </td>
-                    <td>
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <div class="contact-dropdown-container" id="technical-${event.event_id}" style="flex: 1;">
-                                <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'technical')">
-                                    <div style="flex: 1;">
-                                        <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || 'Select technical')}</div>
-                                        ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
+                    <td data-col="name">
+                        <div class="event-cell">
+                            <div>
+                                <small>Event</small>
+                                <input type="text" class="inline-edit" data-field="name" value="${escapeHtml(event.name || '')}" 
+                                       onchange="markDirty(${event.event_id}, 'name', this.value)">
+                            </div>
+                        </div>
+                    </td>
+                    <td data-col="contacts">
+                        <div class="contact-block">
+                            <div class="contact-row">
+                                <div style="min-width: 0;">
+                                    <div class="contact-label">Producer</div>
+                                    <div class="contact-dropdown-container" id="producer-${event.event_id}">
+                                        <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'producer', 'producer')">
+                                            <div style="flex: 1;">
+                                                <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.producer_name || 'Select producer')}</div>
+                                                ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.producer_phone)}</div>` : ''}
+                                            </div>
+                                            <span style="color: var(--text-muted);">▼</span>
+                                        </div>
                                     </div>
-                                    <span style="color: var(--text-muted);">▼</span>
+                                </div>
+                                <button class="btn btn-sm" onclick="openContactsPage()" title="הוספת איש קשר" style="padding: 0.3rem 0.6rem;">➕</button>
+                            </div>
+                            <div class="contact-row">
+                                <div style="min-width: 0;">
+                                    <div class="contact-label">Technical</div>
+                                    <div class="contact-dropdown-container" id="technical-${event.event_id}">
+                                        <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'technical')">
+                                            <div style="flex: 1;">
+                                                <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || 'Select technical')}</div>
+                                                ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
+                                            </div>
+                                            <span style="color: var(--text-muted);">▼</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="row-meta" style="gap: 0.35rem;">
+                                    <button class="btn btn-sm" 
+                                            onclick="showSuggestions(${event.event_id}, this)" 
+                                            title="הצעות טכנאים"
+                                            style="padding: 0.3rem 0.6rem; font-size: 0.85rem; white-space: nowrap;">
+                                        💡
+                                    </button>
                                 </div>
                             </div>
-                            <button class="btn btn-sm" 
-                                    onclick="showSuggestions(${event.event_id}, this)" 
-                                    title="הצעות טכנאים"
-                                    style="padding: 0.3rem 0.6rem; font-size: 0.85rem; white-space: nowrap;">
-                                💡
-                            </button>
-                            ${event.technical_contact_id ? `
-                            <button class="btn btn-sm btn-outline-info" 
-                                    onclick="sendTechReminder(${event.event_id})" 
-                                    title="${event.tech_reminder_sent_at_display ? 'נשלח לאחרונה: ' + escapeHtml(event.tech_reminder_sent_at_display) : 'שלח תזכורת טכנית עם פרטי עובד פותח'}"
-                                    style="padding: 0.3rem 0.6rem; font-size: 0.85rem; white-space: nowrap;">
-                                🔔
-                            </button>
-                            ` : ''}
                         </div>
                     </td>
-                    <td>
-                        <input type="text" class="inline-edit" value="${escapeHtml(event.notes || '')}" 
+                    <td data-col="notes">
+                        <input type="text" class="inline-edit" data-field="notes" value="${escapeHtml(event.notes || '')}" 
                                onchange="markDirty(${event.event_id}, 'notes', this.value)">
                     </td>
-                    <td>
-                        <div class="actions-container">
+                    <td data-col="delivery">
+                        ${renderDeliveryStatusChip(event.latest_delivery_status)}
+                    </td>
+                    <td data-col="actions">
+                        <div class="actions-container" style="flex-wrap: wrap; gap: 0.35rem;">
+                            <button class="action-icon" onclick="openEventPanel(${event.event_id})" title="Edit in side panel">✏️</button>
+                            <button class="action-icon whatsapp ${event.init_sent_at ? 'sent' : ''}" 
+                                    onclick="sendWhatsApp(${event.event_id})"
+                                    title="${event.init_sent_at ? 'נשלח לאחרונה: ' + escapeHtml(event.init_sent_at_display) : 'שליחת איניט'}">
+                                📱
+                            </button>
+                            <button class="action-icon" ${event.technical_contact_id ? '' : 'disabled'} onclick="sendTechReminder(${event.event_id})" title="${event.technical_contact_id ? 'תזכורת טכנאי' : 'בחרו טכנאי לפני שליחת תזכורת'}">🔔</button>
+                            <button class="action-icon" onclick="toggleRowDetails(${event.event_id})" title="ניהול עובדים ותזכורות">🧑‍🤝‍🧑</button>
+                            <button class="action-icon" onclick="saveChanges()" title="שמור שינויים">💾</button>
                             <button class="action-icon delete" 
                                     onclick="deleteEvent(${event.event_id})"
                                     title="Delete event">
                                 🗑️
                             </button>
-                            <button class="action-icon whatsapp ${event.init_sent_at ? 'sent' : ''}" 
-                                    onclick="sendWhatsApp(${event.event_id})"
-                                    title="${event.init_sent_at ? 'נשלח לאחרונה: ' + escapeHtml(event.init_sent_at_display) : 'טרם נשלח'}">
-                                📱
-                            </button>
                         </div>
                     </td>
                 </tr>
                 <tr class="row-details" id="details-${event.event_id}" data-event-id="${event.event_id}">
-                    <td colspan="12" style="padding: 0;">
+                    <td colspan="8" style="padding: 0;">
                         <div class="row-details-content">
                             <div id="shifts-container-${event.event_id}">
                                 <div style="text-align: center; padding: 1rem; color: var(--text-muted);">
@@ -2173,7 +2476,26 @@
 
             // Mark row visually
             const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
-            if (row) row.classList.add('dirty');
+            if (row) {
+                row.classList.add('dirty');
+                if (field === 'event_date') {
+                    row.setAttribute('data-event_date', value);
+                }
+                if (field === 'show_time') {
+                    row.setAttribute('data-show_time', value);
+                }
+                if (field === 'load_in_time') {
+                    row.setAttribute('data-load_in_time', value);
+                }
+                if (field === 'status') {
+                    row.setAttribute('data-status', (value || '').toLowerCase());
+                }
+            }
+
+            if (eventsCache.has(eventId)) {
+                const updated = { ...eventsCache.get(eventId), [field]: value };
+                eventsCache.set(eventId, updated);
+            }
 
             // Show save button
             document.getElementById('saveBtn').classList.add('visible');
@@ -2285,6 +2607,21 @@
             if (eventData.status !== undefined) {
                 updateStatusTrigger(eventId, eventData.status || 'draft');
             }
+
+            // Update row dataset for sorting/highlights
+            row.setAttribute('data-event_date', eventData.event_date || '');
+            row.setAttribute('data-show_time', eventData.show_time_display || '');
+            row.setAttribute('data-load_in_time', eventData.load_in_time_display || '');
+            if (eventData.status) {
+                row.setAttribute('data-status', (eventData.status || '').toLowerCase());
+            }
+
+            // Refresh today highlight
+            const isToday = (eventData.event_date || '') === getTodayISODate();
+            row.classList.toggle('today-event', isToday);
+
+            const existing = eventsCache.get(eventId) || {};
+            eventsCache.set(eventId, { ...existing, ...eventData });
         }
 
         function updateHallConfirmedCounts() {
@@ -2381,6 +2718,111 @@
                 document.removeEventListener('click', handleDropdownOutsideClick);
                 activeDropdown = null;
             }
+        }
+
+        function openContactsPage() {
+            window.open('/ui/contacts', '_blank');
+        }
+
+        function attachRowClickHandlers() {
+            document.querySelectorAll('.events-table tbody tr.event-row').forEach(row => {
+                row.onclick = (e) => {
+                    const isInteractive = e.target.closest('button, input, select, textarea, .contact-dropdown-menu, .status-select-menu, .resize-handle, .contact-dropdown-trigger, .status-select-trigger');
+                    if (isInteractive) return;
+                    const eventId = Number(row.dataset.eventId);
+                    if (eventId) {
+                        openEventPanel(eventId);
+                    }
+                };
+            });
+        }
+
+        function renderSidePanelContent(event) {
+            const statusOptions = STATUS_OPTIONS.map(opt => `<option value="${opt}" ${opt === (event.status || 'draft') ? 'selected' : ''}>${opt}</option>`).join('');
+            return `
+                <div class="panel-section">
+                    <h4>General Info</h4>
+                    <div class="panel-grid two-col">
+                        <label>Date
+                            <input type="date" class="inline-edit" value="${event.event_date || ''}" onchange="markDirty(${event.event_id}, 'event_date', this.value)">
+                        </label>
+                        <label>Status
+                            <select class="inline-edit" onchange="selectStatus(${event.event_id}, this.value)">
+                                ${statusOptions}
+                            </select>
+                        </label>
+                        <label>Show Time
+                            <input type="time" class="inline-edit" value="${event.show_time_display || ''}" onchange="markDirty(${event.event_id}, 'show_time', this.value)">
+                        </label>
+                        <label>Load In
+                            <input type="time" class="inline-edit" value="${event.load_in_time_display || ''}" onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
+                        </label>
+                        <label>Event Name
+                            <input type="text" class="inline-edit" value="${escapeHtml(event.name || '')}" onchange="markDirty(${event.event_id}, 'name', this.value)">
+                        </label>
+                        <label>Day
+                            <input type="text" class="inline-edit" value="${getDayOfWeek(event.event_date)}" disabled>
+                        </label>
+                    </div>
+                </div>
+                <div class="panel-section">
+                    <h4>Contacts</h4>
+                    <div class="panel-grid two-col">
+                        <label>Producer Name
+                            <input type="text" class="inline-edit" value="${escapeHtml(event.producer_name || '')}" onchange="markDirty(${event.event_id}, 'producer_name', this.value)">
+                        </label>
+                        <label>Producer Phone
+                            <input type="text" class="inline-edit" value="${escapeHtml(event.producer_phone || '')}" onchange="markDirty(${event.event_id}, 'producer_phone', this.value)">
+                        </label>
+                        <label>Technical Name
+                            <input type="text" class="inline-edit" value="${escapeHtml(event.technical_name || '')}" onchange="markDirty(${event.event_id}, 'technical_name', this.value)">
+                        </label>
+                        <label>Technical Phone
+                            <input type="text" class="inline-edit" value="${escapeHtml(event.technical_phone || '')}" onchange="markDirty(${event.event_id}, 'technical_phone', this.value)">
+                        </label>
+                    </div>
+                    <div class="panel-actions">
+                        <button class="btn btn-primary" onclick="openContactsPage()">הוספת איש קשר</button>
+                        <button class="btn btn-secondary" onclick="showSuggestions(${event.event_id}, this)">הצעות טכנאים</button>
+                    </div>
+                </div>
+                <div class="panel-section">
+                    <h4>Notes</h4>
+                    <textarea class="inline-edit" style="width: 100%; min-height: 120px;" onchange="markDirty(${event.event_id}, 'notes', this.value)">${escapeHtml(event.notes || '')}</textarea>
+                </div>
+                <div class="panel-section">
+                    <h4>Actions</h4>
+                    <div class="panel-actions">
+                        <button class="btn btn-primary" onclick="sendWhatsApp(${event.event_id})">שליחת איניט</button>
+                        <button class="btn btn-secondary" onclick="sendTechReminder(${event.event_id})">תזכורת טכנאי</button>
+                        <button class="btn btn-secondary" onclick="toggleRowDetails(${event.event_id})">ניהול עובדים</button>
+                        <button class="btn btn-primary" onclick="saveChanges()">שמור</button>
+                        <button class="btn btn-danger" onclick="deleteEvent(${event.event_id})">מחיקה</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function openEventPanel(eventId) {
+            const overlay = document.getElementById('sidePanelOverlay');
+            const panel = document.getElementById('eventSidePanel');
+            const body = document.getElementById('sidePanelBody');
+
+            const eventData = eventsCache.get(eventId);
+
+            if (!eventData) {
+                showToast('לא נמצאו נתונים להצגה', 'error');
+                return;
+            }
+
+            body.innerHTML = renderSidePanelContent(eventData);
+            overlay.classList.add('visible');
+            panel.classList.add('visible');
+        }
+
+        function closeEventPanel() {
+            document.getElementById('sidePanelOverlay').classList.remove('visible');
+            document.getElementById('eventSidePanel').classList.remove('visible');
         }
 
         async function loadContactsForDropdown(eventId, fieldType, role, searchTerm = '') {
@@ -3045,7 +3487,7 @@
         function sortTable(th, field) {
             const table = th.closest('table');
             const tbody = table.querySelector('tbody');
-            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const rows = Array.from(tbody.querySelectorAll('tr.event-row'));
 
             // Determine sort direction (toggle between asc/desc)
             let direction = 'asc';
@@ -3060,13 +3502,16 @@
 
             // Sort rows
             rows.sort((a, b) => {
-                let aVal = a.querySelector(`input[onchange*="${field}"]`)?.value || '';
-                let bVal = b.querySelector(`input[onchange*="${field}"]`)?.value || '';
+                let aVal = getRowFieldValue(a, field);
+                let bVal = getRowFieldValue(b, field);
 
                 // Handle date/time fields - convert to timestamps for proper sorting
-                if (field === 'event_date' || field === 'show_time' || field === 'load_in_time') {
-                    aVal = aVal ? new Date(aVal).getTime() : 0;
-                    bVal = bVal ? new Date(bVal).getTime() : 0;
+                if (field === 'event_date') {
+                    aVal = aVal ? new Date(aVal + 'T00:00:00').getTime() : 0;
+                    bVal = bVal ? new Date(bVal + 'T00:00:00').getTime() : 0;
+                } else if (field === 'show_time' || field === 'load_in_time') {
+                    aVal = aVal ? new Date(`1970-01-01T${aVal}:00`).getTime() : 0;
+                    bVal = bVal ? new Date(`1970-01-01T${bVal}:00`).getTime() : 0;
                 }
 
                 if (direction === 'asc') {
@@ -3077,10 +3522,41 @@
             });
 
             // Re-append sorted rows to DOM
-            rows.forEach(row => tbody.appendChild(row));
+            rows.forEach(row => {
+                tbody.appendChild(row);
+                const details = document.getElementById(`details-${row.dataset.eventId}`);
+                if (details) {
+                    tbody.appendChild(details);
+                }
+            });
 
             // Update sort indicator on clicked column
             th.classList.add(direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
+        }
+
+        function getRowFieldValue(row, field) {
+            const direct = row.querySelector(`[data-field="${field}"]`);
+            if (direct) {
+                return direct.value || direct.textContent || '';
+            }
+
+            if (field === 'status') {
+                return row.getAttribute('data-status') || '';
+            }
+
+            if (field === 'event_date') {
+                return row.getAttribute('data-event_date') || '';
+            }
+
+            if (field === 'show_time') {
+                return row.getAttribute('data-show_time') || '';
+            }
+
+            if (field === 'load_in_time') {
+                return row.getAttribute('data-load_in_time') || '';
+            }
+
+            return '';
         }
 
         // Column Order Management (PHASE 5 - Task 8)
@@ -3207,12 +3683,22 @@
 
             try {
                 const order = JSON.parse(savedOrder);
-                
+
                 // Apply to all tables
                 document.querySelectorAll('.events-table').forEach(table => {
                     const headerRow = table.querySelector('thead tr');
                     const headers = Array.from(headerRow.children);
                     const currentOrder = headers.map(th => th.getAttribute('data-col'));
+
+                    // If saved order no longer matches current columns, skip reorder and refresh storage
+                    const filteredSaved = order.filter(Boolean);
+                    const currentSet = new Set(currentOrder);
+                    const savedSet = new Set(filteredSaved);
+                    const sameSize = currentSet.size === savedSet.size && [...currentSet].every(v => savedSet.has(v));
+                    if (!sameSize) {
+                        saveColumnOrder(table);
+                        return;
+                    }
 
                     // Only reorder if order is different
                     if (JSON.stringify(currentOrder) !== JSON.stringify(order)) {
@@ -3409,6 +3895,73 @@
                 });
             } catch (e) {
                 console.error('Failed to restore column widths:', e);
+            }
+        }
+
+        // Column visibility
+        function loadColumnVisibility() {
+            const saved = localStorage.getItem(COLUMN_VISIBILITY_KEY);
+            if (saved) {
+                try {
+                    columnVisibility = JSON.parse(saved);
+                } catch (e) {
+                    columnVisibility = {};
+                }
+            }
+            // Ensure defaults are present
+            TABLE_COLUMNS.forEach(col => {
+                if (columnVisibility[col.key] === undefined) {
+                    columnVisibility[col.key] = true;
+                }
+            });
+        }
+
+        function saveColumnVisibility() {
+            localStorage.setItem(COLUMN_VISIBILITY_KEY, JSON.stringify(columnVisibility));
+        }
+
+        function setColumnVisibility(key, isVisible) {
+            columnVisibility[key] = isVisible;
+            saveColumnVisibility();
+            applyColumnVisibility();
+        }
+
+        function applyColumnVisibility() {
+            document.querySelectorAll('.events-table').forEach(table => {
+                const headers = Array.from(table.querySelectorAll('thead th'));
+                const visibleCount = headers.filter(th => th.getAttribute('data-col') !== 'expander' && columnVisibility[th.getAttribute('data-col')] !== false).length + 1; // + expander
+
+                headers.forEach(th => {
+                    const col = th.getAttribute('data-col');
+                    if (!col || col === 'expander') return;
+                    th.classList.toggle('hidden-col', columnVisibility[col] === false);
+                });
+
+                table.querySelectorAll('tbody tr').forEach(row => {
+                    Array.from(row.children).forEach(cell => {
+                        const col = cell.getAttribute('data-col');
+                        if (!col || col === 'expander') return;
+                        cell.classList.toggle('hidden-col', columnVisibility[col] === false);
+                    });
+
+                    // Adjust colspan for detail rows
+                    if (row.classList.contains('row-details')) {
+                        const cell = row.querySelector('td');
+                        if (cell) {
+                            cell.colSpan = visibleCount;
+                        }
+                    }
+                });
+            });
+        }
+
+        function toggleColumnMenu(hallName) {
+            document.querySelectorAll('.column-menu').forEach(menu => {
+                menu.classList.remove('open');
+            });
+            const menu = document.getElementById(`column-menu-${hallName.replace(/\s+/g, '-')}`);
+            if (menu) {
+                menu.classList.toggle('open');
             }
         }
 
