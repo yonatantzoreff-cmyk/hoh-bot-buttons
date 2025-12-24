@@ -567,6 +567,13 @@ class HOHService:
             channel="whatsapp",
             status="open",
         )
+        
+        # Build/update scheduled jobs for the new event
+        try:
+            from app.services.scheduler_job_builder import build_or_update_jobs_for_event
+            build_or_update_jobs_for_event(org_id=org_id, event_id=event_id)
+        except Exception as e:
+            logger.warning(f"Failed to build/update jobs for new event {event_id}: {e}")
 
         return {
             "event_id": event_id,
@@ -852,6 +859,13 @@ class HOHService:
                 event_id=event_id,
                 **update_params
             )
+        
+        # Build/update scheduled jobs for this event
+        try:
+            from app.services.scheduler_job_builder import build_or_update_jobs_for_event
+            build_or_update_jobs_for_event(org_id=org_id, event_id=event_id)
+        except Exception as e:
+            logger.warning(f"Failed to build/update jobs for event {event_id}: {e}")
 
     @staticmethod
     def _combine_time(event_date: date, time_str: Optional[str]):

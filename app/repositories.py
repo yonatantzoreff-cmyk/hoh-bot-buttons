@@ -1688,6 +1688,17 @@ class EmployeeShiftRepository:
             )
             shift_id = res.scalar_one()
             session.commit()
+            
+            # Build/update scheduled jobs for this shift
+            try:
+                from app.services.scheduler_job_builder import build_or_update_jobs_for_shifts
+                build_or_update_jobs_for_shifts(org_id=org_id, event_id=event_id)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Failed to build/update jobs for shift {shift_id}: {e}"
+                )
+            
             return shift_id
 
     def list_shifts_for_event(self, org_id: int, event_id: int):
@@ -1830,6 +1841,20 @@ class EmployeeShiftRepository:
         with get_session() as session:
             session.execute(q, params)
             session.commit()
+            
+            # Build/update scheduled jobs for shifts in this event
+            # First get the event_id for this shift
+            shift = self.get_shift_by_id(org_id=org_id, shift_id=shift_id)
+            if shift:
+                event_id = shift.get("event_id")
+                try:
+                    from app.services.scheduler_job_builder import build_or_update_jobs_for_shifts
+                    build_or_update_jobs_for_shifts(org_id=org_id, event_id=event_id)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).warning(
+                        f"Failed to build/update jobs for shift {shift_id}: {e}"
+                    )
 
     def delete_shift(self, org_id: int, shift_id: int):
         """מחיקה מוחלטת של משמרת"""
@@ -2464,6 +2489,62 @@ class ScheduledMessageRepository:
         with get_session() as session:
             result = session.execute(query, {"org_id": org_id, "shift_id": shift_id})
             return [dict(row) for row in result.mappings().all()]
+
+    def find_job_for_event(self, org_id: int, event_id: int, message_type: str) -> Optional[dict]:
+        """Find a scheduled job for a specific event and message type."""
+        query = text("""
+            SELECT *
+            FROM scheduled_messages
+            WHERE org_id = :org_id
+              AND event_id = :event_id
+              AND message_type = :message_type
+            LIMIT 1
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {
+                "org_id": org_id,
+                "event_id": event_id,
+                "message_type": message_type
+            })
+            row = result.mappings().first()
+            return dict(row) if row else None
+
+    def find_job_for_shift(self, org_id: int, shift_id: int, message_type: str) -> Optional[dict]:
+        """Find a scheduled job for a specific shift and message type."""
+        query = text("""
+            SELECT *
+            FROM scheduled_messages
+            WHERE org_id = :org_id
+              AND shift_id = :shift_id
+              AND message_type = :message_type
+            LIMIT 1
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {
+                "org_id": org_id,
+                "shift_id": shift_id,
+                "message_type": message_type
+            })
+            row = result.mappings().first()
+            return dict(row) if row else None
+
+    def update_send_at(self, job_id: str, send_at: datetime) -> None:
+        """Update the send_at time for a scheduled message."""
+        query = text("""
+            UPDATE scheduled_messages
+            SET send_at = :send_at,
+                updated_at = :now
+            WHERE job_id = :job_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {
+                "job_id": job_id,
+                "send_at": send_at,
+                "now": now_utc()
+            })
 
     def update_status(
         self,
