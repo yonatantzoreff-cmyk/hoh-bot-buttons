@@ -1,0 +1,49 @@
+previews:
+  # preview environments: manual או automatic
+  generation: automatic
+  # אופציונלי: לחסוך כסף ע"י מחיקה אוטומטית אחרי חוסר פעילות
+  expireAfterDays: 3
+
+services:
+  - type: web
+    name: hoh-bot
+    runtime: docker
+    plan: standard
+    region: frankfurt
+    healthCheckPath: /health
+    # לא חובה אם ה-Dockerfile בשורש, אבל נחמד להיות מפורש
+    dockerfilePath: ./Dockerfile
+
+    # להוזיל פריוויואים: instance קטן יותר בפריוויו
+    previews:
+      plan: starter
+
+    envVars:
+      # חיבור DB דרך Render Postgres (ייצר DATABASE_URL אוטומטית מה-DB שמוגדר למטה)
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hoh-db
+          property: connectionString
+
+      # פריוויו-מוד: תן לאפליקציה לדעת שהיא לא בפרודקשן
+      - key: APP_ENV
+        value: production
+        previewValue: preview
+
+      # מומלץ: כדי למנוע הפתעות בזמנים/תזמונים
+      - key: TZ
+        value: Asia/Jerusalem
+
+      # סודות (Twilio וכו') — שים בקבוצת Environment Group ידנית
+      # כדי שיישוכפלו גם לפריוויואים
+      - fromGroup: hoh-secrets
+
+databases:
+  - name: hoh-db
+    plan: basic-1gb
+    region: frankfurt
+
+    # פריוויו DB קטן יותר כדי לחסוך כסף
+    previewPlan: basic-256mb
+    previewDiskSizeGB: 5
+
