@@ -760,7 +760,7 @@ async def create_contact(
             phone=payload.phone.strip(),
             role=payload.role.strip(),
         )
-        contact = hoh.get_contact_by_id(org_id=org_id, contact_id=contact_id)
+        contact = hoh.get_contact(org_id=org_id, contact_id=contact_id)
         return {
             "contact": {
                 "contact_id": contact_id,

@@ -2850,6 +2850,17 @@
             });
         }
 
+        function removeContactFromEvent(eventId, role) {
+            const nameField = document.querySelector(role === 'producer' ? `#producer-${eventId} .contact-dropdown-trigger div div` : `#technical-${eventId} .contact-dropdown-trigger div div`);
+            if (nameField) {
+                nameField.textContent = role === 'producer' ? 'Select producer' : 'Select technical';
+            }
+            markDirty(eventId, `${role}_contact_id`, null);
+            markDirty(eventId, `${role}_name`, '');
+            markDirty(eventId, `${role}_phone`, '');
+            showToast('איש הקשר הוסר מהאירוע (לא נמחק ממערכת הקשר)', 'info');
+        }
+
         function renderSidePanelContent(event) {
             const statusOptions = STATUS_OPTIONS.map(opt => `<option value="${opt}" ${opt === (event.status || 'draft') ? 'selected' : ''}>${opt}</option>`).join('');
             return `
@@ -2897,6 +2908,8 @@
                     <div class="panel-actions">
                         <button class="btn btn-primary" onclick="openAddContactModal(${event.event_id})">הוספת איש קשר</button>
                         <button class="btn btn-secondary" onclick="showSuggestions(${event.event_id}, this)">הצעות טכנאים</button>
+                        <button class="btn btn-secondary" onclick="removeContactFromEvent(${event.event_id}, 'producer')">הסר מפיק</button>
+                        <button class="btn btn-secondary" onclick="removeContactFromEvent(${event.event_id}, 'technical')">הסר טכנאי</button>
                     </div>
                 </div>
                 <div class="panel-section">
