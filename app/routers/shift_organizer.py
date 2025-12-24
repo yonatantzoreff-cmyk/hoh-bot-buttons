@@ -47,6 +47,7 @@ class SaveRequest(BaseModel):
     org_id: int
     year: int
     month: int
+    event_ids: Optional[list[int]] = None
     slots: list[SlotData]
 
 
@@ -256,7 +257,7 @@ def save_shifts(request: SaveRequest):
         
         # Delete shifts that are not in the saved list and not locked
         # (Only for events that have slots in the request)
-        events_in_request = set(slot.event_id for slot in slots)
+        events_in_request = set(request.event_ids or []) | set(slot.event_id for slot in slots)
         
         for event_id in events_in_request:
             existing = event_shift_map.get(event_id, [])

@@ -1532,7 +1532,7 @@ async def calendar_import_page() -> HTMLResponse:
     }
 
     async function updateField(stagingId, field, rawValue) {
-      const payload = {};
+      const payload = {{}};
       const value = rawValue === '' ? null : rawValue;
       payload[field] = value;
 
@@ -2001,6 +2001,23 @@ async def shift_organizer_page(
     let currentData = null;
     let generatedSlots = null;
     let employees = [];
+    let eventsById = {{}};
+    
+    function formatDateTimeLocal(value) {{
+      if (!value) return '';
+      const date = new Date(value);
+      return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 16);
+    }}
+    
+    function buildEmployeeOptions(selectedId) {{
+      return '<option value=\"\">-- Select Employee --</option>' + employees.map(emp => `
+        <option value=\"${{emp.employee_id}}\" ${{selectedId === emp.employee_id ? 'selected' : ''}}>
+          ${{emp.name}}
+        </option>
+      `).join('');
+    }}
     
     // Load initial data
     async function loadMonthData() {{
@@ -2009,6 +2026,7 @@ async def shift_organizer_page(
         const data = await response.json();
         currentData = data;
         employees = data.employees;
+        eventsById = Object.fromEntries((data.events || []).map(ev => [ev.event_id, ev]));
         renderEvents(data);
         renderStats(data.employee_stats);
       }} catch (error) {{
@@ -2068,18 +2086,19 @@ async def shift_organizer_page(
     function renderEvent(event, shifts) {{
       const eventDate = new Date(event.event_date + 'T00:00:00');
       const dateStr = eventDate.toLocaleDateString('en-GB');
+      const dayStr = eventDate.toLocaleDateString('en-GB', {{ weekday: 'short' }});
       const showTime = event.show_time ? new Date(event.show_time).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : '-';
       const loadInTime = event.load_in_time ? new Date(event.load_in_time).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : '-';
       
       return `
-        <div class="card mb-3" data-event-id="${{event.event_id}}">
+        <div class="card mb-3 event-card" data-event-id="${{event.event_id}}">
           <div class="card-header">
             <div class="row align-items-center">
               <div class="col-md-3">
                 <strong>${{event.name}}</strong>
               </div>
               <div class="col-md-2">
-                <small class="text-muted">Date:</small> ${{dateStr}}
+                <small class="text-muted">Date:</small> ${{dateStr}} <span class="text-muted">(${{dayStr}})</span>
               </div>
               <div class="col-md-2">
                 <small class="text-muted">Show:</small> ${{showTime}}
@@ -2091,11 +2110,16 @@ async def shift_organizer_page(
                 ${{event.notes ? `<small class="text-muted">${{event.notes}}</small>` : ''}}
               </div>
             </div>
+            <div class="text-end mt-2">
+              <button class="btn btn-sm btn-outline-primary" onclick="addSlot(${{event.event_id}})">
+                + Add Shift
+              </button>
+            </div>
           </div>
           <div class="card-body">
             <div class="slots-container" data-event-id="${{event.event_id}}">
               ${{shifts.map((shift, idx) => renderSlot(event.event_id, shift, idx)).join('')}}
-              ${{shifts.length === 0 ? '<p class="text-muted">No shifts assigned yet. Click "Generate Shifts" to auto-assign.</p>' : ''}}
+              ${{shifts.length === 0 ? '<p class="text-muted">No shifts assigned yet. Click "Generate Shifts" to auto-assign or add manually.</p>' : ''}}
             </div>
           </div>
         </div>
@@ -2103,36 +2127,32 @@ async def shift_organizer_page(
     }}
     
     function renderSlot(eventId, shift, index) {{
-      const startTime = shift.start_at ? new Date(shift.start_at).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : 
-                        (shift.call_time ? new Date(shift.call_time).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : '-');
-      const employeeOptions = employees.map(emp => `
-        <option value="${{emp.employee_id}}" ${{shift.employee_id === emp.employee_id ? 'selected' : ''}}>
-          ${{emp.name}}
-        </option>
-      `).join('');
-      
+      const startValue = formatDateTimeLocal(shift.start_at || shift.call_time);
       const isLocked = shift.is_locked || false;
       const lockIcon = isLocked ? '🔒' : '';
       
       return `
-        <div class="row mb-2 align-items-center slot-row" data-slot-index="${{index}}">
-          <div class="col-md-2">
-            <input type="time" class="form-control form-control-sm" value="${{startTime}}" disabled>
-          </div>
+        <div class="row mb-2 align-items-center slot-row" 
+             data-slot-index="${{index}}"
+             data-event-id="${{eventId}}"
+             data-start="${{shift.start_at || shift.call_time || ''}}"
+             data-end="${{shift.end_at || shift.call_time || ''}}"
+             data-is-locked="${{isLocked}}"
+             data-shift-id="${{shift.shift_id || ''}}"
+             data-shift-type="${{shift.shift_type || ''}}">
           <div class="col-md-4">
-            <select class="form-select form-select-sm employee-select">
-              <option value="">-- Select Employee --</option>
-              ${{employeeOptions}}
-            </select>
+            <input type="datetime-local" class="form-control form-control-sm start-at" value="${{startValue}}" ${{isLocked ? 'disabled' : ''}}>
           </div>
-          <div class="col-md-2">
-            ${{shift.employee_name || '-'}}
+          <div class="col-md-5">
+            <select class="form-select form-select-sm employee-select" ${{isLocked ? 'disabled' : ''}}>
+              ${{buildEmployeeOptions(shift.employee_id)}}
+            </select>
           </div>
           <div class="col-md-2">
             <span class="badge bg-${{isLocked ? 'warning' : 'secondary'}}">${{lockIcon}} ${{shift.shift_type || 'shift'}}</span>
           </div>
-          <div class="col-md-2 text-end">
-            <button class="btn btn-sm btn-outline-danger" onclick="removeSlot(this)">✕</button>
+          <div class="col-md-1 text-end">
+            <button class="btn btn-sm btn-outline-danger" onclick="removeSlot(this)" ${{isLocked ? 'disabled' : ''}}>✕</button>
           </div>
         </div>
       `;
@@ -2140,6 +2160,53 @@ async def shift_organizer_page(
     
     function removeSlot(btn) {{
       btn.closest('.slot-row').remove();
+      document.getElementById('saveBtn').disabled = false;
+    }}
+    
+    document.addEventListener('change', (event) => {{
+      if (event.target.closest('.slot-row')) {{
+        document.getElementById('saveBtn').disabled = false;
+      }}
+      
+      if (event.target.classList.contains('start-at')) {{
+        const row = event.target.closest('.slot-row');
+        if (row && event.target.value) {{
+          const iso = new Date(event.target.value).toISOString();
+          row.dataset.start = iso;
+          row.dataset.end = iso;
+        }}
+      }}
+    }});
+    
+    function getDefaultTimes(eventId) {{
+      const event = eventsById[eventId];
+      const now = new Date();
+      if (!event) {{
+        return {{ start: now, end: now }};
+      }}
+      
+      const baseDate = new Date(event.event_date + 'T00:00:00');
+      const start = event.load_in_time ? new Date(event.load_in_time) :
+                    (event.show_time ? new Date(event.show_time) : new Date(baseDate.setHours(18, 0, 0, 0)));
+      return {{ start, end: start }};
+    }}
+    
+    function addSlot(eventId) {{
+      const container = document.querySelector(`.slots-container[data-event-id="${{eventId}}"]`);
+      if (!container) return;
+      
+      const times = getDefaultTimes(eventId);
+      const newShift = {{
+        start_at: times.start.toISOString(),
+        end_at: times.end.toISOString(),
+        employee_id: null,
+        shift_type: 'shift',
+        is_locked: false,
+        shift_id: null,
+      }};
+      
+      const newIndex = container.querySelectorAll('.slot-row').length;
+      container.insertAdjacentHTML('beforeend', renderSlot(eventId, newShift, newIndex));
       document.getElementById('saveBtn').disabled = false;
     }}
     
@@ -2202,13 +2269,7 @@ async def shift_organizer_page(
     }}
     
     function renderGeneratedSlot(eventId, slot, index) {{
-      const startTime = new Date(slot.start_at).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}});
-      const endTime = new Date(slot.end_at).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}});
-      const employeeOptions = employees.map(emp => `
-        <option value="${{emp.employee_id}}" ${{slot.suggested_employee_id === emp.employee_id ? 'selected' : ''}}>
-          ${{emp.name}}
-        </option>
-      `).join('');
+      const employeeOptions = buildEmployeeOptions(slot.suggested_employee_id);
       
       const isUnfilled = !slot.suggested_employee_id;
       const bgClass = isUnfilled ? 'bg-danger text-white' : '';
@@ -2220,18 +2281,16 @@ async def shift_organizer_page(
              data-event-id="${{eventId}}"
              data-start="${{slot.start_at}}"
              data-end="${{slot.end_at}}"
+             data-is-locked="false"
+             data-shift-type="${{slot.shift_type || 'shift'}}"
              title="${{reason}}">
-          <div class="col-md-2">
-            <small>${{startTime}} - ${{endTime}}</small>
+          <div class="col-md-4">
+            <input type="datetime-local" class="form-control form-control-sm start-at" value="${{formatDateTimeLocal(slot.start_at)}}">
           </div>
           <div class="col-md-5">
             <select class="form-select form-select-sm employee-select">
-              <option value="">-- Select Employee --</option>
               ${{employeeOptions}}
             </select>
-          </div>
-          <div class="col-md-3">
-            ${{slot.suggested_employee_name || '<em>No available employee</em>'}}
           </div>
           <div class="col-md-2 text-end">
             <button class="btn btn-sm btn-outline-danger" onclick="removeSlot(this)">✕</button>
@@ -2254,9 +2313,13 @@ async def shift_organizer_page(
         document.querySelectorAll('.slot-row').forEach(row => {{
           const eventId = parseInt(row.dataset.eventId);
           const employeeSelect = row.querySelector('.employee-select');
-          const employeeId = employeeSelect ? parseInt(employeeSelect.value) : null;
-          const startAt = row.dataset.start;
-          const endAt = row.dataset.end;
+          const employeeId = employeeSelect && employeeSelect.value ? parseInt(employeeSelect.value) : null;
+          const startInput = row.querySelector('.start-at');
+          const startAt = startInput && startInput.value ? new Date(startInput.value).toISOString() : null;
+          const endAt = row.dataset.end ? row.dataset.end : startAt;
+          const shiftId = row.dataset.shiftId ? parseInt(row.dataset.shiftId) : null;
+          const shiftType = row.dataset.shiftType || null;
+          const isLocked = row.dataset.isLocked === 'true';
           
           if (employeeId && startAt && endAt) {{
             slots.push({{
@@ -2264,10 +2327,16 @@ async def shift_organizer_page(
               employee_id: employeeId,
               start_at: startAt,
               end_at: endAt,
-              is_locked: false
+              shift_id: shiftId,
+              shift_type: shiftType,
+              is_locked: isLocked
             }});
           }}
         }});
+        
+        const eventIds = Array.from(document.querySelectorAll('.event-card'))
+          .map(card => parseInt(card.dataset.eventId))
+          .filter(id => !Number.isNaN(id));
         
         const response = await fetch('/shift-organizer/save', {{
           method: 'POST',
@@ -2276,6 +2345,7 @@ async def shift_organizer_page(
             org_id: ORG_ID,
             year: YEAR,
             month: MONTH,
+            event_ids: eventIds,
             slots: slots
           }})
         }});
