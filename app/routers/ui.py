@@ -11,6 +11,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
 
 from app import twilio_client
+from app.constants import EVENT_STATUS_LABELS, EVENT_STATUS_OPTIONS
 from app.credentials import CONTENT_SID_SHIFT_REMINDER
 from app.dependencies import get_hoh_service
 from app.hoh_service import HOHService
@@ -605,6 +606,26 @@ async def list_events() -> HTMLResponse:
         return HTMLResponse(content=f.read())
 
 
+@router.post("/ui/events/{event_id}/status")
+async def update_event_status(
+    event_id: int,
+    status: str = Form(...),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    status_value = status.strip()
+    if status_value not in EVENT_STATUS_OPTIONS:
+        raise HTTPException(status_code=400, detail="Invalid event status")
+
+    updated = hoh.events.update_event_status(
+        event_id=event_id, status=status_value, org_id=1
+    )
+
+    if not updated:
+        raise HTTPException(status_code=404, detail="Event not found")
+
+    return RedirectResponse(url="/ui/events", status_code=303)
+
+
 @router.get("/ui/events/legacy", response_class=HTMLResponse)
 async def list_events_legacy(hoh: HOHService = Depends(get_hoh_service)) -> HTMLResponse:
     """Legacy events UI (kept for reference)."""
@@ -635,7 +656,29 @@ async def list_events_legacy(hoh: HOHService = Depends(get_hoh_service)) -> HTML
         created_at_display = (
             created_at.strftime("%Y-%m-%d %H:%M") if created_at else ""
         )
-        status = row.get("status") or ""
+        status = (row.get("status") or "").strip()
+        status_options = list(EVENT_STATUS_OPTIONS)
+        if status and status not in status_options:
+            status_options = [status] + status_options
+
+        options_html = []
+        if not status:
+            options_html.append('<option value="" selected disabled>—</option>')
+
+        for opt in status_options:
+            opt_label = EVENT_STATUS_LABELS.get(opt, opt)
+            selected_attr = " selected" if opt == status else ""
+            options_html.append(
+                f'<option value="{escape(opt)}"{selected_attr}>{escape(opt_label)}</option>'
+            )
+
+        status_form = """
+            <form method="post" action="/ui/events/{event_id}/status" class="mb-0">
+              <select name="status" class="form-select form-select-sm" onchange="this.form.submit()">
+                {options}
+              </select>
+            </form>
+        """.format(event_id=event_id, options="".join(options_html))
         delivery_status = row.get("latest_delivery_status")
         delivery_status_display = (
             delivery_status.capitalize()
@@ -809,7 +852,7 @@ async def list_events_legacy(hoh: HOHService = Depends(get_hoh_service)) -> HTML
               <td>{time}</td>
               <td>{load_in}</td>
               <td>{hall}</td>
-              <td>{status}</td>
+              <td>{status_form}</td>
               <td><span class=\"badge text-bg-{delivery_status_class}\">{delivery_status}</span></td>
               <td class=\"text-break\">{notes}</td>
               <td>{producer_phone}</td>
@@ -833,7 +876,7 @@ async def list_events_legacy(hoh: HOHService = Depends(get_hoh_service)) -> HTML
                 time=escape(time_display),
                 load_in=escape(load_in_display),
                 hall=escape(hall_label or ""),
-                status=escape(status),
+                status_form=status_form,
                 delivery_status=escape(delivery_status_display),
                 delivery_status_class=delivery_status_class,
                 notes=escape(notes),

@@ -161,6 +161,37 @@ class EventRepository:
         with get_session() as session:
             session.execute(query, params)
 
+    def update_event_status(
+        self,
+        *,
+        event_id: int,
+        status: str,
+        org_id: int,
+    ) -> bool:
+        """Update only the status field for an event. Returns True if a row was updated."""
+
+        query = text(
+            """
+            UPDATE events
+            SET status = :status,
+                updated_at = :now
+            WHERE event_id = :event_id
+              AND org_id = :org_id
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(
+                query,
+                {
+                    "status": status,
+                    "event_id": event_id,
+                    "org_id": org_id,
+                    "now": now_utc(),
+                },
+            )
+            return result.rowcount > 0
+
     def update_event(
         self,
         org_id: int,
