@@ -220,8 +220,9 @@ def test_compute_send_at_with_naive_now_datetime():
     fixed_time = "09:00"
     days_before = 3
     
-    # Current time: Monday, July 8, 2024 at 10:00 (naive datetime)
-    now_naive = datetime(2024, 7, 8, 7, 0)  # 10:00 Israel = 07:00 UTC in summer
+    # Current time: Monday, July 8, 2024 at 07:00 UTC (naive datetime)
+    # This is treated as UTC by the function, which is 10:00 Israel time in summer (UTC+3)
+    now_naive = datetime(2024, 7, 8, 7, 0)
     
     # Should still work, treating naive as UTC
     result = compute_send_at(event_date, fixed_time, days_before, now_naive, apply_weekend_rule=False)
