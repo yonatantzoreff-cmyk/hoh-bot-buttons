@@ -140,7 +140,7 @@ async def list_scheduler_jobs(
 
 @router.post("/api/scheduler/jobs/{job_id}/enable")
 async def toggle_job_enabled(
-    job_id: str,
+    job_id: int,
     enabled: bool = Query(..., description="Enable or disable the job"),
     org_id: int = Query(1, description="Organization ID"),
 ) -> dict:
@@ -167,7 +167,7 @@ async def toggle_job_enabled(
 
 @router.post("/api/scheduler/jobs/{job_id}/send-now")
 async def send_job_now(
-    job_id: str,
+    job_id: int,
     org_id: int = Query(1, description="Organization ID"),
 ) -> SendNowResponse:
     """Send a scheduled message immediately."""
