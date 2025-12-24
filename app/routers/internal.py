@@ -113,7 +113,7 @@ async def get_scheduler_diagnostics(
     """
     try:
         report = run_scheduler_diagnostics(org_id=org_id)
-        return JSONResponse(content=report, status_code=200)
+        return JSONResponse(content=report)
     except Exception as e:
         logger.error(f"Scheduler diagnostics failed: {e}", exc_info=True)
         raise HTTPException(

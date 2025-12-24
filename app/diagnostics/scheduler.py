@@ -8,16 +8,17 @@ Checks database connection, schema, data visibility, org scoping, endpoint queri
 import logging
 import json
 from typing import Optional, Dict, List, Any
-from datetime import datetime
 
 from sqlalchemy import text, inspect
-from sqlalchemy.engine import Engine
 
 from app.appdb import get_session, engine, DATABASE_URL
 from app.time_utils import now_utc, utc_to_local_datetime
 from app.repositories import EventRepository
 
 logger = logging.getLogger(__name__)
+
+# Constants
+SAMPLE_EVENTS_LIMIT = 5
 
 
 def run_scheduler_diagnostics(org_id: Optional[int] = None) -> Dict[str, Any]:
@@ -588,7 +589,7 @@ def check_fetch_diagnostics(org_id: int) -> Dict[str, Any]:
                     "name": e["name"],
                     "event_date": str(e["event_date"])
                 }
-                for e in future_events[:5]
+                for e in future_events[:SAMPLE_EVENTS_LIMIT]
             ]
         
         # Check timezone logic
