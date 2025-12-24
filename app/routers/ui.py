@@ -2736,7 +2736,7 @@ async def scheduler_page() -> HTMLResponse:
         <button id="cleanupBtn" class="btn btn-outline-danger">
           🗑️ Cleanup Old Logs
         </button>
-        <button class="btn btn-outline-secondary btn-sm ms-3" onclick="alert('JavaScript is working! Check console for logs.'); console.log('Test button clicked');">
+        <button class="btn btn-outline-secondary btn-sm ms-3" id="testJsBtn">
           🔍 Test JavaScript
         </button>
       </div>
@@ -3422,14 +3422,13 @@ async def scheduler_page() -> HTMLResponse:
       console.log('Scheduler page loaded - initializing...');
       
       try {
-        // Attach event listeners to buttons (in addition to inline onclick)
+        // Attach event listeners to buttons
         const fetchBtn = document.getElementById('fetchBtn');
         const cleanupBtn = document.getElementById('cleanupBtn');
+        const testJsBtn = document.getElementById('testJsBtn');
         
         if (fetchBtn) {
           console.log('Fetch button found, attaching click listener');
-          // Remove inline onclick and use addEventListener instead
-          fetchBtn.onclick = null;
           fetchBtn.addEventListener('click', fetchFutureEvents);
         } else {
           console.error('Fetch button not found in DOM!');
@@ -3437,10 +3436,17 @@ async def scheduler_page() -> HTMLResponse:
         
         if (cleanupBtn) {
           console.log('Cleanup button found, attaching click listener');
-          cleanupBtn.onclick = null;
           cleanupBtn.addEventListener('click', cleanupPastLogs);
         } else {
           console.error('Cleanup button not found in DOM!');
+        }
+        
+        if (testJsBtn) {
+          console.log('Test button found, attaching click listener');
+          testJsBtn.addEventListener('click', () => {
+            alert('JavaScript is working! Check console for logs.');
+            console.log('Test button clicked');
+          });
         }
         
         console.log('Loading scheduler settings...');
