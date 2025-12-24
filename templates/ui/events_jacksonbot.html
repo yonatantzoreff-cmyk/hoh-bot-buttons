@@ -1938,6 +1938,7 @@
         // Constants
         const EVENT_LOAD_TIMEOUT = 1000; // ms to wait for events to load before scrolling
         const NAVIGATION_SCROLL_DELAY = 500; // ms to wait before scrolling after navigation
+        let activeColumnMenu = null;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -2140,7 +2141,7 @@
                                     <div class="hall-body">
                                         <div class="table-toolbar">
                                             <div style="position: relative;">
-                                                <button type="button" class="btn-ghost" onclick="toggleColumnMenu('${escapeHtml(hallName)}')">Columns ▾</button>
+                                                <button type="button" class="btn-ghost column-menu-toggle" data-hall="${escapeHtml(hallName)}" onclick="toggleColumnMenu('${escapeHtml(hallName)}')">Columns ▾</button>
                                                 <div class="column-menu" id="column-menu-${hallName.replace(/\s+/g, '-')}">
                                                     ${TABLE_COLUMNS.map(col => `
                                                         <label>
@@ -2363,15 +2364,14 @@
                     </td>
                     <td data-col="info">
                         <div class="info-pill">
-                            <div class="row-meta">
-                                <span class="meta-chip">${eventDate || '—'}</span>
-                                <span class="meta-chip">${getDayOfWeek(event.event_date)}</span>
-                            </div>
                             <div class="event-info-grid">
-                                <div>
+                                <div style="display: grid; gap: 0.25rem;">
                                     <small>Date</small>
-                                    <input type="date" class="inline-edit" data-field="event_date" value="${eventDate}" 
-                                           onchange="markDirty(${event.event_id}, 'event_date', this.value)">
+                                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                        <input type="date" class="inline-edit" data-field="event_date" value="${eventDate}" 
+                                               onchange="markDirty(${event.event_id}, 'event_date', this.value)">
+                                        <span style="color: var(--text-secondary); font-weight: 600;">${getDayOfWeek(event.event_date)}</span>
+                                    </div>
                                 </div>
                                 <div>
                                     <small>Event</small>
@@ -3977,9 +3977,22 @@
             });
             const menu = document.getElementById(`column-menu-${hallName.replace(/\s+/g, '-')}`);
             if (menu) {
-                menu.classList.toggle('open');
+                const willOpen = !menu.classList.contains('open');
+                menu.classList.toggle('open', willOpen);
+                activeColumnMenu = willOpen ? menu : null;
             }
         }
+
+        document.addEventListener('click', (e) => {
+            if (activeColumnMenu) {
+                const withinMenu = activeColumnMenu.contains(e.target);
+                const toggleBtn = e.target.closest('.column-menu-toggle');
+                if (!withinMenu && !toggleBtn) {
+                    activeColumnMenu.classList.remove('open');
+                    activeColumnMenu = null;
+                }
+            }
+        });
 
         // Toast Notifications
         function showToast(message, type = 'info') {
