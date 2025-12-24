@@ -28,6 +28,9 @@ from app.utils.phone import normalize_phone_to_e164_il
 
 logger = logging.getLogger(__name__)
 
+# Phone validation constants
+MIN_PHONE_DIGITS = 10  # Minimum number of digits required for a valid phone number
+
 
 def _generate_job_id(org_id: int, entity_type: str, entity_id: int, message_type: str) -> str:
     """
@@ -63,8 +66,8 @@ def _validate_phone(phone: Optional[str]) -> tuple[bool, Optional[str]]:
     
     try:
         normalized = normalize_phone_to_e164_il(phone)
-        # Basic validation - should have at least 10 digits
-        if len(normalized.replace("+", "").replace("-", "")) >= 10:
+        # Basic validation - should have at least MIN_PHONE_DIGITS digits
+        if len(normalized.replace("+", "").replace("-", "")) >= MIN_PHONE_DIGITS:
             return True, normalized
         return False, None
     except Exception as e:

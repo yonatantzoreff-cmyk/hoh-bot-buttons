@@ -2541,6 +2541,7 @@ class ScheduledMessageRepository:
                 "send_at": send_at,
                 "now": now_utc()
             })
+            session.commit()
 
     def update_status(
         self,
