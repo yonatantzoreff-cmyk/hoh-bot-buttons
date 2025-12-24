@@ -884,11 +884,6 @@
             background: var(--bg-tertiary);
         }
 
-        .status-option-label {
-            color: var(--text-secondary);
-            font-size: 0.9rem;
-        }
-
         [data-theme="dark"] .status-chip.draft {
             background: #3d4157;
             color: #c4c7d7;
@@ -1864,12 +1859,15 @@
             container.innerHTML = `
                 <div class="hall-tabs">
                     <div class="hall-tab-list">
-                        ${hallEntries.map(([hallName, events]) => `
-                            <button type="button" class="hall-tab ${hallName === activeHall ? 'active' : ''}" data-hall="${escapeHtml(hallName)}" onclick="selectHallTabFromButton(this)">
-                                <span class="hall-tab-name">${escapeHtml(hallName)}</span>
-                                <span class="hall-tab-count">${events.length}</span>
-                            </button>
-                        `).join('')}
+                        ${hallEntries.map(([hallName, events]) => {
+                            const confirmedCount = events.filter(e => (e.status || '').toLowerCase() === 'confirmed').length;
+                            return `
+                                <button type="button" class="hall-tab ${hallName === activeHall ? 'active' : ''}" data-hall="${escapeHtml(hallName)}" onclick="selectHallTabFromButton(this)">
+                                    <span class="hall-tab-name">${escapeHtml(hallName)}</span>
+                                    <span class="hall-tab-count">(${events.length}/${confirmedCount})</span>
+                                </button>
+                            `;
+                        }).join('')}
                     </div>
                     <div class="hall-tab-panels">
                         ${hallEntries.map(([hallName, events]) => `
@@ -2016,15 +2014,19 @@
         function updateStatusTrigger(eventId, status) {
             const trigger = document.querySelector(`#status-select-${eventId} .status-select-trigger`);
             const menu = document.getElementById(`status-menu-${eventId}`);
-            if (!trigger) return;
+            const container = document.getElementById(`status-select-${eventId}`);
+            if (!trigger || !container) return;
 
             trigger.innerHTML = `${renderStatusChip({ status })}<span class="status-select-caret">▼</span>`;
+            container.dataset.status = (status || '').toLowerCase();
 
             if (menu) {
                 menu.querySelectorAll('.status-option').forEach(option => {
                     option.classList.toggle('selected', option.dataset.value === status);
                 });
             }
+
+            updateHallConfirmedCounts();
         }
 
         function renderEventRow(event) {
@@ -2069,7 +2071,7 @@
                                onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
                     </td>
                     <td>
-                        <div class="status-select-container" id="status-select-${event.event_id}">
+                        <div class="status-select-container" id="status-select-${event.event_id}" data-status="${statusClass}">
                             <button type="button" class="status-select-trigger" onclick="toggleStatusMenu(${event.event_id})" aria-haspopup="listbox" aria-expanded="false">
                                 ${renderStatusChip(event)}
                                 <span class="status-select-caret">▼</span>
@@ -2078,7 +2080,6 @@
                                 ${STATUS_OPTIONS.map(statusOption => `
                                     <button type="button" class="status-option ${statusOption === statusValue ? 'selected' : ''}" role="option" data-value="${statusOption}" onclick="selectStatus(${event.event_id}, '${statusOption}')">
                                         ${renderStatusChip({ status: statusOption })}
-                                        <span class="status-option-label">${statusOption.replace('_', ' ')}</span>
                                     </button>
                                 `).join('')}
                             </div>
@@ -2284,6 +2285,18 @@
             if (eventData.status !== undefined) {
                 updateStatusTrigger(eventId, eventData.status || 'draft');
             }
+        }
+
+        function updateHallConfirmedCounts() {
+            document.querySelectorAll('.hall-tab-panel').forEach(panel => {
+                const hallName = panel.dataset.hall;
+                const totalEvents = panel.querySelectorAll('tr.event-row').length;
+                const confirmedEvents = panel.querySelectorAll('.status-select-container[data-status="confirmed"]').length;
+                const tab = document.querySelector(`.hall-tab[data-hall="${CSS.escape(hallName)}"] .hall-tab-count`);
+                if (tab) {
+                    tab.textContent = `(${totalEvents}/${confirmedEvents})`;
+                }
+            });
         }
 
         // Contact Dropdown (PHASE 4)
