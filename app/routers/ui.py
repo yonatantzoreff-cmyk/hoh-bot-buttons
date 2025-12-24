@@ -2086,6 +2086,7 @@ async def shift_organizer_page(
     function renderEvent(event, shifts) {{
       const eventDate = new Date(event.event_date + 'T00:00:00');
       const dateStr = eventDate.toLocaleDateString('en-GB');
+      const dayStr = eventDate.toLocaleDateString('en-GB', {{ weekday: 'short' }});
       const showTime = event.show_time ? new Date(event.show_time).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : '-';
       const loadInTime = event.load_in_time ? new Date(event.load_in_time).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : '-';
       
@@ -2097,7 +2098,7 @@ async def shift_organizer_page(
                 <strong>${{event.name}}</strong>
               </div>
               <div class="col-md-2">
-                <small class="text-muted">Date:</small> ${{dateStr}}
+                <small class="text-muted">Date:</small> ${{dateStr}} <span class="text-muted">(${{dayStr}})</span>
               </div>
               <div class="col-md-2">
                 <small class="text-muted">Show:</small> ${{showTime}}
