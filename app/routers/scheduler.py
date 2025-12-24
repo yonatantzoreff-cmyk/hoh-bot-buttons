@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
+from sqlalchemy import text
 
 from app.dependencies import get_hoh_service
 from app.hoh_service import HOHService
@@ -23,6 +24,7 @@ from app.services.scheduler_job_builder import (
     build_or_update_jobs_for_event,
     build_or_update_jobs_for_shifts,
 )
+from app.appdb import get_session
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -64,9 +66,6 @@ async def list_scheduler_jobs(
     employees_repo = EmployeeRepository()
     
     # Build query to get all scheduled messages for this org
-    from sqlalchemy import text
-    from app.appdb import get_session
-    
     query = """
         SELECT 
             sm.*,
@@ -376,9 +375,6 @@ async def cleanup_past_logs(
     - Jobs in 'scheduled', 'retrying', or 'blocked' status
     """
     try:
-        from sqlalchemy import text
-        from app.appdb import get_session
-        
         # Calculate cutoff date
         now = now_utc()
         cutoff_date = now - timedelta(days=days)
