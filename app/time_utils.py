@@ -13,7 +13,7 @@ Key principles:
 """
 
 import logging
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Optional
 
@@ -242,3 +242,93 @@ def format_datetime_for_display(dt: datetime, include_date: bool = True) -> str:
         return local_dt.strftime("%d/%m/%Y %H:%M")
     else:
         return local_dt.strftime("%H:%M")
+
+
+def compute_send_at(
+    base_date: date,
+    fixed_time: str,
+    days_before: int,
+    now: datetime,
+    apply_weekend_rule: bool
+) -> datetime:
+    """
+    Calculate the send_at timestamp for scheduled messages with weekend rule support.
+    
+    This function is used for scheduling messages like INIT, TECH_REMINDER, and SHIFT_REMINDER.
+    The weekend rule applies ONLY for INIT messages - TECH_REMINDER and SHIFT_REMINDER can be 
+    sent on Friday/Saturday.
+    
+    Algorithm:
+    1) Calculate candidate = (base_date at fixed_time in Asia/Jerusalem) - days_before days
+    2) If candidate < now: candidate = (tomorrow at fixed_time)
+    3) If apply_weekend_rule is True:
+       - If candidate is Friday -> add 2 days (Sunday)
+       - If candidate is Saturday -> add 1 day (Sunday)
+    
+    Args:
+        base_date: The base event date (e.g., event_date)
+        fixed_time: Time string in "HH:MM" format for the scheduled message (e.g., "09:00")
+        days_before: Number of days before base_date to schedule (e.g., 3 for "3 days before event")
+        now: Current datetime (timezone-aware, for comparison)
+        apply_weekend_rule: If True, move Friday/Saturday to Sunday (use for INIT only)
+    
+    Returns:
+        Timezone-aware datetime in UTC representing when the message should be sent
+        
+    Examples:
+        # INIT message 3 days before event on Thursday at 09:00
+        >>> compute_send_at(date(2024, 7, 18), "09:00", 3, now_utc(), True)
+        # Returns Monday 2024-07-15 09:00 Israel time (as UTC)
+        
+        # INIT message would be Friday, moved to Sunday
+        >>> compute_send_at(date(2024, 7, 20), "09:00", 1, now_utc(), True)
+        # Returns Sunday 2024-07-21 09:00 Israel time (as UTC)
+        
+        # TECH_REMINDER on Friday - no weekend rule
+        >>> compute_send_at(date(2024, 7, 20), "09:00", 1, now_utc(), False)
+        # Returns Friday 2024-07-19 09:00 Israel time (as UTC)
+    """
+    # Ensure now is timezone-aware
+    if now.tzinfo is None:
+        logger.warning("compute_send_at received naive datetime for 'now', assuming UTC")
+        now = now.replace(tzinfo=timezone.utc)
+    
+    # Step 1: Calculate initial candidate = base_date - days_before at fixed_time
+    candidate_date = base_date - timedelta(days=days_before)
+    
+    # Parse the time and combine with candidate_date in Israel timezone
+    candidate = parse_local_time_to_utc(candidate_date, fixed_time)
+    
+    # Step 2: If candidate is in the past, move to tomorrow at fixed_time
+    if candidate < now:
+        # Get tomorrow's date in Israel timezone
+        now_israel = utc_to_local_datetime(now)
+        tomorrow_israel = now_israel.date() + timedelta(days=1)
+        candidate = parse_local_time_to_utc(tomorrow_israel, fixed_time)
+    
+    # Step 3: Apply weekend rule if requested (INIT messages only)
+    if apply_weekend_rule:
+        # Convert to Israel time to check the weekday
+        candidate_israel = utc_to_local_datetime(candidate)
+        weekday = candidate_israel.weekday()  # Monday=0, Sunday=6
+        
+        if weekday == 4:  # Friday
+            # Move to Sunday (add 2 days)
+            new_date = candidate_israel.date() + timedelta(days=2)
+            candidate = parse_local_time_to_utc(new_date, fixed_time)
+            logger.info(
+                "Weekend rule: Moving from Friday to Sunday: %s -> %s",
+                candidate_israel.date(),
+                new_date
+            )
+        elif weekday == 5:  # Saturday
+            # Move to Sunday (add 1 day)
+            new_date = candidate_israel.date() + timedelta(days=1)
+            candidate = parse_local_time_to_utc(new_date, fixed_time)
+            logger.info(
+                "Weekend rule: Moving from Saturday to Sunday: %s -> %s",
+                candidate_israel.date(),
+                new_date
+            )
+    
+    return candidate
