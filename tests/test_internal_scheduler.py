@@ -5,18 +5,6 @@ import os
 from unittest.mock import patch, AsyncMock, MagicMock
 from fastapi.testclient import TestClient
 
-# Set required env vars for imports to work
-os.environ.setdefault("TWILIO_ACCOUNT_SID", "test_sid")
-os.environ.setdefault("TWILIO_AUTH_TOKEN", "test_token")
-os.environ.setdefault("CONTENT_SID_INIT", "test")
-os.environ.setdefault("CONTENT_SID_RANGES", "test")
-os.environ.setdefault("CONTENT_SID_HALVES", "test")
-os.environ.setdefault("CONTENT_SID_CONFIRM", "test")
-os.environ.setdefault("CONTENT_SID_NOT_SURE", "test")
-os.environ.setdefault("CONTENT_SID_CONTACT", "test")
-os.environ.setdefault("CONTENT_SID_SHIFT_REMINDER", "test")
-os.environ.setdefault("CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT", "test")
-
 
 def test_internal_router_exists():
     """Test that the internal router is properly defined."""
