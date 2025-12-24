@@ -2730,13 +2730,13 @@ async def scheduler_page() -> HTMLResponse:
     <!-- Action Buttons Row -->
     <div class="row mb-3">
       <div class="col">
-        <button id="fetchBtn" class="btn btn-success me-2" onclick="fetchFutureEvents()">
+        <button id="fetchBtn" class="btn btn-success me-2">
           🔄 Fetch Future Events
         </button>
-        <button id="cleanupBtn" class="btn btn-outline-danger" onclick="cleanupPastLogs()">
+        <button id="cleanupBtn" class="btn btn-outline-danger">
           🗑️ Cleanup Old Logs
         </button>
-        <button class="btn btn-outline-secondary btn-sm ms-3" onclick="alert('JavaScript is working! Check console for logs.')">
+        <button class="btn btn-outline-secondary btn-sm ms-3" onclick="alert('JavaScript is working! Check console for logs.'); console.log('Test button clicked');">
           🔍 Test JavaScript
         </button>
       </div>
@@ -3422,6 +3422,27 @@ async def scheduler_page() -> HTMLResponse:
       console.log('Scheduler page loaded - initializing...');
       
       try {
+        // Attach event listeners to buttons (in addition to inline onclick)
+        const fetchBtn = document.getElementById('fetchBtn');
+        const cleanupBtn = document.getElementById('cleanupBtn');
+        
+        if (fetchBtn) {
+          console.log('Fetch button found, attaching click listener');
+          // Remove inline onclick and use addEventListener instead
+          fetchBtn.onclick = null;
+          fetchBtn.addEventListener('click', fetchFutureEvents);
+        } else {
+          console.error('Fetch button not found in DOM!');
+        }
+        
+        if (cleanupBtn) {
+          console.log('Cleanup button found, attaching click listener');
+          cleanupBtn.onclick = null;
+          cleanupBtn.addEventListener('click', cleanupPastLogs);
+        } else {
+          console.error('Cleanup button not found in DOM!');
+        }
+        
         console.log('Loading scheduler settings...');
         loadSettings();
         
