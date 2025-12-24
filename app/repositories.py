@@ -173,6 +173,8 @@ class EventRepository:
         load_in_time=_NO_UPDATE,
         producer_contact_id: Optional[int] = _NO_UPDATE,
         technical_contact_id: Optional[int] = _NO_UPDATE,
+        status: Optional[str] = _NO_UPDATE,
+        next_followup_at=_NO_UPDATE,
         notes: Optional[str] = _NO_UPDATE,
     ) -> None:
         sets = ["updated_at = :now"]
@@ -205,6 +207,14 @@ class EventRepository:
         if technical_contact_id is not _NO_UPDATE:
             sets.append("technical_contact_id = :technical_contact_id")
             params["technical_contact_id"] = technical_contact_id
+
+        if status is not _NO_UPDATE:
+            sets.append("status = :status")
+            params["status"] = status
+
+        if next_followup_at is not _NO_UPDATE:
+            sets.append("next_followup_at = :next_followup_at")
+            params["next_followup_at"] = next_followup_at
 
         if notes is not _NO_UPDATE:
             sets.append("notes = :notes")
@@ -268,6 +278,7 @@ class EventRepository:
                 e.technical_contact_id,
                 tech.name AS technical_name,
                 tech.phone AS technical_phone,
+                e.next_followup_at,
                 e.created_at
             FROM events e
             LEFT JOIN halls h ON e.hall_id = h.hall_id
@@ -712,6 +723,71 @@ class ConversationRepository:
                     "now": now_utc(),
                 },
             )
+    
+    def update_conversation_state(
+        self,
+        org_id: int,
+        conversation_id: int,
+        *,
+        expected_input: Optional[str] = None,
+        last_prompt_key: Optional[str] = None,
+        last_template_sid: Optional[str] = None,
+        last_template_vars: Optional[dict] = None,
+    ) -> None:
+        """Update conversation state machine fields."""
+        sets = ["updated_at = :now"]
+        params = {
+            "org_id": org_id,
+            "conversation_id": conversation_id,
+            "now": now_utc(),
+        }
+        
+        if expected_input is not None:
+            sets.append("expected_input = :expected_input")
+            params["expected_input"] = expected_input
+        
+        if last_prompt_key is not None:
+            sets.append("last_prompt_key = :last_prompt_key")
+            params["last_prompt_key"] = last_prompt_key
+        
+        if last_template_sid is not None:
+            sets.append("last_template_sid = :last_template_sid")
+            params["last_template_sid"] = last_template_sid
+        
+        if last_template_vars is not None:
+            sets.append("last_template_vars = :last_template_vars")
+            params["last_template_vars"] = json.dumps(last_template_vars, ensure_ascii=False)
+        
+        if len(sets) == 1:  # Only updated_at
+            return
+        
+        query = text(
+            f"""
+            UPDATE conversations
+            SET {', '.join(sets)}
+            WHERE org_id = :org_id AND conversation_id = :conversation_id
+            """
+        )
+        
+        with get_session() as session:
+            session.execute(query, params)
+    
+    def get_conversation_by_id(self, org_id: int, conversation_id: int):
+        """Get conversation by ID with all state fields."""
+        query = text(
+            """
+            SELECT *
+            FROM conversations
+            WHERE org_id = :org_id AND conversation_id = :conversation_id
+            """
+        )
+        
+        with get_session() as session:
+            result = session.execute(
+                query,
+                {"org_id": org_id, "conversation_id": conversation_id}
+            )
+            return result.mappings().first()
 
 
 class MessageRepository:
@@ -1148,6 +1224,145 @@ class MessageRepository:
 
             return True
 
+    def get_unread_summary(self, org_id: int, user_id: str = "admin", limit: int = 5) -> dict:
+        """
+        Get notification summary with unread count and recent events with new messages.
+        Returns up to `limit` events with their latest message info.
+        """
+        query = text(
+            """
+            WITH user_state AS (
+                SELECT COALESCE(last_seen_message_id, 0) AS last_seen_id,
+                       COALESCE(last_seen_at, '1970-01-01'::timestamptz) AS last_seen_time
+                FROM user_notification_state
+                WHERE org_id = :org_id AND user_id = :user_id
+            ),
+            unread_messages AS (
+                SELECT m.message_id, m.event_id, m.received_at, m.body
+                FROM messages m
+                CROSS JOIN user_state us
+                WHERE m.org_id = :org_id
+                  AND m.direction = 'incoming'
+                  AND (m.message_id > us.last_seen_id OR m.received_at > us.last_seen_time)
+            ),
+            latest_incoming_messages AS (
+                SELECT DISTINCT ON (event_id)
+                    event_id,
+                    body AS last_message_snippet
+                FROM messages
+                WHERE org_id = :org_id AND direction = 'incoming'
+                ORDER BY event_id, received_at DESC
+            ),
+            event_summary AS (
+                SELECT 
+                    e.event_id,
+                    e.name AS event_name,
+                    e.event_date,
+                    h.name AS hall_name,
+                    h.hall_id,
+                    COUNT(um.message_id) AS unread_count,
+                    MAX(um.received_at) AS last_message_at,
+                    lim.last_message_snippet
+                FROM unread_messages um
+                JOIN events e ON um.event_id = e.event_id
+                LEFT JOIN halls h ON e.hall_id = h.hall_id
+                LEFT JOIN latest_incoming_messages lim ON e.event_id = lim.event_id
+                GROUP BY e.event_id, e.name, e.event_date, h.name, h.hall_id, lim.last_message_snippet
+                ORDER BY MAX(um.received_at) DESC
+                LIMIT :limit
+            )
+            SELECT 
+                (SELECT COUNT(*) FROM unread_messages) AS unread_count_total,
+                COALESCE(
+                    json_agg(
+                        json_build_object(
+                            'event_id', es.event_id,
+                            'event_name', es.event_name,
+                            'event_date', es.event_date,
+                            'hall_id', es.hall_id,
+                            'hall_name', es.hall_name,
+                            'unread_count_for_event', es.unread_count,
+                            'last_message_snippet', LEFT(es.last_message_snippet, 100),
+                            'last_message_at', es.last_message_at
+                        )
+                    ) FILTER (WHERE es.event_id IS NOT NULL),
+                    '[]'::json
+                ) AS items
+            FROM event_summary es
+            """
+        )
+        
+        with get_session() as session:
+            result = session.execute(query, {
+                "org_id": org_id,
+                "user_id": user_id,
+                "limit": limit
+            }).mappings().first()
+            
+            if result:
+                return {
+                    "unread_count_total": result["unread_count_total"] or 0,
+                    "items": result["items"] if result["items"] else []
+                }
+            return {"unread_count_total": 0, "items": []}
+
+    def get_recent_messages_with_events(self, org_id: int, limit: int = 200) -> list[dict]:
+        """
+        Get recent messages with event details for the full messages view.
+        """
+        query = text(
+            """
+            SELECT
+                m.message_id,
+                m.event_id,
+                e.name AS event_name,
+                e.event_date,
+                e.show_time,
+                h.name AS hall_name,
+                m.direction,
+                m.body,
+                m.sent_at,
+                m.received_at,
+                m.created_at,
+                c.name AS contact_name,
+                c.phone AS contact_phone
+            FROM messages m
+            LEFT JOIN events e ON m.event_id = e.event_id
+            LEFT JOIN halls h ON e.hall_id = h.hall_id
+            LEFT JOIN contacts c ON m.contact_id = c.contact_id
+            WHERE m.org_id = :org_id
+            ORDER BY COALESCE(m.received_at, m.sent_at, m.created_at) DESC
+            LIMIT :limit
+            """
+        )
+        
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "limit": limit})
+            return result.mappings().all()
+
+    def mark_all_as_read(self, org_id: int, user_id: str = "admin") -> None:
+        """
+        Mark all messages as read by updating the user's last_seen state.
+        """
+        # Use a CTE to compute max_message_id once
+        query = text(
+            """
+            WITH max_msg AS (
+                SELECT COALESCE(MAX(message_id), 0) AS max_id FROM messages WHERE org_id = :org_id
+            )
+            INSERT INTO user_notification_state (org_id, user_id, last_seen_message_id, last_seen_at, updated_at)
+            SELECT :org_id, :user_id, max_id, NOW(), NOW() FROM max_msg
+            ON CONFLICT (org_id, user_id)
+            DO UPDATE SET 
+                last_seen_message_id = (SELECT max_id FROM max_msg),
+                last_seen_at = NOW(),
+                updated_at = NOW()
+            """
+        )
+        
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id, "user_id": user_id})
+
 
 class TemplateRepository:
     """אחראי על טבלאות message_templates / followup_rules."""
@@ -1276,6 +1491,7 @@ class EmployeeRepository:
         is_active: bool = True,
     ) -> int:
         """יוצר עובד חדש ומחזיר employee_id"""
+        normalized_phone = normalize_phone_to_e164_il(phone)
         q = text("""
             INSERT INTO employees (org_id, name, phone, role, notes, is_active)
             VALUES (:org_id, :name, :phone, :role, :notes, :is_active)
@@ -1288,7 +1504,7 @@ class EmployeeRepository:
                 {
                     "org_id": org_id,
                     "name": name,
-                    "phone": phone,
+                    "phone": normalized_phone,
                     "role": role,
                     "notes": notes,
                     "is_active": is_active,
@@ -1320,6 +1536,7 @@ class EmployeeRepository:
 
     def get_employee_by_phone(self, org_id: int, phone: str):
         """מחזיר עובד לפי טלפון בתוך אותו org, או None"""
+        normalized_phone = normalize_phone_to_e164_il(phone)
         q = text("""
             SELECT *
             FROM employees
@@ -1332,7 +1549,7 @@ class EmployeeRepository:
                 q,
                 {
                     "org_id": org_id,
-                    "phone": phone,
+                    "phone": normalized_phone,
                 },
             )
             row = res.mappings().first()
@@ -1396,8 +1613,9 @@ class EmployeeRepository:
             params["name"] = name
 
         if phone is not None:
+            normalized_phone = normalize_phone_to_e164_il(phone)
             sets.append("phone = :phone")
-            params["phone"] = phone
+            params["phone"] = normalized_phone
 
         if role is not None:
             sets.append("role = :role")
@@ -1433,7 +1651,7 @@ class EmployeeShiftRepository:
         self,
         org_id: int,
         event_id: int,
-        employee_id: int,
+        employee_id: Optional[int],  # PHASE 2: Make nullable to allow empty shifts
         call_time,
         shift_role: Optional[str] = None,
         notes: Optional[str] = None,
@@ -1441,6 +1659,7 @@ class EmployeeShiftRepository:
         """
         יוצר משמרת חדשה לעובד באירוע מסוים.
         call_time = datetime (timezone-aware) לשעת כניסה.
+        PHASE 2: employee_id can be None for unassigned shifts.
         """
         q = text("""
             INSERT INTO employee_shifts (
@@ -1461,7 +1680,7 @@ class EmployeeShiftRepository:
                 {
                     "org_id": org_id,
                     "event_id": event_id,
-                    "employee_id": employee_id,
+                    "employee_id": employee_id,  # Can be None
                     "call_time": call_time,
                     "shift_role": shift_role,
                     "notes": notes,
@@ -1472,16 +1691,18 @@ class EmployeeShiftRepository:
             return shift_id
 
     def list_shifts_for_event(self, org_id: int, event_id: int):
-        """רשימת כל המשמרות באירוע מסוים"""
+        """רשימת כל המשמרות באירוע מסוים (PHASE 2: Handles unassigned shifts)"""
         q = text("""
-            SELECT s.*, e.name AS employee_name, e.phone AS employee_phone
+            SELECT s.*, 
+                   COALESCE(e.name, '(Unassigned)') AS employee_name, 
+                   e.phone AS employee_phone
             FROM employee_shifts s
-            JOIN employees e
+            LEFT JOIN employees e
               ON e.employee_id = s.employee_id
              AND e.org_id = s.org_id
             WHERE s.org_id = :org_id
               AND s.event_id = :event_id
-            ORDER BY s.call_time, e.name
+            ORDER BY s.call_time, COALESCE(e.name, 'ZZZZ')
         """)
 
         with get_session() as session:
@@ -1544,7 +1765,7 @@ class EmployeeShiftRepository:
         q = text("""
             SELECT s.*, e.name AS employee_name, e.phone AS employee_phone
             FROM employee_shifts s
-            JOIN employees e
+            LEFT JOIN employees e
               ON e.employee_id = s.employee_id
              AND e.org_id = s.org_id
             WHERE s.org_id = :org_id
@@ -1567,6 +1788,7 @@ class EmployeeShiftRepository:
         org_id: int,
         shift_id: int,
         *,
+        employee_id: Any = _NO_UPDATE,
         call_time=None,
         shift_role: Optional[str] = None,
         notes: Optional[str] = None,
@@ -1578,6 +1800,10 @@ class EmployeeShiftRepository:
             "shift_id": shift_id,
             "now": now_utc(),
         }
+
+        if employee_id is not _NO_UPDATE:
+            sets.append("employee_id = :employee_id")
+            params["employee_id"] = employee_id
 
         if call_time is not None:
             sets.append("call_time = :call_time")

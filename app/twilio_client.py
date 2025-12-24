@@ -118,10 +118,19 @@ def send_content_message(
 
     :param to: recipient phone (with or without the "whatsapp:" prefix)
     :param content_sid: Twilio Content SID
-    :param content_variables: variables dict to be JSON-encoded for Twilio
+    :param content_variables: variables dict to be JSON-encoded for Twilio.
+                              MUST be a dict mapping "1".."n" to values, NOT a list/tuple.
     :param messaging_service_sid: optional override for messaging service
     :param channel: messaging channel (defaults to "whatsapp")
+    :raises ValueError: if content_variables is a list or tuple
     """
+    
+    # Guard: Twilio requires content_variables as a JSON string of an object (dict), not array
+    if isinstance(content_variables, (list, tuple)):
+        raise ValueError(
+            "content_variables must be a dict mapping '1'..'n' to values, not a list or tuple. "
+            "Example: {'1': 'value1', '2': 'value2'}"
+        )
 
     to_addr = _normalize_to(to, channel=channel)
     msid = messaging_service_sid or DEFAULT_MESSAGING_SERVICE_SID

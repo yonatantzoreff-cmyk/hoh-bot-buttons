@@ -1,0 +1,3641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JacksonBot - Events Management</title>
+    
+    <style>
+        /* CSS Variables for Light/Dark Mode */
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f6f7fb;
+            --bg-tertiary: #eef0f7;
+            --text-primary: #323338;
+            --text-secondary: #676879;
+            --text-muted: #9699a6;
+            --border-color: #d0d4e4;
+            --accent-color: #0085ff;
+            --accent-hover: #0073e6;
+            --success-color: #00c875;
+            --warning-color: #fdab3d;
+            --danger-color: #e44258;
+            --info-color: #579bfc;
+            --chip-bg: #e6f4ff;
+            --chip-text: #0073e6;
+            --shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+            --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.12);
+        }
+
+        [data-theme="dark"] {
+            --bg-primary: #1c1f3b;
+            --bg-secondary: #292d4d;
+            --bg-tertiary: #353a5f;
+            --text-primary: #ffffff;
+            --text-secondary: #c4c7d7;
+            --text-muted: #8b8fa3;
+            --border-color: #3f4564;
+            --accent-color: #4da6ff;
+            --accent-hover: #66b3ff;
+            --success-color: #00d97e;
+            --warning-color: #f5a623;
+            --danger-color: #f16061;
+            --info-color: #5f9bff;
+            --chip-bg: #2d4a6d;
+            --chip-text: #66b3ff;
+            --shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+            --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            transition: background 0.3s, color 0.3s;
+        }
+
+        /* Header */
+        .header {
+            background: var(--bg-primary);
+            padding: 1.5rem 2rem;
+            box-shadow: var(--shadow);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-left {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        /* Hamburger Menu */
+        .hamburger-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            padding: 0.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            transition: all 0.3s;
+        }
+
+        .hamburger-btn span {
+            display: block;
+            width: 24px;
+            height: 3px;
+            background: var(--text-primary);
+            border-radius: 2px;
+            transition: all 0.3s;
+        }
+
+        .hamburger-btn.open span:nth-child(1) {
+            transform: rotate(45deg) translate(5px, 5px);
+        }
+
+        .hamburger-btn.open span:nth-child(2) {
+            opacity: 0;
+        }
+
+        .hamburger-btn.open span:nth-child(3) {
+            transform: rotate(-45deg) translate(7px, -6px);
+        }
+
+        .hamburger-menu {
+            position: fixed;
+            top: 80px;
+            right: -300px;
+            width: 280px;
+            background: var(--bg-primary);
+            border-left: 1px solid var(--border-color);
+            box-shadow: var(--shadow-hover);
+            transition: right 0.3s ease;
+            z-index: 99;
+            max-height: calc(100vh - 80px);
+            overflow-y: auto;
+        }
+
+        .hamburger-menu.open {
+            right: 0;
+        }
+
+        .hamburger-menu-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 98;
+            display: none;
+        }
+
+        .hamburger-menu-overlay.visible {
+            display: block;
+        }
+
+        .hamburger-menu-item {
+            display: block;
+            padding: 1rem 1.5rem;
+            color: var(--text-primary);
+            text-decoration: none;
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.2s;
+        }
+
+        .hamburger-menu-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .hamburger-menu-item:last-child {
+            border-bottom: none;
+        }
+
+        /* Theme Toggle */
+        .theme-toggle {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 0.4rem 0.8rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+        }
+
+        .theme-toggle:hover {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        /* Notification Bell */
+        .notification-bell {
+            position: relative;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 50%;
+            width: 42px;
+            height: 42px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+        }
+
+        .notification-bell:hover {
+            background: var(--accent-color);
+            transform: scale(1.05);
+        }
+
+        .notification-bell:hover .bell-icon {
+            filter: brightness(0) invert(1);
+        }
+
+        .notification-badge {
+            position: absolute;
+            top: -4px;
+            right: -4px;
+            background: var(--danger-color);
+            color: white;
+            border-radius: 10px;
+            min-width: 20px;
+            height: 20px;
+            padding: 0 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .notification-badge.hidden {
+            display: none;
+        }
+
+        /* Notification Panel */
+        .notification-panel {
+            position: absolute;
+            top: calc(100% + 10px);
+            right: 0;
+            width: 400px;
+            max-height: 600px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            box-shadow: var(--shadow-hover);
+            z-index: 1000;
+            display: none;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .notification-panel.visible {
+            display: flex;
+        }
+
+        .notification-panel-header {
+            padding: 1rem 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .notification-panel-header h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .notification-panel-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .notification-icon-btn {
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            padding: 0.3rem;
+            color: var(--text-secondary);
+            font-size: 1.1rem;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        .notification-icon-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .notification-list {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.5rem;
+        }
+
+        .notification-item {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 0.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: 1px solid transparent;
+        }
+
+        .notification-item:hover {
+            background: var(--bg-tertiary);
+            border-color: var(--border-color);
+        }
+
+        .notification-item-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 0.5rem;
+        }
+
+        .notification-item-title {
+            font-weight: 600;
+            color: var(--text-primary);
+            font-size: 0.95rem;
+        }
+
+        .notification-item-badge {
+            background: var(--chip-bg);
+            color: var(--chip-text);
+            padding: 0.2rem 0.5rem;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+
+        .notification-item-snippet {
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            margin-bottom: 0.5rem;
+            line-height: 1.4;
+        }
+
+        .notification-item-time {
+            color: var(--text-muted);
+            font-size: 0.75rem;
+        }
+
+        .notification-empty {
+            text-align: center;
+            padding: 3rem 1rem;
+            color: var(--text-muted);
+        }
+
+        .notification-panel-footer {
+            padding: 1rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: center;
+        }
+
+        .notification-show-all {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0.5rem 1.5rem;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .notification-show-all:hover {
+            background: var(--bg-tertiary);
+        }
+
+        /* Event Highlight Animation */
+        .event-highlight {
+            animation: highlightFade 2s ease-out;
+        }
+
+        @keyframes highlightFade {
+            0% {
+                background: rgba(0, 133, 255, 0.2);
+                transform: scale(1.01);
+            }
+            100% {
+                background: transparent;
+                transform: scale(1);
+            }
+        }
+
+        /* Month Selector */
+        .month-selector {
+            padding: 2rem;
+            background: var(--bg-primary);
+            margin: 2rem 2rem 1rem;
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+        }
+
+        .month-scale {
+            display: flex;
+            gap: 1.5rem;
+            overflow-x: auto;
+            padding: 1rem 0;
+            justify-content: center;
+        }
+
+        .month-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        .month-item:hover {
+            transform: translateY(-3px);
+        }
+
+        .month-circle {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 600;
+            color: var(--text-secondary);
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+
+        /* Month colors: past/current/future (PHASE 2 - Task 4) */
+        .month-circle.past {
+            background: #d1d5db;
+            color: #6b7280;
+        }
+
+        .month-circle.current {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .month-circle.future {
+            background: #ffffff;
+            color: var(--text-primary);
+        }
+
+        [data-theme="dark"] .month-circle.past {
+            background: #4b5563;
+            color: #9ca3af;
+        }
+
+        [data-theme="dark"] .month-circle.current {
+            background: #10b981;
+            color: white;
+        }
+
+        [data-theme="dark"] .month-circle.future {
+            background: #6b7280;
+            color: #e5e7eb;
+        }
+
+        .month-circle.selected {
+            outline: 3px solid var(--accent-color);
+            outline-offset: 2px;
+            box-shadow: var(--shadow-hover);
+        }
+
+        .month-label {
+            margin-top: 0.5rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+        }
+
+        /* Main Container */
+        .container {
+            padding: 0 2rem 2rem;
+            width: calc(100% - 4rem);
+            max-width: none;
+            margin: 0 auto 2rem;
+        }
+
+        .hall-tabs {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            overflow: visible;
+        }
+
+        .hall-tab-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+            padding: 1rem 1.5rem 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            position: sticky;
+            top: 80px;
+            background: var(--bg-primary);
+            z-index: 10;
+        }
+
+        .hall-tab {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.55rem 0.9rem;
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: var(--shadow);
+        }
+
+        .hall-tab:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .hall-tab.active {
+            background: var(--accent-color);
+            border-color: var(--accent-color);
+            color: white;
+            box-shadow: var(--shadow-hover);
+        }
+
+        .hall-tab-name {
+            font-weight: 700;
+        }
+
+        .hall-tab-count {
+            background: rgba(255, 255, 255, 0.2);
+            color: inherit;
+            padding: 0.15rem 0.55rem;
+            border-radius: 999px;
+            font-size: 0.85rem;
+            font-weight: 600;
+            border: 1px solid rgba(0, 0, 0, 0.05);
+        }
+
+        .hall-tab.active .hall-tab-count {
+            background: rgba(255, 255, 255, 0.25);
+            border-color: rgba(255, 255, 255, 0.3);
+        }
+
+        .hall-tab-panels {
+            padding: 0 1.5rem 1.5rem;
+            overflow: visible;
+        }
+
+        .hall-tab-panel {
+            display: none;
+            overflow: visible;
+        }
+
+        .hall-tab-panel.active {
+            display: block;
+        }
+
+        /* Hall Section */
+        .hall-section {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            margin-bottom: 1.5rem;
+            overflow: visible;
+        }
+
+        .hall-header {
+            padding: 1.5rem 2rem;
+            background: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .hall-header:hover {
+            background: var(--bg-secondary);
+        }
+
+        .hall-header.static {
+            cursor: default;
+        }
+
+        .hall-header.static:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .hall-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: var(--text-primary);
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .hall-count {
+            background: var(--chip-bg);
+            color: var(--chip-text);
+            padding: 0.3rem 0.8rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        .hall-body {
+            padding: 1.5rem;
+        }
+
+        .hall-body.hidden {
+            display: none;
+        }
+
+        /* Events Table */
+        .events-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .events-table thead {
+            background: var(--bg-secondary);
+        }
+
+        .events-table th {
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            cursor: move;
+            user-select: none;
+            position: relative;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .events-table th:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .events-table th.dragging {
+            opacity: 0.4;
+        }
+
+        .events-table th.drag-over {
+            border-left: 3px solid var(--accent-color);
+        }
+
+        /* PHASE 5: Resizable columns */
+        .events-table th .resize-handle {
+            position: absolute;
+            right: 0;
+            top: 0;
+            width: 5px;
+            height: 100%;
+            cursor: col-resize;
+            user-select: none;
+            z-index: 10;
+            background: transparent;
+        }
+
+        .events-table th .resize-handle:hover,
+        .events-table th .resize-handle.resizing {
+            background: var(--accent-color);
+        }
+
+        .events-table th.resizing {
+            cursor: col-resize;
+            user-select: none;
+        }
+
+        /* Prevent text selection during resize */
+        body.resizing-column {
+            user-select: none;
+            cursor: col-resize;
+        }
+
+        .events-table th[data-col="expander"] {
+            cursor: default;
+        }
+
+        .events-table th[data-col="expander"]:hover {
+            background: var(--bg-secondary);
+        }
+
+        .events-table th::before {
+            content: '⋮⋮';
+            color: var(--text-muted);
+            font-size: 0.9rem;
+            margin-right: 0.5rem;
+            opacity: 0.5;
+        }
+
+        .events-table th[data-col="expander"]::before {
+            content: '';
+        }
+
+        .events-table th:hover::before {
+            opacity: 1;
+        }
+
+        .events-table th.sortable::after {
+            content: ' ↕';
+            color: var(--text-muted);
+            font-size: 0.8rem;
+            margin-left: 0.3rem;
+        }
+
+        .events-table th.sorted-asc::after {
+            content: ' ↑';
+            color: var(--accent-color);
+        }
+
+        .events-table th.sorted-desc::after {
+            content: ' ↓';
+            color: var(--accent-color);
+        }
+
+        .events-table td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            vertical-align: middle;
+        }
+
+        .events-table tr {
+            transition: background 0.2s;
+        }
+
+        .events-table tbody tr:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .events-table tbody tr.dirty {
+            background: #fff9e6;
+            border-left: 4px solid var(--warning-color);
+        }
+
+        [data-theme="dark"] .events-table tbody tr.dirty {
+            background: #3d3420;
+        }
+
+        /* Inline Edit Fields */
+        .inline-edit {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+
+        .inline-edit:focus {
+            outline: none;
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0, 133, 255, 0.1);
+        }
+
+        .inline-edit:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+        }
+
+        /* Status Chip */
+        .status-chip {
+            display: inline-block;
+            padding: 0.4rem 0.9rem;
+            border-radius: 16px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+
+        .status-chip.draft {
+            background: #e6e9f0;
+            color: #5a5f7d;
+        }
+
+        .status-chip.pending {
+            background: #fff4e6;
+            color: #d97706;
+        }
+
+        .status-chip.confirmed {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .status-chip.cancelled {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .status-chip.follow_up {
+            background: #e0e7ff;
+            color: #4338ca;
+        }
+
+        .status-chip.contact_required {
+            background: #fce7f3;
+            color: #be185d;
+        }
+
+        [data-theme="dark"] .status-chip.draft {
+            background: #3d4157;
+            color: #c4c7d7;
+        }
+
+        [data-theme="dark"] .status-chip.pending {
+            background: #4d3d1a;
+            color: #fbbf24;
+        }
+
+        [data-theme="dark"] .status-chip.confirmed {
+            background: #1a4d3a;
+            color: #34d399;
+        }
+
+        [data-theme="dark"] .status-chip.follow_up {
+            background: #312e81;
+            color: #a5b4fc;
+        }
+
+        [data-theme="dark"] .status-chip.contact_required {
+            background: #831843;
+            color: #f9a8d4;
+        }
+
+        /* Delivery Status Chips (PHASE 1) */
+        .delivery-chip {
+            display: inline-block;
+            padding: 0.4rem 0.9rem;
+            border-radius: 16px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: capitalize;
+        }
+
+        /* Green: delivered, read */
+        .delivery-chip.delivered,
+        .delivery-chip.read {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        /* Orange: queued, sending, sent, accepted (in transit) */
+        .delivery-chip.queued,
+        .delivery-chip.sending,
+        .delivery-chip.sent,
+        .delivery-chip.accepted {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        /* Red: failed, undelivered */
+        .delivery-chip.failed,
+        .delivery-chip.undelivered {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        /* Gray: no status */
+        .delivery-chip.none {
+            background: #f3f4f6;
+            color: #6b7280;
+        }
+
+        [data-theme="dark"] .delivery-chip.delivered,
+        [data-theme="dark"] .delivery-chip.read {
+            background: #1a4d3a;
+            color: #34d399;
+        }
+
+        [data-theme="dark"] .delivery-chip.queued,
+        [data-theme="dark"] .delivery-chip.sending,
+        [data-theme="dark"] .delivery-chip.sent,
+        [data-theme="dark"] .delivery-chip.accepted {
+            background: #78350f;
+            color: #fbbf24;
+        }
+
+        [data-theme="dark"] .delivery-chip.failed,
+        [data-theme="dark"] .delivery-chip.undelivered {
+            background: #7f1d1d;
+            color: #fca5a5;
+        }
+
+        [data-theme="dark"] .delivery-chip.none {
+            background: #374151;
+            color: #9ca3af;
+        }
+
+        /* Buttons */
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            font-weight: 600;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        .btn-primary {
+            background: var(--accent-color);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: var(--accent-hover);
+            box-shadow: var(--shadow-hover);
+        }
+
+        .btn-success {
+            background: var(--success-color);
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #00b56a;
+            box-shadow: var(--shadow-hover);
+        }
+
+        .btn-sm {
+            padding: 0.3rem 0.7rem;
+            font-size: 0.8rem;
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        /* Action Icons (PHASE 3 - Task 5) */
+        .action-icon {
+            background: none;
+            border: none;
+            font-size: 1.2rem;
+            cursor: pointer;
+            padding: 0.3rem;
+            transition: transform 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .action-icon:hover {
+            transform: scale(1.2);
+        }
+
+        .action-icon.delete {
+            color: var(--danger-color);
+        }
+
+        .action-icon.whatsapp {
+            color: #25D366;
+        }
+
+        .action-icon.whatsapp.sent {
+            color: #0088cc;
+        }
+
+        .actions-container {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        /* Row Expander Column */
+        .expander-cell {
+            width: 40px;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .expander-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            color: var(--text-muted);
+            padding: 0.3rem;
+            transition: all 0.2s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 24px;
+            height: 24px;
+        }
+
+        .expander-btn:hover {
+            color: var(--accent-color);
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+        }
+
+        .expander-btn.expanded {
+            transform: rotate(90deg);
+        }
+
+        /* Row Details (Shifts) */
+        .row-details {
+            display: none;
+            background: var(--bg-secondary);
+            border-top: 1px solid var(--border-color);
+        }
+
+        .row-details.visible {
+            display: table-row;
+        }
+
+        .row-details-content {
+            padding: 1rem 1.5rem 1rem 3rem;
+        }
+
+        .row-details-header {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--text-secondary);
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .shifts-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-primary);
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .shifts-table th {
+            padding: 0.6rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.8rem;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .shifts-table td {
+            padding: 0.6rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .shifts-table tr.dirty {
+            background: #fff9e6;
+        }
+
+        [data-theme="dark"] .shifts-table tr.dirty {
+            background: #3d3420;
+        }
+
+        .add-shift-btn {
+            margin-top: 0.75rem;
+        }
+        
+        /* Reminder Bell Colors */
+        .action-icon.reminder {
+            color: var(--success-color);
+        }
+        
+        .action-icon.reminder.sent {
+            color: var(--info-color);
+        }
+
+        /* Modal System */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            display: none;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.visible {
+            display: flex;
+        }
+
+        .modal-dialog {
+            background: var(--bg-primary);
+            border-radius: 12px;
+            box-shadow: var(--shadow-hover);
+            min-width: 400px;
+            max-width: 90%;
+            animation: modalSlideIn 0.3s;
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                transform: translateY(-50px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        .modal-header {
+            padding: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+        .modal-header h3 {
+            margin: 0;
+            color: var(--text-primary);
+            font-size: 1.3rem;
+        }
+
+        .modal-body {
+            padding: 1.5rem;
+            color: var(--text-primary);
+        }
+
+        .modal-footer {
+            padding: 1rem 1.5rem;
+            border-top: 1px solid var(--border-color);
+            display: flex;
+            justify-content: flex-end;
+            gap: 0.75rem;
+        }
+
+        .btn-secondary {
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+        }
+
+        .btn-secondary:hover {
+            background: var(--border-color);
+        }
+
+        .btn-danger {
+            background: var(--danger-color);
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c93a4a;
+            box-shadow: var(--shadow-hover);
+        }
+
+        /* Save Button */
+        .save-btn {
+            position: fixed;
+            bottom: 2rem;
+            right: 2rem;
+            padding: 1rem 2rem;
+            background: var(--success-color);
+            color: white;
+            border: none;
+            border-radius: 50px;
+            font-size: 1rem;
+            font-weight: 700;
+            cursor: pointer;
+            box-shadow: var(--shadow-hover);
+            z-index: 1000;
+            display: none;
+            animation: slideIn 0.3s;
+        }
+
+        .save-btn.visible {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateY(100px);
+                opacity: 0;
+            }
+            to {
+                transform: translateY(0);
+                opacity: 1;
+            }
+        }
+
+        /* Loading Spinner */
+        .spinner {
+            border: 3px solid var(--border-color);
+            border-top-color: var(--accent-color);
+            border-radius: 50%;
+            width: 20px;
+            height: 20px;
+            animation: spin 0.8s linear infinite;
+            display: inline-block;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Suggestions Popover */
+        .suggestions-popover {
+            position: absolute;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            box-shadow: var(--shadow-hover);
+            max-width: 400px;
+            z-index: 1000;
+            display: none;
+        }
+
+        .suggestions-popover.visible {
+            display: block;
+        }
+
+        /* Contact Dropdown (PHASE 4) */
+        .contact-dropdown-container {
+            position: relative;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .contact-dropdown-trigger {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            flex: 1;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .contact-dropdown-trigger:hover {
+            border-color: var(--accent-color);
+        }
+
+        .contact-dropdown-trigger.active {
+            border-color: var(--accent-color);
+            box-shadow: 0 0 0 3px rgba(0, 133, 255, 0.1);
+        }
+
+        .contact-dropdown-menu {
+            position: absolute;
+            top: calc(100% + 4px);
+            left: 0;
+            right: 0;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            box-shadow: var(--shadow-hover);
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            display: none;
+        }
+
+        .contact-dropdown-menu.visible {
+            display: block;
+        }
+
+        .contact-dropdown-search {
+            position: sticky;
+            top: 0;
+            padding: 0.5rem;
+            border-bottom: 1px solid var(--border-color);
+            background: var(--bg-primary);
+        }
+
+        .contact-dropdown-search input {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            font-size: 0.9rem;
+        }
+
+        .contact-dropdown-item {
+            padding: 0.75rem;
+            cursor: pointer;
+            border-bottom: 1px solid var(--border-color);
+            transition: background 0.2s;
+        }
+
+        .contact-dropdown-item:last-child {
+            border-bottom: none;
+        }
+
+        .contact-dropdown-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .contact-dropdown-item-name {
+            font-weight: 600;
+            color: var(--text-primary);
+            margin-bottom: 0.2rem;
+        }
+
+        .contact-dropdown-item-phone {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+        }
+
+        .contact-dropdown-empty {
+            padding: 1rem;
+            text-align: center;
+            color: var(--text-muted);
+        }
+
+        .suggestion-item {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border-color);
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        .suggestion-item:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .suggestion-item:last-child {
+            border-bottom: none;
+        }
+
+        .suggestion-name {
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+
+        .suggestion-details {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 0.3rem;
+        }
+
+        .suggestion-badge {
+            display: inline-block;
+            background: var(--chip-bg);
+            color: var(--chip-text);
+            padding: 0.2rem 0.5rem;
+            border-radius: 10px;
+            font-size: 0.75rem;
+            margin-top: 0.3rem;
+        }
+
+        /* Empty State */
+        .empty-state {
+            text-align: center;
+            padding: 4rem 2rem;
+            color: var(--text-muted);
+        }
+
+        .empty-state-icon {
+            font-size: 4rem;
+            margin-bottom: 1rem;
+        }
+
+        /* Notification Toast */
+        .toast {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 1rem 1.5rem;
+            box-shadow: var(--shadow-hover);
+            z-index: 2000;
+            display: none;
+            animation: slideInRight 0.3s;
+        }
+
+        .toast.visible {
+            display: block;
+        }
+
+        @keyframes slideInRight {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .toast.success {
+            border-left: 4px solid var(--success-color);
+        }
+
+        .toast.error {
+            border-left: 4px solid var(--danger-color);
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .header {
+                padding: 1rem;
+            }
+
+            .header h1 {
+                font-size: 1.3rem;
+            }
+
+            .header-actions {
+                gap: 0.5rem;
+            }
+
+            .hamburger-menu {
+                width: 240px;
+                top: 70px;
+                max-height: calc(100vh - 70px);
+            }
+
+            .month-scale {
+                gap: 1rem;
+            }
+
+            .month-circle {
+                width: 50px;
+                height: 50px;
+            }
+
+            .events-table {
+                font-size: 0.85rem;
+            }
+
+            .events-table th,
+            .events-table td {
+                padding: 0.7rem;
+            }
+
+            .container {
+                width: calc(100% - 2rem);
+                padding: 0 1rem 1rem;
+            }
+
+            .hall-tab-list {
+                position: static;
+                padding: 0.75rem 1rem 0.5rem;
+            }
+
+            .hall-tab {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .hall-tab-panels {
+                padding: 0 1rem 1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="header-left">
+            <h1>JacksonBot 🤖</h1>
+        </div>
+        <div class="header-actions">
+            <div style="position: relative;">
+                <div class="notification-bell" id="notificationBell" onclick="toggleNotificationPanel()">
+                    <span class="bell-icon">🔔</span>
+                    <div class="notification-badge hidden" id="notificationBadge">0</div>
+                </div>
+                
+                <!-- Notification Panel -->
+                <div class="notification-panel" id="notificationPanel">
+                    <div class="notification-panel-header">
+                        <h3>התראות</h3>
+                        <div class="notification-panel-actions">
+                            <button class="notification-icon-btn" onclick="clearNotifications(event)" title="Clear all">
+                                🗑️
+                            </button>
+                        </div>
+                    </div>
+                    <div class="notification-list" id="notificationList">
+                        <div class="notification-empty">
+                            אין התראות חדשות
+                        </div>
+                    </div>
+                    <div class="notification-panel-footer">
+                        <button class="notification-show-all" onclick="showAllMessages()">
+                            הצג הכל
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <button class="theme-toggle" onclick="toggleTheme()" title="Toggle theme">
+                <span id="theme-icon">🌙</span>
+            </button>
+            <a href="/ui" class="btn btn-primary">+ Add Event</a>
+            <button class="hamburger-btn" onclick="toggleHamburgerMenu()" aria-label="Menu">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Hamburger Menu -->
+    <div class="hamburger-menu-overlay" id="hamburgerOverlay" onclick="closeHamburgerMenu()"></div>
+    <nav class="hamburger-menu" id="hamburgerMenu">
+        <a href="/ui/events" class="hamburger-menu-item" onclick="closeHamburgerMenu()">📅 View Events</a>
+        <a href="/ui/contacts" class="hamburger-menu-item" onclick="closeHamburgerMenu()">👥 Contacts</a>
+        <a href="/ui/employees" class="hamburger-menu-item" onclick="closeHamburgerMenu()">👷 Employees</a>
+        <a href="/ui/messages" class="hamburger-menu-item" onclick="closeHamburgerMenu()">💬 Messages</a>
+        <a href="/ui/calendar-import" class="hamburger-menu-item" onclick="closeHamburgerMenu()">📥 Import Calendar</a>
+        <a href="/ui/shift-organizer" class="hamburger-menu-item" onclick="closeHamburgerMenu()">🗓️ Shift Organizer</a>
+        <a href="/ui/availability" class="hamburger-menu-item" onclick="closeHamburgerMenu()">✅ Availability</a>
+    </nav>
+
+    <div class="month-selector">
+        <div class="month-scale" id="monthScale">
+            <!-- Month circles will be generated by JavaScript -->
+        </div>
+    </div>
+
+    <div class="container" id="eventsContainer">
+        <div class="empty-state">
+            <div class="spinner" style="width: 40px; height: 40px; border-width: 4px;"></div>
+            <p style="margin-top: 1rem;">Loading events...</p>
+        </div>
+    </div>
+
+    <button class="save-btn" id="saveBtn" onclick="saveChanges()">
+        <span>💾</span> Save Changes
+    </button>
+
+    <div class="toast" id="toast">
+        <div id="toastMessage"></div>
+    </div>
+
+    <!-- Confirmation Modal -->
+    <div class="modal-overlay" id="confirmModal" onclick="closeConfirmModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="confirmTitle">Confirm Action</h3>
+            </div>
+            <div class="modal-body">
+                <p id="confirmMessage">Are you sure?</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeConfirmModal()">Cancel</button>
+                <button class="btn btn-danger" id="confirmBtn" onclick="confirmAction()">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Input Modal -->
+    <div class="modal-overlay" id="inputModal" onclick="closeInputModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3 id="inputTitle">Input Required</h3>
+            </div>
+            <div class="modal-body">
+                <label id="inputLabel" style="display: block; margin-bottom: 0.5rem; color: var(--text-primary);">Name:</label>
+                <input type="text" id="inputField" class="inline-edit" style="width: 100%;" placeholder="Enter value...">
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeInputModal()">Cancel</button>
+                <button class="btn btn-primary" onclick="submitInput()">Submit</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Global state
+        let currentMonth = '';
+        let activeHall = '';
+        let currentTheme = 'light';
+        let dirtyRows = new Map();
+        let eventSource = null;
+        let notificationEventSource = null;
+        const ORG_ID = 1;
+        const HALL_STORAGE_KEY = 'events.activeHall';
+        let notificationSound = null;
+        let audioContext = null;
+        let isMuted = false;
+        
+        // Constants
+        const EVENT_LOAD_TIMEOUT = 1000; // ms to wait for events to load before scrolling
+        const NAVIGATION_SCROLL_DELAY = 500; // ms to wait before scrolling after navigation
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTheme();
+            generateMonthSelector();
+            
+            // Load saved month or default to current
+            const saved = localStorage.getItem('events.selectedMonth');
+            const today = new Date();
+            const currentMonthValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            const defaultMonth = saved || currentMonthValue;
+            
+            selectMonth(defaultMonth);
+            connectSSE();
+            initNotifications();
+            checkDeepLink();
+            
+            // Check for success message after sending tech reminder
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('reminder_sent') === 'true') {
+                showToast('התזכורת נשלחה בהצלחה!', 'success');
+                // Clean URL without reloading
+                const cleanUrl = window.location.pathname;
+                window.history.replaceState({}, document.title, cleanUrl);
+            }
+        });
+
+        // Theme Management
+        function loadTheme() {
+            const saved = localStorage.getItem('theme') || 'light';
+            currentTheme = saved;
+            document.documentElement.setAttribute('data-theme', saved);
+            updateThemeIcon();
+        }
+
+        function toggleTheme() {
+            currentTheme = currentTheme === 'light' ? 'dark' : 'light';
+            localStorage.setItem('theme', currentTheme);
+            document.documentElement.setAttribute('data-theme', currentTheme);
+            updateThemeIcon();
+        }
+
+        function updateThemeIcon() {
+            const icon = document.getElementById('theme-icon');
+            const toggle = document.querySelector('.theme-toggle');
+            if (currentTheme === 'dark') {
+                icon.textContent = '☀️';
+                toggle.title = 'Switch to light mode';
+            } else {
+                icon.textContent = '🌙';
+                toggle.title = 'Switch to dark mode';
+            }
+        }
+
+        // Hamburger Menu Functions
+        function toggleHamburgerMenu() {
+            const menu = document.getElementById('hamburgerMenu');
+            const overlay = document.getElementById('hamburgerOverlay');
+            const btn = document.querySelector('.hamburger-btn');
+            
+            menu.classList.toggle('open');
+            overlay.classList.toggle('visible');
+            btn.classList.toggle('open');
+        }
+
+        function closeHamburgerMenu() {
+            const menu = document.getElementById('hamburgerMenu');
+            const overlay = document.getElementById('hamburgerOverlay');
+            const btn = document.querySelector('.hamburger-btn');
+            
+            menu.classList.remove('open');
+            overlay.classList.remove('visible');
+            btn.classList.remove('open');
+        }
+
+        // Month Selector
+        function generateMonthSelector() {
+            const scale = document.getElementById('monthScale');
+            const today = new Date();
+            const currentYear = today.getFullYear();
+            const currentMonth = today.getMonth() + 1;
+            const months = [];
+
+            // Generate 12 months: 6 before, current, 5 after
+            for (let i = -6; i <= 5; i++) {
+                const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+                const monthYear = date.getFullYear();
+                const monthNum = date.getMonth() + 1;
+                
+                // Determine if past, current, or future
+                let timeClass = '';
+                if (monthYear < currentYear || (monthYear === currentYear && monthNum < currentMonth)) {
+                    timeClass = 'past';
+                } else if (monthYear === currentYear && monthNum === currentMonth) {
+                    timeClass = 'current';
+                } else {
+                    timeClass = 'future';
+                }
+                
+                months.push({
+                    year: monthYear,
+                    month: monthNum,
+                    label: date.toLocaleDateString('en-US', { month: 'short', year: '2-digit', timeZone: 'Asia/Jerusalem' }).replace(' ', '/'),
+                    value: `${monthYear}-${String(monthNum).padStart(2, '0')}`,
+                    timeClass: timeClass
+                });
+            }
+
+            scale.innerHTML = months.map(m => `
+                <div class="month-item" onclick="selectMonth('${m.value}')">
+                    <div class="month-circle ${m.timeClass}" data-month="${m.value}">
+                        ${m.month}
+                    </div>
+                    <div class="month-label">${m.label}</div>
+                </div>
+            `).join('');
+        }
+
+        function selectMonth(month) {
+            currentMonth = month;
+            
+            // Save to localStorage (PHASE 2 - Task 3)
+            localStorage.setItem('events.selectedMonth', month);
+            
+            // Update UI - add selected class (PHASE 2 - Task 4)
+            document.querySelectorAll('.month-circle').forEach(circle => {
+                circle.classList.toggle('selected', circle.dataset.month === month);
+            });
+
+            // Load events
+            loadEvents(month);
+        }
+
+        // Load Events
+        async function loadEvents(month) {
+            try {
+                const response = await fetch(`/api/events?month=${month}&org_id=${ORG_ID}`);
+                const data = await response.json();
+                renderEvents(data);
+            } catch (error) {
+                console.error('Failed to load events:', error);
+                showToast('Failed to load events', 'error');
+            }
+        }
+
+        // Render Events
+        function renderEvents(data) {
+            const container = document.getElementById('eventsContainer');
+            
+            if (!data.halls || Object.keys(data.halls).length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <div class="empty-state-icon">📅</div>
+                        <h3>No events for this month</h3>
+                        <p>Select a different month or add a new event</p>
+                    </div>
+                `;
+                return;
+            }
+
+            // Sort events by date (ascending - earliest first) for each hall
+            Object.keys(data.halls).forEach(hallName => {
+                data.halls[hallName].sort((a, b) => {
+                    const dateA = a.event_date ? new Date(a.event_date).getTime() : 0;
+                    const dateB = b.event_date ? new Date(b.event_date).getTime() : 0;
+                    return dateA - dateB;
+                });
+            });
+
+            const hallEntries = Object.entries(data.halls);
+            const storedHall = localStorage.getItem(HALL_STORAGE_KEY);
+            if (storedHall && data.halls[storedHall]) {
+                activeHall = storedHall;
+            } else if (!activeHall || !data.halls[activeHall]) {
+                activeHall = hallEntries[0][0];
+                localStorage.setItem(HALL_STORAGE_KEY, activeHall);
+            }
+
+            container.innerHTML = `
+                <div class="hall-tabs">
+                    <div class="hall-tab-list">
+                        ${hallEntries.map(([hallName, events]) => `
+                            <button type="button" class="hall-tab ${hallName === activeHall ? 'active' : ''}" data-hall="${escapeHtml(hallName)}" onclick="selectHallTabFromButton(this)">
+                                <span class="hall-tab-name">${escapeHtml(hallName)}</span>
+                                <span class="hall-tab-count">${events.length}</span>
+                            </button>
+                        `).join('')}
+                    </div>
+                    <div class="hall-tab-panels">
+                        ${hallEntries.map(([hallName, events]) => `
+                            <div class="hall-tab-panel ${hallName === activeHall ? 'active' : ''}" data-hall="${escapeHtml(hallName)}">
+                                <div class="hall-section">
+                                    <div class="hall-body">
+                                        <table class="events-table" data-hall="${escapeHtml(hallName)}">
+                                            <thead>
+                                                <tr id="header-row-${hallName.replace(/\s+/g, '-')}">
+                                                    <th data-col="expander" style="width: 40px;"></th>
+                                                    <th class="sortable" draggable="true" data-col="name" onclick="sortTable(this, 'name')">Name</th>
+                                                    <th class="sortable sorted-asc" draggable="true" data-col="event_date" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date</th>
+                                                    <th draggable="true" data-col="day" style="width: 80px;">Day</th>
+                                                    <th class="sortable" draggable="true" data-col="show_time" onclick="sortTable(this, 'show_time')">Show Time</th>
+                                                    <th class="sortable" draggable="true" data-col="load_in_time" onclick="sortTable(this, 'load_in_time')">Load In</th>
+                                                    <th draggable="true" data-col="status">Status</th>
+                                                    <th draggable="true" data-col="delivery">Delivery</th>
+                                                    <th draggable="true" data-col="producer">Producer</th>
+                                                    <th draggable="true" data-col="technical">Technical</th>
+                                                    <th draggable="true" data-col="notes">Notes</th>
+                                                    <th draggable="true" data-col="actions">Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                ${events.map(event => renderEventRow(event)).join('')}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        `).join('')}
+                    </div>
+                </div>
+            `;
+
+            // Restore column order from localStorage
+            restoreColumnOrder();
+
+            // PHASE 5: Initialize column resize
+            initColumnResize();
+
+            // Note: Shifts are loaded on-demand when user expands the section
+        }
+
+        function selectHallTabFromButton(button) {
+            const hallName = button.dataset.hall;
+            selectHallTab(hallName);
+        }
+
+        function selectHallTab(hallName) {
+            if (!hallName) return;
+
+            activeHall = hallName;
+            localStorage.setItem(HALL_STORAGE_KEY, hallName);
+
+            document.querySelectorAll('.hall-tab').forEach(tab => {
+                tab.classList.toggle('active', tab.dataset.hall === hallName);
+            });
+
+            document.querySelectorAll('.hall-tab-panel').forEach(panel => {
+                panel.classList.toggle('active', panel.dataset.hall === hallName);
+            });
+        }
+
+        // PHASE 5: Get day of week in English (e.g., "Sun", "Mon", "Tue", etc.)
+        function getDayOfWeek(dateStr) {
+            if (!dateStr) return '—';
+            
+            try {
+                const date = new Date(dateStr + 'T12:00:00'); // Add time to avoid timezone issues
+                const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+                return days[date.getDay()];
+            } catch (e) {
+                return '—';
+            }
+        }
+
+        // Render delivery status chip with proper colors (PHASE 1)
+        function renderDeliveryStatusChip(deliveryStatus) {
+            if (!deliveryStatus) {
+                return '<span class="delivery-chip none">—</span>';
+            }
+            
+            const status = deliveryStatus.toLowerCase();
+            return `<span class="delivery-chip ${status}">${escapeHtml(deliveryStatus)}</span>`;
+        }
+
+        // Render status chip with tooltip for follow_up status (PHASE 2)
+        function renderStatusChip(event) {
+            const status = event.status || 'draft';
+            const statusClass = status.toLowerCase();
+            
+            // Add tooltip for follow_up status showing next follow-up time
+            if (statusClass === 'follow_up' && event.next_followup_at_display) {
+                return `<span class="status-chip ${statusClass}" title="הודעת follow-up הבאה תישלח ב: ${escapeHtml(event.next_followup_at_display)}">${status}</span>`;
+            } else if (statusClass === 'follow_up') {
+                return `<span class="status-chip ${statusClass}" title="לא מתוזמן">${status}</span>`;
+            }
+            
+            return `<span class="status-chip ${statusClass}">${status}</span>`;
+        }
+
+        function renderEventRow(event) {
+            // Event status mapping (PHASE 3):
+            // - draft: Event created, no message sent yet
+            // - pending: Message sent, waiting for response
+            // - confirmed: Load-in time received and confirmed
+            // - follow_up: Client clicked "still don't know" (עדיין לא יודע)
+            // - contact_required: Client is not the contact person, forwarded contact info
+            const statusClass = (event.status || 'draft').toLowerCase();
+            // Use pre-formatted times from backend (Israel timezone)
+            const showTime = event.show_time_display || '';
+            const loadInTime = event.load_in_time_display || '';
+            const eventDate = event.event_date || '';
+            const defaultTime = event.load_in_time_display || '';
+
+            return `
+                <tr data-event-id="${event.event_id}" class="event-row">
+                    <td class="expander-cell">
+                        <button class="expander-btn" onclick="toggleRowDetails(${event.event_id})" id="expander-${event.event_id}" aria-label="Toggle shifts">
+                            ▶
+                        </button>
+                    </td>
+                    <td>
+                        <input type="text" class="inline-edit" value="${escapeHtml(event.name || '')}" 
+                               onchange="markDirty(${event.event_id}, 'name', this.value)">
+                    </td>
+                    <td>
+                        <input type="date" class="inline-edit" value="${event.event_date || ''}" 
+                               onchange="markDirty(${event.event_id}, 'event_date', this.value)">
+                    </td>
+                    <td style="text-align: center; color: var(--text-secondary); font-size: 0.9rem;">
+                        ${getDayOfWeek(event.event_date)}
+                    </td>
+                    <td>
+                        <input type="time" class="inline-edit" value="${event.show_time_display}" 
+                               onchange="markDirty(${event.event_id}, 'show_time', this.value)">
+                    </td>
+                    <td>
+                        <input type="time" class="inline-edit" value="${event.load_in_time_display}" 
+                               onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
+                    </td>
+                    <td>
+                        ${renderStatusChip(event)}
+                    </td>
+                    <td>
+                        ${renderDeliveryStatusChip(event.latest_delivery_status)}
+                    </td>
+                    <td>
+                        <div class="contact-dropdown-container" id="producer-${event.event_id}">
+                            <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'producer', 'producer')">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.producer_name || 'Select producer')}</div>
+                                    ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.producer_phone)}</div>` : ''}
+                                </div>
+                                <span style="color: var(--text-muted);">▼</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div class="contact-dropdown-container" id="technical-${event.event_id}" style="flex: 1;">
+                                <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'technical')">
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || 'Select technical')}</div>
+                                        ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
+                                    </div>
+                                    <span style="color: var(--text-muted);">▼</span>
+                                </div>
+                            </div>
+                            <button class="btn btn-sm" 
+                                    onclick="showSuggestions(${event.event_id}, this)" 
+                                    title="הצעות טכנאים"
+                                    style="padding: 0.3rem 0.6rem; font-size: 0.85rem; white-space: nowrap;">
+                                💡
+                            </button>
+                            ${event.technical_contact_id ? `
+                            <button class="btn btn-sm btn-outline-info" 
+                                    onclick="sendTechReminder(${event.event_id})" 
+                                    title="${event.tech_reminder_sent_at_display ? 'נשלח לאחרונה: ' + escapeHtml(event.tech_reminder_sent_at_display) : 'שלח תזכורת טכנית עם פרטי עובד פותח'}"
+                                    style="padding: 0.3rem 0.6rem; font-size: 0.85rem; white-space: nowrap;">
+                                🔔
+                            </button>
+                            ` : ''}
+                        </div>
+                    </td>
+                    <td>
+                        <input type="text" class="inline-edit" value="${escapeHtml(event.notes || '')}" 
+                               onchange="markDirty(${event.event_id}, 'notes', this.value)">
+                    </td>
+                    <td>
+                        <div class="actions-container">
+                            <button class="action-icon delete" 
+                                    onclick="deleteEvent(${event.event_id})"
+                                    title="Delete event">
+                                🗑️
+                            </button>
+                            <button class="action-icon whatsapp ${event.init_sent_at ? 'sent' : ''}" 
+                                    onclick="sendWhatsApp(${event.event_id})"
+                                    title="${event.init_sent_at ? 'נשלח לאחרונה: ' + escapeHtml(event.init_sent_at_display) : 'טרם נשלח'}">
+                                📱
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                <tr class="row-details" id="details-${event.event_id}" data-event-id="${event.event_id}">
+                    <td colspan="12" style="padding: 0;">
+                        <div class="row-details-content">
+                            <div id="shifts-container-${event.event_id}">
+                                <div style="text-align: center; padding: 1rem; color: var(--text-muted);">
+                                    <div class="spinner" style="width: 24px; height: 24px;"></div>
+                                    <p style="margin-top: 0.5rem; font-size: 0.85rem;">Loading shifts...</p>
+                                </div>
+                            </div>
+                            <button class="btn btn-sm btn-primary add-shift-btn" 
+                                    onclick="addShift(${event.event_id}, '${event.event_date || ''}', '${escapeHtml(defaultTime)}')">
+                                + Add Shift
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        // Dirty Tracking
+        function markDirty(eventId, field, value) {
+            if (!dirtyRows.has(eventId)) {
+                dirtyRows.set(eventId, {});
+            }
+            dirtyRows.get(eventId)[field] = value;
+
+            // Mark row visually
+            const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
+            if (row) row.classList.add('dirty');
+
+            // Show save button
+            document.getElementById('saveBtn').classList.add('visible');
+        }
+
+        // Save Changes
+        async function saveChanges() {
+            const saveBtn = document.getElementById('saveBtn');
+            saveBtn.disabled = true;
+            saveBtn.innerHTML = '<span class="spinner"></span> Saving...';
+
+            let successCount = 0;
+            let errorCount = 0;
+            const failedEvents = [];
+
+            for (const [eventId, changes] of dirtyRows.entries()) {
+                try {
+                    const response = await fetch(`/api/events/${eventId}?org_id=${ORG_ID}`, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(changes)
+                    });
+
+                    if (response.ok) {
+                        successCount++;
+                        const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
+                        if (row) {
+                            row.classList.remove('dirty');
+                        }
+                        
+                        // Update row with response data
+                        const result = await response.json();
+                        if (result.event) {
+                            updateEventRow(eventId, result.event);
+                        }
+                    } else {
+                        errorCount++;
+                        failedEvents.push(eventId);
+                        const error = await response.json();
+                        console.error(`Failed to update event ${eventId}:`, error);
+                        showToast(`Failed to save event ${eventId}: ${error.detail || 'Unknown error'}`, 'error');
+                    }
+                } catch (error) {
+                    errorCount++;
+                    failedEvents.push(eventId);
+                    console.error(`Error updating event ${eventId}:`, error);
+                    showToast(`Error saving event ${eventId}: ${error.message}`, 'error');
+                }
+            }
+
+            // Only clear dirty rows that succeeded
+            for (const [eventId] of dirtyRows.entries()) {
+                if (!failedEvents.includes(eventId)) {
+                    dirtyRows.delete(eventId);
+                }
+            }
+
+            // Hide save button only if no more dirty rows
+            if (dirtyRows.size === 0) {
+                saveBtn.classList.remove('visible');
+            }
+            
+            saveBtn.disabled = false;
+            saveBtn.innerHTML = '<span>💾</span> Save Changes';
+
+            if (errorCount === 0) {
+                showToast(`Successfully saved ${successCount} event(s)`, 'success');
+            } else {
+                showToast(`Saved ${successCount}, failed ${errorCount}. Please retry failed items.`, 'error');
+            }
+        }
+        
+        // Update event row with new data from server
+        function updateEventRow(eventId, eventData) {
+            const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
+            if (!row) return;
+            
+            // Update input values with server data
+            const inputs = row.querySelectorAll('.inline-edit');
+            inputs.forEach(input => {
+                const onchange = input.getAttribute('onchange');
+                if (!onchange) return;
+                
+                // Extract field name from onchange attribute
+                const fieldMatch = onchange.match(/markDirty\([^,]+,\s*['"]([^'"]+)['"]/);
+                if (!fieldMatch) return;
+                
+                const field = fieldMatch[1];
+                
+                // Update value based on field
+                if (field === 'name' && eventData.name !== undefined) {
+                    input.value = eventData.name;
+                } else if (field === 'event_date' && eventData.event_date) {
+                    input.value = eventData.event_date;
+                } else if (field === 'show_time' && eventData.show_time_display !== undefined) {
+                    input.value = eventData.show_time_display;
+                } else if (field === 'load_in_time' && eventData.load_in_time_display !== undefined) {
+                    input.value = eventData.load_in_time_display;
+                } else if (field === 'notes' && eventData.notes !== undefined) {
+                    input.value = eventData.notes;
+                } else if (field === 'producer_name' && eventData.producer_name !== undefined) {
+                    input.value = eventData.producer_name;
+                } else if (field === 'technical_name' && eventData.technical_name !== undefined) {
+                    input.value = eventData.technical_name;
+                }
+            });
+        }
+
+        // Contact Dropdown (PHASE 4)
+        let activeDropdown = null;
+
+        async function toggleContactDropdown(eventId, fieldType, role) {
+            const containerId = `${fieldType}-${eventId}`;
+            const container = document.getElementById(containerId);
+            
+            // Close any existing dropdown
+            if (activeDropdown && activeDropdown !== container) {
+                closeContactDropdown();
+            }
+            
+            // Check if dropdown already exists
+            let menu = container.querySelector('.contact-dropdown-menu');
+            if (menu) {
+                if (menu.classList.contains('visible')) {
+                    closeContactDropdown();
+                    return;
+                } else {
+                    menu.classList.add('visible');
+                    container.querySelector('.contact-dropdown-trigger').classList.add('active');
+                    activeDropdown = container;
+                    menu.querySelector('.contact-dropdown-search input')?.focus();
+                    return;
+                }
+            }
+            
+            // Create dropdown menu
+            menu = document.createElement('div');
+            menu.className = 'contact-dropdown-menu visible';
+            menu.innerHTML = `
+                <div class="contact-dropdown-search">
+                    <input type="text" placeholder="Search by name or phone..." oninput="filterContactDropdown(${eventId}, '${fieldType}', '${role}', this.value)">
+                </div>
+                <div class="contact-dropdown-list" id="${fieldType}-list-${eventId}">
+                    <div class="contact-dropdown-empty">Loading...</div>
+                </div>
+            `;
+            
+            container.appendChild(menu);
+            container.querySelector('.contact-dropdown-trigger').classList.add('active');
+            activeDropdown = container;
+            
+            // Load contacts
+            await loadContactsForDropdown(eventId, fieldType, role);
+            
+            // Focus search input
+            menu.querySelector('.contact-dropdown-search input')?.focus();
+            
+            // Close on outside click
+            setTimeout(() => {
+                document.addEventListener('click', handleDropdownOutsideClick);
+            }, 100);
+        }
+
+        function handleDropdownOutsideClick(e) {
+            // Check if click is inside activeDropdown container or inside any portal dropdown
+            const portalDropdown = e.target.closest('.contact-dropdown-menu');
+            if (activeDropdown && !activeDropdown.contains(e.target) && !portalDropdown) {
+                closeContactDropdown();
+            }
+        }
+
+        function closeContactDropdown() {
+            if (activeDropdown) {
+                // Try to find menu in container first (old style)
+                let menu = activeDropdown.querySelector('.contact-dropdown-menu');
+                if (menu) {
+                    menu.remove();
+                }
+                // Also look for portal dropdown (PHASE 3: new style)
+                const containerId = activeDropdown.id;
+                if (containerId) {
+                    menu = document.querySelector(`[data-dropdown-id="${containerId}"]`);
+                    if (menu) {
+                        menu.remove();
+                    }
+                }
+                activeDropdown.querySelector('.contact-dropdown-trigger')?.classList.remove('active');
+                document.removeEventListener('click', handleDropdownOutsideClick);
+                activeDropdown = null;
+            }
+        }
+
+        async function loadContactsForDropdown(eventId, fieldType, role, searchTerm = '') {
+            try {
+                const url = `/api/contacts/by-role?org_id=${ORG_ID}&role=${encodeURIComponent(role)}${searchTerm ? '&search=' + encodeURIComponent(searchTerm) : ''}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                const listId = `${fieldType}-list-${eventId}`;
+                const listEl = document.getElementById(listId);
+                if (!listEl) return;
+                
+                if (data.contacts.length === 0) {
+                    listEl.innerHTML = '<div class="contact-dropdown-empty">No contacts found</div>';
+                    return;
+                }
+                
+                listEl.innerHTML = data.contacts.map(contact => `
+                    <div class="contact-dropdown-item" onclick="selectContact(${eventId}, '${fieldType}', ${contact.contact_id}, '${escapeHtml(contact.name)}', '${escapeHtml(contact.phone)}')">
+                        <div class="contact-dropdown-item-name">${escapeHtml(contact.name)}</div>
+                        <div class="contact-dropdown-item-phone">${escapeHtml(contact.phone)}</div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load contacts:', error);
+                const listId = `${fieldType}-list-${eventId}`;
+                const listEl = document.getElementById(listId);
+                if (listEl) {
+                    listEl.innerHTML = '<div class="contact-dropdown-empty">Error loading contacts</div>';
+                }
+            }
+        }
+
+        function filterContactDropdown(eventId, fieldType, role, searchTerm) {
+            loadContactsForDropdown(eventId, fieldType, role, searchTerm);
+        }
+
+        function selectContact(eventId, fieldType, contactId, name, phone) {
+            // Update the UI
+            const container = document.getElementById(`${fieldType}-${eventId}`);
+            const trigger = container.querySelector('.contact-dropdown-trigger');
+            trigger.innerHTML = `
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(name)}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(phone)}</div>
+                </div>
+                <span style="color: var(--text-muted);">▼</span>
+            `;
+            
+            // Mark as dirty
+            markDirty(eventId, `${fieldType}_contact_id`, contactId);
+            markDirty(eventId, `${fieldType}_name`, name);
+            markDirty(eventId, `${fieldType}_phone`, phone);
+            
+            // Close dropdown
+            closeContactDropdown();
+            
+            showToast(`${fieldType === 'producer' ? 'Producer' : 'Technical'} contact updated. Remember to save!`, 'success');
+        }
+
+        // Technical Suggestions
+        async function showSuggestions(eventId, button) {
+            try {
+                const response = await fetch(`/api/events/${eventId}/technical-suggestions?org_id=${ORG_ID}`);
+                const suggestions = await response.json();
+
+                if (suggestions.length === 0) {
+                    showToast('No suggestions available', 'info');
+                    return;
+                }
+
+                // Create popover
+                const existing = document.querySelector('.suggestions-popover');
+                if (existing) existing.remove();
+
+                const popover = document.createElement('div');
+                popover.className = 'suggestions-popover visible';
+                popover.style.position = 'fixed';
+                
+                const rect = button.getBoundingClientRect();
+                popover.style.top = `${rect.bottom + 5}px`;
+                popover.style.left = `${rect.left - 300}px`;
+
+                popover.innerHTML = suggestions.map(s => `
+                    <div class="suggestion-item" onclick="selectSuggestion(${eventId}, ${s.contact_id}, '${escapeHtml(s.name)}', '${escapeHtml(s.phone)}')">
+                        <div class="suggestion-name">${escapeHtml(s.name)}</div>
+                        <div class="suggestion-details">
+                            ${escapeHtml(s.phone)}<br>
+                            Last: ${escapeHtml(s.last_event_name || 'N/A')} (${s.last_event_date || 'N/A'})
+                        </div>
+                        <span class="suggestion-badge">Worked ${s.times_worked}x</span>
+                    </div>
+                `).join('');
+
+                document.body.appendChild(popover);
+
+                // Close on outside click
+                setTimeout(() => {
+                    document.addEventListener('click', function closePopover(e) {
+                        if (!popover.contains(e.target) && e.target !== button) {
+                            popover.remove();
+                            document.removeEventListener('click', closePopover);
+                        }
+                    });
+                }, 100);
+
+            } catch (error) {
+                console.error('Failed to load suggestions:', error);
+                showToast('Failed to load suggestions', 'error');
+            }
+        }
+
+        // PHASE 6: Select technician suggestion and update UI
+        function selectSuggestion(eventId, contactId, name, phone) {
+            // Update the UI - find the technical contact dropdown
+            const container = document.getElementById(`technical-${eventId}`);
+            const trigger = container.querySelector('.contact-dropdown-trigger');
+            trigger.innerHTML = `
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(name)}</div>
+                    <div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(phone)}</div>
+                </div>
+                <span style="color: var(--text-muted);">▼</span>
+            `;
+            
+            // Mark as dirty with contact_id
+            markDirty(eventId, 'technical_contact_id', contactId);
+            markDirty(eventId, 'technical_name', name);
+            markDirty(eventId, 'technical_phone', phone);
+
+            document.querySelector('.suggestions-popover')?.remove();
+            showToast(`Suggestion applied: ${name}. Remember to save!`, 'success');
+        }
+
+        // Employee Dropdown for Shifts (PHASE 5)
+        async function toggleEmployeeDropdown(eventId, shiftId, currentName) {
+            const containerId = `employee-shift-${shiftId}`;
+            const container = document.getElementById(containerId);
+            
+            // Close any existing dropdown
+            if (activeDropdown && activeDropdown !== container) {
+                closeContactDropdown();
+            }
+            
+            // Check if dropdown already exists
+            let menu = document.querySelector(`[data-dropdown-id="${containerId}"]`);
+            if (menu) {
+                if (menu.classList.contains('visible')) {
+                    closeContactDropdown();
+                    return;
+                } else {
+                    menu.classList.add('visible');
+                    container.querySelector('.contact-dropdown-trigger').classList.add('active');
+                    activeDropdown = container;
+                    return;
+                }
+            }
+            
+            // PHASE 3: Create dropdown as portal (append to body to avoid overflow issues)
+            menu = document.createElement('div');
+            menu.className = 'contact-dropdown-menu visible';
+            menu.setAttribute('data-dropdown-id', containerId);
+            menu.style.position = 'fixed';
+            menu.style.zIndex = '10000';
+            
+            // PHASE 3: No search field - simple dropdown only
+            menu.innerHTML = `
+                <div class="contact-dropdown-list" id="employee-list-${shiftId}" style="max-height: 300px; overflow-y: auto;">
+                    <div class="contact-dropdown-empty">Loading...</div>
+                </div>
+            `;
+            
+            // Position dropdown relative to trigger
+            const triggerRect = container.getBoundingClientRect();
+            menu.style.top = `${triggerRect.bottom + 4}px`;
+            menu.style.left = `${triggerRect.left}px`;
+            menu.style.minWidth = `${triggerRect.width}px`;
+            
+            document.body.appendChild(menu);
+            container.querySelector('.contact-dropdown-trigger').classList.add('active');
+            activeDropdown = container;
+            
+            // Load employees
+            await loadEmployeesForDropdown(eventId, shiftId);
+            
+            // Close on outside click
+            setTimeout(() => {
+                document.addEventListener('click', handleDropdownOutsideClick);
+            }, 100);
+            
+            // Update position on scroll
+            const updatePosition = () => {
+                if (menu && menu.classList.contains('visible')) {
+                    const rect = container.getBoundingClientRect();
+                    menu.style.top = `${rect.bottom + 4}px`;
+                    menu.style.left = `${rect.left}px`;
+                }
+            };
+            window.addEventListener('scroll', updatePosition, { passive: true, once: true });
+        }
+
+        async function loadEmployeesForDropdown(eventId, shiftId, searchTerm = '') {
+            try {
+                const url = `/api/employees?org_id=${ORG_ID}&active_only=true${searchTerm ? '&search=' + encodeURIComponent(searchTerm) : ''}`;
+                const response = await fetch(url);
+                const data = await response.json();
+                
+                const listId = `employee-list-${shiftId}`;
+                const listEl = document.getElementById(listId);
+                if (!listEl) return;
+                
+                if (data.employees.length === 0) {
+                    listEl.innerHTML = '<div class="contact-dropdown-empty">No employees found</div>';
+                    return;
+                }
+                
+                listEl.innerHTML = data.employees.map(emp => `
+                    <div class="contact-dropdown-item" onclick="selectEmployee(${eventId}, ${shiftId}, ${emp.employee_id}, '${escapeHtml(emp.name)}')">
+                        <div class="contact-dropdown-item-name">${escapeHtml(emp.name)}</div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load employees:', error);
+                const listId = `employee-list-${shiftId}`;
+                const listEl = document.getElementById(listId);
+                if (listEl) {
+                    listEl.innerHTML = '<div class="contact-dropdown-empty">Error loading employees</div>';
+                }
+            }
+        }
+
+        function filterEmployeeDropdown(eventId, shiftId, searchTerm) {
+            loadEmployeesForDropdown(eventId, shiftId, searchTerm);
+        }
+
+        function selectEmployee(eventId, shiftId, employeeId, name) {
+            // Update the UI
+            const container = document.getElementById(`employee-shift-${shiftId}`);
+            const trigger = container.querySelector('.contact-dropdown-trigger');
+            trigger.innerHTML = `
+                <div style="flex: 1;">
+                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(name)}</div>
+                </div>
+                <span style="color: var(--text-muted);">▼</span>
+            `;
+            
+            // Mark as dirty
+            markShiftDirty(eventId, shiftId, 'employee_id', employeeId);
+            markShiftDirty(eventId, shiftId, 'employee_name', name);
+            
+            // Close dropdown
+            closeContactDropdown();
+            
+            showToast('Employee updated. Remember to save!', 'success');
+        }
+
+        // Shifts Management (Row Expander Pattern)
+        let dirtyShifts = new Map();
+        let loadedShifts = new Map(); // Cache shifts per event
+
+        function toggleRowDetails(eventId) {
+            const detailsRow = document.getElementById(`details-${eventId}`);
+            const expanderBtn = document.getElementById(`expander-${eventId}`);
+            
+            if (detailsRow.classList.contains('visible')) {
+                // Close
+                detailsRow.classList.remove('visible');
+                expanderBtn.classList.remove('expanded');
+            } else {
+                // Open
+                detailsRow.classList.add('visible');
+                expanderBtn.classList.add('expanded');
+                
+                // Load shifts if not already loaded
+                if (!loadedShifts.has(eventId)) {
+                    loadShiftsForEvent(eventId);
+                }
+            }
+        }
+
+        async function loadShiftsForEvent(eventId) {
+            try {
+                const response = await fetch(`/api/events/${eventId}/shifts?org_id=${ORG_ID}`);
+                const data = await response.json();
+                
+                loadedShifts.set(eventId, data.shifts || []);
+                renderShiftsTable(eventId, data.shifts || []);
+            } catch (error) {
+                console.error(`Failed to load shifts for event ${eventId}:`, error);
+                document.getElementById(`shifts-container-${eventId}`).innerHTML = `
+                    <div style="text-align: center; padding: 1rem; color: var(--danger-color);">
+                        Failed to load shifts
+                    </div>
+                `;
+            }
+        }
+
+        function renderShiftsTable(eventId, shifts) {
+            const container = document.getElementById(`shifts-container-${eventId}`);
+            
+            if (shifts.length === 0) {
+                container.innerHTML = `
+                    <div style="text-align: center; padding: 1rem; color: var(--text-muted);">
+                        No shifts yet. Click "+ Add Shift" to create one.
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = `
+                <table class="shifts-table">
+                    <thead>
+                        <tr>
+                            <th>Employee</th>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>Notes</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${shifts.map(shift => renderShiftRow(eventId, shift)).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function renderShiftRow(eventId, shift) {
+            // Use pre-formatted times from backend (Israel timezone)
+            const shiftDate = shift.call_date_display || '';
+            const shiftTime = shift.call_time_display || '';
+            const reminderSent = shift.reminder_24h_sent_at ? true : false;
+            
+            // Reminder tooltip
+            const reminderTooltip = reminderSent 
+                ? `נשלח לאחרונה: ${escapeHtml(shift.reminder_sent_display)}` 
+                : 'שלח תזכורת';
+
+            return `
+                <tr data-shift-id="${shift.shift_id}">
+                    <td>
+                        <div class="contact-dropdown-container" id="employee-shift-${shift.shift_id}" style="min-width: 150px;">
+                            <div class="contact-dropdown-trigger" onclick="toggleEmployeeDropdown(${eventId}, ${shift.shift_id}, '${escapeHtml(shift.employee_name || 'Select employee')}')">
+                                <div style="flex: 1;">
+                                    <div style="font-weight: 600; font-size: 0.85rem;">${escapeHtml(shift.employee_name || 'Select employee')}</div>
+                                </div>
+                                <span style="color: var(--text-muted); font-size: 0.8rem;">▼</span>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <input type="date" class="inline-edit" 
+                               value="${shiftDate}" 
+                               onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'shift_date', this.value)"
+                               style="font-size: 0.85rem;">
+                    </td>
+                    <td>
+                        <input type="time" class="inline-edit" 
+                               value="${shiftTime}" 
+                               onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'shift_time', this.value)"
+                               style="font-size: 0.85rem;">
+                    </td>
+                    <td>
+                        <input type="text" class="inline-edit" 
+                               value="${escapeHtml(shift.notes || '')}" 
+                               onchange="markShiftDirty(${eventId}, ${shift.shift_id}, 'notes', this.value)"
+                               placeholder="Notes"
+                               style="font-size: 0.85rem;">
+                    </td>
+                    <td>
+                        <div class="actions-container">
+                            <button class="btn btn-sm btn-success" 
+                                    id="save-shift-${shift.shift_id}"
+                                    onclick="saveShift(${eventId}, ${shift.shift_id})"
+                                    style="display: none; padding: 0.25rem 0.5rem; font-size: 0.75rem;"
+                                    title="Save changes">
+                                💾
+                            </button>
+                            <button class="action-icon reminder ${reminderSent ? 'sent' : ''}" 
+                                    onclick="sendShiftReminder(${eventId}, ${shift.shift_id})"
+                                    title="${reminderTooltip}">
+                                🔔
+                            </button>
+                            <button class="action-icon delete" 
+                                    onclick="deleteShift(${eventId}, ${shift.shift_id})"
+                                    title="מחק משמרת">
+                                🗑️
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+            `;
+        }
+
+        function markShiftDirty(eventId, shiftId, field, value) {
+            const key = `${eventId}-${shiftId}`;
+            if (!dirtyShifts.has(key)) {
+                dirtyShifts.set(key, { eventId, shiftId });
+            }
+            dirtyShifts.get(key)[field] = value;
+
+            // Show save button for this shift
+            const saveBtn = document.getElementById(`save-shift-${shiftId}`);
+            if (saveBtn) {
+                saveBtn.style.display = 'inline-flex';
+            }
+
+            // Mark row visually
+            const row = document.querySelector(`tr[data-shift-id="${shiftId}"]`);
+            if (row) row.classList.add('dirty');
+        }
+
+        async function saveShift(eventId, shiftId) {
+            const key = `${eventId}-${shiftId}`;
+            const changes = dirtyShifts.get(key);
+            if (!changes) return;
+
+            const saveBtn = document.getElementById(`save-shift-${shiftId}`);
+            if (saveBtn) {
+                saveBtn.disabled = true;
+                saveBtn.innerHTML = '<span class="spinner" style="width: 12px; height: 12px;"></span>';
+            }
+
+            try {
+                const response = await fetch(`/api/shifts/${shiftId}?org_id=${ORG_ID}`, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(changes)
+                });
+
+                if (response.ok) {
+                    dirtyShifts.delete(key);
+                    const row = document.querySelector(`tr[data-shift-id="${shiftId}"]`);
+                    if (row) row.classList.remove('dirty');
+                    
+                    if (saveBtn) {
+                        saveBtn.style.display = 'none';
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = '💾';
+                    }
+                    
+                    showToast('Shift saved successfully', 'success');
+                    // Reload shifts
+                    loadShiftsForEvent(eventId);
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to save shift: ${error.detail || 'Unknown error'}`, 'error');
+                    if (saveBtn) {
+                        saveBtn.disabled = false;
+                        saveBtn.innerHTML = '💾';
+                    }
+                }
+            } catch (error) {
+                console.error('Error saving shift:', error);
+                showToast('Failed to save shift', 'error');
+                if (saveBtn) {
+                    saveBtn.disabled = false;
+                    saveBtn.innerHTML = '💾';
+                }
+            }
+        }
+
+        // PHASE 3: Add shift inline (no modal) with defaults from event
+        async function addShift(eventId, defaultDate, defaultTime) {
+            try {
+                // PHASE 2: Create shift immediately with defaults: date=event_date, time=load_in_time
+                // Send employee_id as null (not employee_name) to create unassigned shift for later assignment
+                const response = await fetch(`/api/events/${eventId}/shifts?org_id=${ORG_ID}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        employee_id: null,  // PHASE 2: null = empty shift (no employee creation)
+                        shift_date: defaultDate || null,
+                        shift_time: defaultTime || null,
+                        notes: ''
+                    })
+                });
+
+                if (response.ok) {
+                    showToast('Shift added. Please select employee.', 'success');
+                    // Reload shifts to show the new row
+                    loadShiftsForEvent(eventId);
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to add shift: ${error.detail || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error adding shift:', error);
+                showToast('Failed to add shift', 'error');
+            }
+        }
+
+        async function deleteShift(eventId, shiftId) {
+            showConfirmModal(
+                'Delete Shift',
+                'Are you sure you want to delete this shift? This action cannot be undone.',
+                async () => {
+                    await deleteShiftAPI(eventId, shiftId);
+                }
+            );
+        }
+
+        async function deleteShiftAPI(eventId, shiftId) {
+            try {
+                const response = await fetch(`/api/shifts/${shiftId}?org_id=${ORG_ID}`, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    showToast('Shift deleted successfully', 'success');
+                    // Reload shifts
+                    loadShiftsForEvent(eventId);
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to delete shift: ${error.detail || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting shift:', error);
+                showToast('Failed to delete shift', 'error');
+            }
+        }
+
+        async function sendShiftReminder(eventId, shiftId) {
+            try {
+                const response = await fetch(`/api/shifts/${shiftId}/send-reminder?org_id=${ORG_ID}`, {
+                    method: 'POST',
+                });
+
+                if (response.ok) {
+                    // Optimistic update - change icon to blue (sent)
+                    const btn = document.querySelector(`tr[data-shift-id="${shiftId}"] .action-icon.whatsapp`);
+                    if (btn) {
+                        btn.classList.add('sent');
+                        btn.title = 'נשלח בעבר – שלח שוב';
+                    }
+                    
+                    showToast('Reminder sent successfully', 'success');
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to send reminder: ${error.detail || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error sending reminder:', error);
+                showToast('Failed to send reminder', 'error');
+            }
+        }
+
+        // Delete Event (PHASE 3 - Task 5A)
+        async function deleteEvent(eventId) {
+            showConfirmModal(
+                'Delete Event',
+                'Are you sure you want to delete this event? This action cannot be undone.',
+                async () => {
+                    await deleteEventAPI(eventId);
+                }
+            );
+        }
+
+        async function deleteEventAPI(eventId) {
+            try {
+                const response = await fetch(`/api/events/${eventId}?org_id=${ORG_ID}`, {
+                    method: 'DELETE',
+                });
+
+                if (response.ok) {
+                    // Remove row from table
+                    const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
+                    if (row) {
+                        row.style.transition = 'opacity 0.3s';
+                        row.style.opacity = '0';
+                        setTimeout(() => row.remove(), 300);
+                    }
+                    
+                    showToast('Event deleted successfully', 'success');
+                    
+                    // Reload events after a short delay
+                    setTimeout(() => loadEvents(currentMonth), 500);
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to delete event: ${error.detail || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error deleting event:', error);
+                showToast('Failed to delete event', 'error');
+            }
+        }
+
+        // Send technical reminder with opening employee details
+        async function sendTechReminder(eventId) {
+            try {
+                // Send directly without confirmation dialog
+                const form = document.createElement('form');
+                form.method = 'POST';
+                form.action = `/ui/send_tech_reminder_employee/${eventId}`;
+                document.body.appendChild(form);
+                form.submit();
+            } catch (error) {
+                console.error('Error sending tech reminder:', error);
+                showToast('Failed to send tech reminder', 'error');
+            }
+        }
+
+        // Send WhatsApp (PHASE 3 - Task 5B)
+        async function sendWhatsApp(eventId) {
+            try {
+                const response = await fetch(`/api/events/${eventId}/send-whatsapp?org_id=${ORG_ID}`, {
+                    method: 'POST',
+                });
+
+                if (response.ok) {
+                    // Optimistic update - change icon to blue (sent)
+                    const btn = document.querySelector(`tr[data-event-id="${eventId}"] .action-icon.whatsapp`);
+                    if (btn) {
+                        btn.classList.add('sent');
+                        btn.title = 'נשלח בעבר – שלח שוב';
+                    }
+                    
+                    showToast('WhatsApp message sent successfully', 'success');
+                } else {
+                    const error = await response.json();
+                    showToast(`Failed to send WhatsApp: ${error.detail || 'Unknown error'}`, 'error');
+                }
+            } catch (error) {
+                console.error('Error sending WhatsApp:', error);
+                showToast('Failed to send WhatsApp message', 'error');
+            }
+        }
+
+        // SSE Connection
+        function connectSSE() {
+            if (eventSource) {
+                eventSource.close();
+            }
+
+            eventSource = new EventSource(`/api/sse/events?org_id=${ORG_ID}`);
+
+            eventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    console.log('SSE event received:', data);
+
+                    if (data.type === 'event_updated') {
+                        // Reload current month if event is in current view
+                        loadEvents(currentMonth);
+                        showToast('Event updated by another user', 'info');
+                    }
+                } catch (error) {
+                    console.error('SSE parse error:', error);
+                }
+            };
+
+            eventSource.onerror = (error) => {
+                console.error('SSE error:', error);
+                // Reconnect after delay
+                setTimeout(() => connectSSE(), 5000);
+            };
+        }
+
+        // Sorting
+        // Note: Sort state is NOT saved to localStorage, so on page refresh,
+        // the default sort (by date, ascending) is always applied
+        function sortTable(th, field) {
+            const table = th.closest('table');
+            const tbody = table.querySelector('tbody');
+            const rows = Array.from(tbody.querySelectorAll('tr'));
+
+            // Determine sort direction (toggle between asc/desc)
+            let direction = 'asc';
+            if (th.classList.contains('sorted-asc')) {
+                direction = 'desc';
+            }
+
+            // Clear all sort indicators in this table
+            table.querySelectorAll('th').forEach(h => {
+                h.classList.remove('sorted-asc', 'sorted-desc');
+            });
+
+            // Sort rows
+            rows.sort((a, b) => {
+                let aVal = a.querySelector(`input[onchange*="${field}"]`)?.value || '';
+                let bVal = b.querySelector(`input[onchange*="${field}"]`)?.value || '';
+
+                // Handle date/time fields - convert to timestamps for proper sorting
+                if (field === 'event_date' || field === 'show_time' || field === 'load_in_time') {
+                    aVal = aVal ? new Date(aVal).getTime() : 0;
+                    bVal = bVal ? new Date(bVal).getTime() : 0;
+                }
+
+                if (direction === 'asc') {
+                    return aVal > bVal ? 1 : -1;
+                } else {
+                    return aVal < bVal ? 1 : -1;
+                }
+            });
+
+            // Re-append sorted rows to DOM
+            rows.forEach(row => tbody.appendChild(row));
+
+            // Update sort indicator on clicked column
+            th.classList.add(direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
+        }
+
+        // Column Order Management (PHASE 5 - Task 8)
+        let draggedColumn = null;
+        let draggedColumnIndex = -1;
+
+        function initColumnDragDrop() {
+            // Apply to all tables
+            document.querySelectorAll('.events-table thead th').forEach((th, index) => {
+                th.addEventListener('dragstart', handleDragStart);
+                th.addEventListener('dragover', handleDragOver);
+                th.addEventListener('drop', handleDrop);
+                th.addEventListener('dragend', handleDragEnd);
+                th.addEventListener('dragenter', handleDragEnter);
+                th.addEventListener('dragleave', handleDragLeave);
+            });
+        }
+
+        function handleDragStart(e) {
+            draggedColumn = this;
+            draggedColumnIndex = Array.from(this.parentNode.children).indexOf(this);
+            this.classList.add('dragging');
+            e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/html', this.innerHTML);
+        }
+
+        function handleDragOver(e) {
+            if (e.preventDefault) {
+                e.preventDefault();
+            }
+            e.dataTransfer.dropEffect = 'move';
+            return false;
+        }
+
+        function handleDragEnter(e) {
+            if (this !== draggedColumn) {
+                this.classList.add('drag-over');
+            }
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over');
+        }
+
+        function handleDrop(e) {
+            if (e.stopPropagation) {
+                e.stopPropagation();
+            }
+
+            if (draggedColumn !== this) {
+                const targetIndex = Array.from(this.parentNode.children).indexOf(this);
+                const table = this.closest('table');
+                
+                // Reorder columns in this table
+                reorderTableColumns(table, draggedColumnIndex, targetIndex);
+                
+                // Save column order to localStorage
+                saveColumnOrder(table);
+            }
+
+            return false;
+        }
+
+        function handleDragEnd(e) {
+            this.classList.remove('dragging');
+            document.querySelectorAll('.events-table thead th').forEach(th => {
+                th.classList.remove('drag-over');
+            });
+        }
+
+        function reorderTableColumns(table, fromIndex, toIndex) {
+            const headerRow = table.querySelector('thead tr');
+            const headers = Array.from(headerRow.children);
+            const bodyRows = Array.from(table.querySelectorAll('tbody tr'));
+
+            // Move header
+            const header = headers[fromIndex];
+            if (toIndex < fromIndex) {
+                headerRow.insertBefore(header, headers[toIndex]);
+            } else {
+                headerRow.insertBefore(header, headers[toIndex].nextSibling);
+            }
+
+            // Move cells in each body row
+            bodyRows.forEach(row => {
+                const cells = Array.from(row.children);
+                
+                // Skip row-details rows (they have colspan)
+                if (cells.length === 1 && cells[0].colSpan > 1) {
+                    return;
+                }
+                
+                // Skip if this is a row-details row by checking class
+                if (row.classList.contains('row-details')) {
+                    return;
+                }
+                
+                // Only reorder if we have the right number of cells
+                if (fromIndex >= cells.length || toIndex >= cells.length) {
+                    return;
+                }
+                
+                const cell = cells[fromIndex];
+                if (toIndex < fromIndex) {
+                    row.insertBefore(cell, cells[toIndex]);
+                } else {
+                    row.insertBefore(cell, cells[toIndex].nextSibling);
+                }
+            });
+        }
+
+        function saveColumnOrder(table) {
+            const headerRow = table.querySelector('thead tr');
+            const order = Array.from(headerRow.children).map(th => th.getAttribute('data-col'));
+            localStorage.setItem('events.columnOrder', JSON.stringify(order));
+        }
+
+        function restoreColumnOrder() {
+            const savedOrder = localStorage.getItem('events.columnOrder');
+            if (!savedOrder) {
+                initColumnDragDrop();
+                return;
+            }
+
+            try {
+                const order = JSON.parse(savedOrder);
+                
+                // Apply to all tables
+                document.querySelectorAll('.events-table').forEach(table => {
+                    const headerRow = table.querySelector('thead tr');
+                    const headers = Array.from(headerRow.children);
+                    const currentOrder = headers.map(th => th.getAttribute('data-col'));
+
+                    // Only reorder if order is different
+                    if (JSON.stringify(currentOrder) !== JSON.stringify(order)) {
+                        // Create mapping of column names to indices in saved order
+                        const orderMap = {};
+                        order.forEach((col, idx) => {
+                            orderMap[col] = idx;
+                        });
+
+                        // Sort headers by saved order
+                        headers.sort((a, b) => {
+                            const aCol = a.getAttribute('data-col');
+                            const bCol = b.getAttribute('data-col');
+                            const aIdx = orderMap[aCol] !== undefined ? orderMap[aCol] : 999;
+                            const bIdx = orderMap[bCol] !== undefined ? orderMap[bCol] : 999;
+                            return aIdx - bIdx;
+                        });
+
+                        // Clear and re-append in correct order
+                        headerRow.innerHTML = '';
+                        headers.forEach(th => headerRow.appendChild(th));
+
+                        // Reorder body rows to match
+                        const bodyRows = Array.from(table.querySelectorAll('tbody tr'));
+                        bodyRows.forEach(row => {
+                            const cells = Array.from(row.children);
+                            
+                            // Skip row-details rows (they have colspan)
+                            if (cells.length === 1 && cells[0].colSpan > 1) {
+                                // Update colspan to match current column count
+                                cells[0].colSpan = headers.length;
+                                return;
+                            }
+                            
+                            // Skip if this is a row-details row by checking class
+                            if (row.classList.contains('row-details')) {
+                                return;
+                            }
+
+                            // Create index map once before sorting (performance optimization)
+                            const cellIndexMap = new Map();
+                            cells.forEach((cell, idx) => {
+                                cellIndexMap.set(cell, idx);
+                            });
+
+                            // Sort cells by header order
+                            cells.sort((a, b) => {
+                                const aIdx = cellIndexMap.get(a);
+                                const bIdx = cellIndexMap.get(b);
+                                
+                                // Map cell index to header column name
+                                const aHeader = currentOrder[aIdx];
+                                const bHeader = currentOrder[bIdx];
+                                
+                                const aSortIdx = orderMap[aHeader] !== undefined ? orderMap[aHeader] : 999;
+                                const bSortIdx = orderMap[bHeader] !== undefined ? orderMap[bHeader] : 999;
+                                
+                                return aSortIdx - bSortIdx;
+                            });
+
+                            // Clear and re-append
+                            row.innerHTML = '';
+                            cells.forEach(cell => row.appendChild(cell));
+                        });
+                    }
+                });
+            } catch (e) {
+                console.error('Failed to restore column order:', e);
+            }
+
+            // Initialize drag and drop after restoring
+            initColumnDragDrop();
+        }
+
+        // PHASE 5: Column Resize Management
+        let resizeState = {
+            isResizing: false,
+            startX: 0,
+            startWidth: 0,
+            currentTh: null,
+        };
+
+        function initColumnResize() {
+            // Add resize handles to all table headers (except expander)
+            document.querySelectorAll('.events-table thead th').forEach(th => {
+                // Skip expander column
+                if (th.getAttribute('data-col') === 'expander') {
+                    return;
+                }
+
+                // Check if resize handle already exists
+                if (th.querySelector('.resize-handle')) {
+                    return;
+                }
+
+                // Create resize handle
+                const resizeHandle = document.createElement('div');
+                resizeHandle.className = 'resize-handle';
+                resizeHandle.addEventListener('mousedown', (e) => startResize(e, th));
+                th.appendChild(resizeHandle);
+            });
+
+            // Restore saved column widths
+            restoreColumnWidths();
+        }
+
+        function startResize(e, th) {
+            // Prevent drag and sort while resizing
+            e.stopPropagation();
+            e.preventDefault();
+
+            resizeState.isResizing = true;
+            resizeState.currentTh = th;
+            resizeState.startX = e.pageX;
+            resizeState.startWidth = th.offsetWidth;
+
+            // Add visual feedback
+            th.classList.add('resizing');
+            document.body.classList.add('resizing-column');
+            
+            // Find the resize handle
+            const handle = th.querySelector('.resize-handle');
+            if (handle) {
+                handle.classList.add('resizing');
+            }
+
+            // Add global mouse listeners
+            document.addEventListener('mousemove', doResize);
+            document.addEventListener('mouseup', stopResize);
+        }
+
+        function doResize(e) {
+            if (!resizeState.isResizing) return;
+
+            const diff = e.pageX - resizeState.startX;
+            const MIN_COLUMN_WIDTH = 50;  // Minimum column width in pixels
+            const MAX_COLUMN_WIDTH = 600; // Maximum column width in pixels
+            const newWidth = Math.max(MIN_COLUMN_WIDTH, Math.min(MAX_COLUMN_WIDTH, resizeState.startWidth + diff));
+            
+            resizeState.currentTh.style.width = newWidth + 'px';
+            resizeState.currentTh.style.minWidth = newWidth + 'px';
+            resizeState.currentTh.style.maxWidth = newWidth + 'px';
+        }
+
+        function stopResize(e) {
+            if (!resizeState.isResizing) return;
+
+            resizeState.isResizing = false;
+            
+            // Remove visual feedback
+            if (resizeState.currentTh) {
+                resizeState.currentTh.classList.remove('resizing');
+                const handle = resizeState.currentTh.querySelector('.resize-handle');
+                if (handle) {
+                    handle.classList.remove('resizing');
+                }
+            }
+            document.body.classList.remove('resizing-column');
+
+            // Remove global mouse listeners
+            document.removeEventListener('mousemove', doResize);
+            document.removeEventListener('mouseup', stopResize);
+
+            // Save column widths to localStorage
+            saveColumnWidths();
+
+            resizeState.currentTh = null;
+        }
+
+        function saveColumnWidths() {
+            const widths = {};
+            document.querySelectorAll('.events-table thead th').forEach(th => {
+                const col = th.getAttribute('data-col');
+                if (col && col !== 'expander' && th.style.width) {
+                    widths[col] = th.style.width;
+                }
+            });
+            localStorage.setItem('events.columnWidths', JSON.stringify(widths));
+        }
+
+        function restoreColumnWidths() {
+            const saved = localStorage.getItem('events.columnWidths');
+            if (!saved) return;
+
+            try {
+                const widths = JSON.parse(saved);
+                document.querySelectorAll('.events-table thead th').forEach(th => {
+                    const col = th.getAttribute('data-col');
+                    if (col && widths[col]) {
+                        th.style.width = widths[col];
+                        th.style.minWidth = widths[col];
+                        th.style.maxWidth = widths[col];
+                    }
+                });
+            } catch (e) {
+                console.error('Failed to restore column widths:', e);
+            }
+        }
+
+        // Toast Notifications
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            const toastMessage = document.getElementById('toastMessage');
+            
+            toast.className = `toast visible ${type}`;
+            toastMessage.textContent = message;
+
+            setTimeout(() => {
+                toast.classList.remove('visible');
+            }, 3000);
+        }
+
+        // Modal System
+        let confirmCallback = null;
+        let inputCallback = null;
+
+        function showConfirmModal(title, message, onConfirm) {
+            document.getElementById('confirmTitle').textContent = title;
+            document.getElementById('confirmMessage').textContent = message;
+            confirmCallback = onConfirm;
+            document.getElementById('confirmModal').classList.add('visible');
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.remove('visible');
+            confirmCallback = null;
+        }
+
+        function confirmAction() {
+            if (confirmCallback) {
+                confirmCallback();
+            }
+            closeConfirmModal();
+        }
+
+        function showInputModal(title, label, placeholder, onSubmit) {
+            document.getElementById('inputTitle').textContent = title;
+            document.getElementById('inputLabel').textContent = label;
+            const inputField = document.getElementById('inputField');
+            inputField.placeholder = placeholder;
+            inputField.value = '';
+            inputCallback = onSubmit;
+            
+            // Add Enter key handler
+            inputField.onkeydown = (e) => {
+                if (e.key === 'Enter') {
+                    submitInput();
+                }
+            };
+            
+            document.getElementById('inputModal').classList.add('visible');
+            // Focus on input
+            setTimeout(() => inputField.focus(), 100);
+        }
+
+        function closeInputModal() {
+            document.getElementById('inputModal').classList.remove('visible');
+            inputCallback = null;
+        }
+
+        function submitInput() {
+            const value = document.getElementById('inputField').value;
+            if (inputCallback && value) {
+                inputCallback(value);
+            }
+            closeInputModal();
+        }
+
+        // Utility
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text || '';
+            return div.innerHTML;
+        }
+
+        // ===================================
+        // NOTIFICATIONS SYSTEM
+        // ===================================
+        
+        function initNotifications() {
+            // Load mute preference
+            isMuted = localStorage.getItem('notificationsMuted') === 'true';
+            
+            // Create notification sound using Web Audio API
+            initNotificationSound();
+            
+            // Load initial notification summary
+            loadNotificationSummary();
+            
+            // Connect to SSE for real-time updates
+            connectNotificationSSE();
+            
+            // Close panel when clicking outside
+            document.addEventListener('click', (e) => {
+                const panel = document.getElementById('notificationPanel');
+                const bell = document.getElementById('notificationBell');
+                if (!panel.contains(e.target) && !bell.contains(e.target)) {
+                    panel.classList.remove('visible');
+                }
+            });
+        }
+        
+        function initNotificationSound() {
+            // Create a simple pleasant notification sound using Web Audio API
+            // AudioContext is created lazily and reused globally
+            try {
+                notificationSound = async () => {
+                    if (isMuted) return;
+                    
+                    // Create AudioContext on first use (lazy initialization)
+                    if (!audioContext) {
+                        audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    }
+                    
+                    // Resume AudioContext if suspended (required after user interaction in modern browsers)
+                    if (audioContext.state === 'suspended') {
+                        await audioContext.resume();
+                    }
+                    
+                    const oscillator = audioContext.createOscillator();
+                    const gainNode = audioContext.createGain();
+                    
+                    oscillator.connect(gainNode);
+                    gainNode.connect(audioContext.destination);
+                    
+                    // Pleasant notification tone (E6 -> C6)
+                    oscillator.frequency.setValueAtTime(1318.51, audioContext.currentTime);
+                    oscillator.frequency.exponentialRampToValueAtTime(1046.50, audioContext.currentTime + 0.1);
+                    
+                    gainNode.gain.setValueAtTime(0.1, audioContext.currentTime);
+                    gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+                    
+                    oscillator.start(audioContext.currentTime);
+                    oscillator.stop(audioContext.currentTime + 0.3);
+                };
+            } catch (e) {
+                console.warn('Could not initialize notification sound:', e);
+                notificationSound = () => {}; // Fallback to silent
+            }
+        }
+        
+        async function loadNotificationSummary() {
+            try {
+                const response = await fetch(`/notifications/summary?org_id=${ORG_ID}`);
+                const data = await response.json();
+                updateNotificationUI(data);
+            } catch (error) {
+                console.error('Failed to load notifications:', error);
+            }
+        }
+        
+        function updateNotificationUI(data) {
+            const badge = document.getElementById('notificationBadge');
+            const list = document.getElementById('notificationList');
+            
+            // Update badge
+            const count = data.unread_count_total || 0;
+            if (count > 0) {
+                badge.textContent = count > 99 ? '99+' : count;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+            
+            // Update list
+            if (!data.items || data.items.length === 0) {
+                list.innerHTML = '<div class="notification-empty">אין התראות חדשות</div>';
+                return;
+            }
+            
+            list.innerHTML = data.items.map(item => {
+                const timeAgo = formatTimeAgo(item.last_message_at);
+                const snippet = escapeHtml(item.last_message_snippet || '');
+                const eventName = escapeHtml(item.event_name || 'אירוע ללא שם');
+                const unreadCount = item.unread_count_for_event || 0;
+                const eventId = parseInt(item.event_id) || 0;
+                const eventDate = escapeHtml(item.event_date || '');
+                
+                return `
+                    <div class="notification-item" data-event-id="${eventId}" data-event-date="${eventDate}">
+                        <div class="notification-item-header">
+                            <div class="notification-item-title">${eventName}</div>
+                            ${unreadCount > 0 ? `<div class="notification-item-badge">${unreadCount}</div>` : ''}
+                        </div>
+                        <div class="notification-item-snippet">${snippet}</div>
+                        <div class="notification-item-time">${timeAgo}</div>
+                    </div>
+                `;
+            }).join('');
+            
+            // Add event listeners to notification items (safer than inline onclick)
+            list.querySelectorAll('.notification-item').forEach(item => {
+                item.addEventListener('click', () => {
+                    const eventId = parseInt(item.getAttribute('data-event-id'));
+                    const eventDate = item.getAttribute('data-event-date');
+                    if (eventId) {
+                        navigateToEvent(eventId, eventDate);
+                    }
+                });
+            });
+        }
+        
+        function formatTimeAgo(timestamp) {
+            if (!timestamp) return '';
+            
+            // Parse ISO timestamp (UTC) and convert to local time for comparison
+            const now = new Date();
+            const then = new Date(timestamp);
+            const diffMs = now - then;
+            const diffMins = Math.floor(diffMs / 60000);
+            const diffHours = Math.floor(diffMs / 3600000);
+            const diffDays = Math.floor(diffMs / 86400000);
+            
+            if (diffMins < 1) return 'כרגע';
+            if (diffMins < 60) return `לפני ${diffMins} דק'`;
+            if (diffHours < 24) return `לפני ${diffHours} שעות`;
+            if (diffDays === 1) return 'אתמול';
+            if (diffDays < 7) return `לפני ${diffDays} ימים`;
+            // Format date in Israel timezone using Intl API
+            return then.toLocaleDateString('he-IL', { timeZone: 'Asia/Jerusalem' });
+        }
+        
+        function connectNotificationSSE() {
+            notificationEventSource = new EventSource(`/notifications/sse?org_id=${ORG_ID}`);
+            
+            notificationEventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+                    
+                    if (data.type === 'connected') {
+                        console.log('Connected to notification stream');
+                        return;
+                    }
+                    
+                    if (data.type === 'incoming_message') {
+                        handleIncomingMessage(data);
+                    }
+                } catch (error) {
+                    console.error('Error parsing notification SSE data:', error);
+                }
+            };
+            
+            notificationEventSource.onerror = (error) => {
+                console.error('Notification SSE error:', error);
+                // Attempt to reconnect after 5 seconds
+                setTimeout(() => {
+                    if (notificationEventSource.readyState === EventSource.CLOSED) {
+                        connectNotificationSSE();
+                    }
+                }, 5000);
+            };
+        }
+        
+        function handleIncomingMessage(data) {
+            // Play sound
+            if (notificationSound) {
+                notificationSound();
+            }
+            
+            // Reload notification summary to update UI
+            loadNotificationSummary();
+            
+            // Show toast
+            const eventName = data.event_name || 'אירוע חדש';
+            showToast(`הודעה חדשה מ: ${eventName}`, 'info');
+        }
+        
+        function toggleNotificationPanel() {
+            const panel = document.getElementById('notificationPanel');
+            panel.classList.toggle('visible');
+        }
+        
+        async function clearNotifications(event) {
+            event.stopPropagation();
+            
+            try {
+                await fetch(`/notifications/clear?org_id=${ORG_ID}`, {
+                    method: 'POST'
+                });
+                
+                // Update UI
+                const badge = document.getElementById('notificationBadge');
+                badge.classList.add('hidden');
+                
+                const list = document.getElementById('notificationList');
+                list.innerHTML = '<div class="notification-empty">אין התראות חדשות</div>';
+                
+                showToast('ההתראות נוקו בהצלחה', 'success');
+            } catch (error) {
+                console.error('Failed to clear notifications:', error);
+                showToast('שגיאה בניקוי התראות', 'error');
+            }
+        }
+        
+        function showAllMessages() {
+            window.location.href = '/ui/messages';
+        }
+        
+        // Deep linking support
+        function checkDeepLink() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const eventId = urlParams.get('eventId');
+            const month = urlParams.get('month');
+            
+            if (eventId && month) {
+                // Select the month first
+                selectMonth(month);
+                
+                // Wait for events to load, then navigate to the specific event
+                setTimeout(() => {
+                    scrollAndHighlightEvent(parseInt(eventId));
+                }, EVENT_LOAD_TIMEOUT);
+            }
+        }
+        
+        function navigateToEvent(eventId, eventDate) {
+            if (!eventDate) {
+                console.warn('No event date provided for navigation');
+                return;
+            }
+            
+            // Close notification panel
+            const panel = document.getElementById('notificationPanel');
+            panel.classList.remove('visible');
+            
+            // Extract month from event date (YYYY-MM-DD -> YYYY-MM)
+            const month = eventDate.substring(0, 7);
+            
+            // Update URL with query params
+            const url = new URL(window.location);
+            url.searchParams.set('month', month);
+            url.searchParams.set('eventId', eventId);
+            window.history.pushState({}, '', url);
+            
+            // Select the month
+            selectMonth(month);
+            
+            // Wait for events to load, then scroll and highlight
+            setTimeout(() => {
+                scrollAndHighlightEvent(eventId);
+            }, NAVIGATION_SCROLL_DELAY);
+        }
+        
+        function scrollAndHighlightEvent(eventId) {
+            // Validate and sanitize eventId to prevent XSS
+            const safeEventId = parseInt(eventId);
+            if (!safeEventId || isNaN(safeEventId)) {
+                console.warn('Invalid event ID:', eventId);
+                return;
+            }
+            
+            // Find the event row using the validated ID
+            const eventRow = document.querySelector(`tr[data-event-id="${safeEventId}"]`);
+            
+            if (!eventRow) {
+                console.warn('Event row not found:', safeEventId);
+                return;
+            }
+            
+            // Activate the hall tab containing this event
+            const hallPanel = eventRow.closest('.hall-tab-panel');
+            if (hallPanel && !hallPanel.classList.contains('active')) {
+                selectHallTab(hallPanel.dataset.hall);
+            }
+            
+            // Scroll to the event row
+            setTimeout(() => {
+                eventRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                
+                // Add highlight animation
+                eventRow.classList.add('event-highlight');
+                setTimeout(() => {
+                    eventRow.classList.remove('event-highlight');
+                }, 3000);
+            }, 300);
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (eventSource) {
+                eventSource.close();
+            }
+            if (notificationEventSource) {
+                notificationEventSource.close();
+            }
+        });
+    </script>
+</body>
+</html>
