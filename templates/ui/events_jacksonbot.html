@@ -2700,8 +2700,9 @@
         // Contact Dropdown (PHASE 4)
         let activeDropdown = null;
 
-        async function toggleContactDropdown(eventId, fieldType, role) {
-            const containerId = `${fieldType}-${eventId}`;
+        async function toggleContactDropdown(eventId, fieldType, role, source = 'table') {
+            const prefix = source === 'panel' ? 'panel-' : '';
+            const containerId = `${prefix}${fieldType}-${eventId}`;
             const container = document.getElementById(containerId);
             
             // Close any existing dropdown
@@ -2731,7 +2732,7 @@
                 <div class="contact-dropdown-search">
                     <input type="text" placeholder="Search by name or phone..." oninput="filterContactDropdown(${eventId}, '${fieldType}', '${role}', this.value)">
                 </div>
-                <div class="contact-dropdown-list" id="${fieldType}-list-${eventId}">
+                <div class="contact-dropdown-list" id="${prefix}${fieldType}-list-${eventId}">
                     <div class="contact-dropdown-empty">Loading...</div>
                 </div>
             `;
@@ -2741,7 +2742,7 @@
             activeDropdown = container;
             
             // Load contacts
-            await loadContactsForDropdown(eventId, fieldType, role);
+            await loadContactsForDropdown(eventId, fieldType, role, '', source);
             
             // Focus search input
             menu.querySelector('.contact-dropdown-search input')?.focus();
@@ -2915,11 +2916,23 @@
             });
         }
 
-        function removeContactFromEvent(eventId, role) {
-            const nameField = document.querySelector(role === 'producer' ? `#producer-${eventId} .contact-dropdown-trigger div div` : `#technical-${eventId} .contact-dropdown-trigger div div`);
-            if (nameField) {
-                nameField.textContent = role === 'producer' ? 'Select producer' : 'Select technical';
+        function setContactTriggerDefault(eventId, role, source = 'table') {
+            const prefix = source === 'panel' ? 'panel-' : '';
+            const container = document.getElementById(`${prefix}${role}-${eventId}`);
+            const trigger = container?.querySelector('.contact-dropdown-trigger');
+            if (trigger) {
+                trigger.innerHTML = `
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; font-size: 0.9rem;">${role === 'producer' ? 'Select producer' : 'Select technical'}</div>
+                    </div>
+                    <span style="color: var(--text-muted);">▼</span>
+                `;
             }
+        }
+
+        function removeContactFromEvent(eventId, role) {
+            setContactTriggerDefault(eventId, role, 'table');
+            setContactTriggerDefault(eventId, role, 'panel');
             markDirty(eventId, `${role}_contact_id`, null);
             markDirty(eventId, `${role}_name`, '');
             markDirty(eventId, `${role}_phone`, '');
@@ -2957,17 +2970,27 @@
                 <div class="panel-section">
                     <h4>Contacts</h4>
                     <div class="panel-grid two-col">
-                        <label>Producer Name
-                            <input type="text" class="inline-edit" value="${escapeHtml(event.producer_name || '')}" onchange="markDirty(${event.event_id}, 'producer_name', this.value)">
+                        <label>Producer Contact
+                            <div class="contact-dropdown-container" id="panel-producer-${event.event_id}">
+                                <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'producer', 'producer', 'panel')">
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.producer_name || 'Select producer')}</div>
+                                        ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.producer_phone)}</div>` : ''}
+                                    </div>
+                                    <span style="color: var(--text-muted);">▼</span>
+                                </div>
+                            </div>
                         </label>
-                        <label>Producer Phone
-                            <input type="text" class="inline-edit" value="${escapeHtml(event.producer_phone || '')}" onchange="markDirty(${event.event_id}, 'producer_phone', this.value)">
-                        </label>
-                        <label>Technical Name
-                            <input type="text" class="inline-edit" value="${escapeHtml(event.technical_name || '')}" onchange="markDirty(${event.event_id}, 'technical_name', this.value)">
-                        </label>
-                        <label>Technical Phone
-                            <input type="text" class="inline-edit" value="${escapeHtml(event.technical_phone || '')}" onchange="markDirty(${event.event_id}, 'technical_phone', this.value)">
+                        <label>Technical Contact
+                            <div class="contact-dropdown-container" id="panel-technical-${event.event_id}">
+                                <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'technical', 'panel')">
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || 'Select technical')}</div>
+                                        ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
+                                    </div>
+                                    <span style="color: var(--text-muted);">▼</span>
+                                </div>
+                            </div>
                         </label>
                     </div>
                     <div class="panel-actions">
@@ -3017,13 +3040,14 @@
             document.getElementById('eventSidePanel').classList.remove('visible');
         }
 
-        async function loadContactsForDropdown(eventId, fieldType, role, searchTerm = '') {
+        async function loadContactsForDropdown(eventId, fieldType, role, searchTerm = '', source = 'table') {
             try {
                 const url = `/api/contacts/by-role?org_id=${ORG_ID}&role=${encodeURIComponent(role)}${searchTerm ? '&search=' + encodeURIComponent(searchTerm) : ''}`;
                 const response = await fetch(url);
                 const data = await response.json();
                 
-                const listId = `${fieldType}-list-${eventId}`;
+                const prefix = source === 'panel' ? 'panel-' : '';
+                const listId = `${prefix}${fieldType}-list-${eventId}`;
                 const listEl = document.getElementById(listId);
                 if (!listEl) return;
                 
@@ -3033,14 +3057,15 @@
                 }
                 
                 listEl.innerHTML = data.contacts.map(contact => `
-                    <div class="contact-dropdown-item" onclick="selectContact(${eventId}, '${fieldType}', ${contact.contact_id}, '${escapeHtml(contact.name)}', '${escapeHtml(contact.phone)}')">
+                    <div class="contact-dropdown-item" onclick="selectContact(${eventId}, '${fieldType}', ${contact.contact_id}, '${escapeHtml(contact.name)}', '${escapeHtml(contact.phone)}', '${source}')">
                         <div class="contact-dropdown-item-name">${escapeHtml(contact.name)}</div>
                         <div class="contact-dropdown-item-phone">${escapeHtml(contact.phone)}</div>
                     </div>
                 `).join('');
             } catch (error) {
                 console.error('Failed to load contacts:', error);
-                const listId = `${fieldType}-list-${eventId}`;
+                const prefix = source === 'panel' ? 'panel-' : '';
+                const listId = `${prefix}${fieldType}-list-${eventId}`;
                 const listEl = document.getElementById(listId);
                 if (listEl) {
                     listEl.innerHTML = '<div class="contact-dropdown-empty">Error loading contacts</div>';
@@ -3048,21 +3073,33 @@
             }
         }
 
-        function filterContactDropdown(eventId, fieldType, role, searchTerm) {
-            loadContactsForDropdown(eventId, fieldType, role, searchTerm);
+        function filterContactDropdown(eventId, fieldType, role, searchTerm, source = 'table') {
+            loadContactsForDropdown(eventId, fieldType, role, searchTerm, source);
         }
 
-        function selectContact(eventId, fieldType, contactId, name, phone) {
+        function selectContact(eventId, fieldType, contactId, name, phone, source = 'table') {
             // Update the UI
-            const container = document.getElementById(`${fieldType}-${eventId}`);
-            const trigger = container.querySelector('.contact-dropdown-trigger');
-            trigger.innerHTML = `
+            const prefix = source === 'panel' ? 'panel-' : '';
+            const container = document.getElementById(`${prefix}${fieldType}-${eventId}`);
+            const trigger = container?.querySelector('.contact-dropdown-trigger');
+            const triggerContent = `
                 <div style="flex: 1;">
                     <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(name)}</div>
                     <div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(phone)}</div>
                 </div>
                 <span style="color: var(--text-muted);">▼</span>
             `;
+            if (trigger) {
+                trigger.innerHTML = triggerContent;
+            }
+
+            // Also update paired table/panel trigger if exists
+            const counterpartPrefix = source === 'panel' ? '' : 'panel-';
+            const counterpart = document.getElementById(`${counterpartPrefix}${fieldType}-${eventId}`);
+            const counterpartTrigger = counterpart?.querySelector('.contact-dropdown-trigger');
+            if (counterpartTrigger) {
+                counterpartTrigger.innerHTML = triggerContent;
+            }
             
             // Mark as dirty
             markDirty(eventId, `${fieldType}_contact_id`, contactId);
