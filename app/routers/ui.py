@@ -2727,6 +2727,18 @@ async def scheduler_page() -> HTMLResponse:
       </div>
     </div>
     
+    <!-- Action Buttons Row -->
+    <div class="row mb-3">
+      <div class="col">
+        <button id="fetchBtn" class="btn btn-success me-2" onclick="fetchFutureEvents()">
+          🔄 Fetch Future Events
+        </button>
+        <button id="cleanupBtn" class="btn btn-outline-danger" onclick="cleanupPastLogs()">
+          🗑️ Cleanup Old Logs
+        </button>
+      </div>
+    </div>
+    
     <!-- Global Settings Card -->
     <div class="card mb-4 shadow-sm">
       <div class="card-header bg-primary text-white">
@@ -2789,9 +2801,15 @@ async def scheduler_page() -> HTMLResponse:
         <div class="card shadow-sm">
           <div class="card-header bg-light d-flex justify-content-between align-items-center">
             <h6 class="mb-0">INIT Messages</h6>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="hideSentInit" onchange="loadJobs('INIT')">
-              <label class="form-check-label" for="hideSentInit">Hide sent</label>
+            <div class="d-flex gap-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="hideSentInit" onchange="loadJobs('INIT')">
+                <label class="form-check-label" for="hideSentInit">Hide sent</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="showPastInit" onchange="loadJobs('INIT')">
+                <label class="form-check-label" for="showPastInit">Show past</label>
+              </div>
             </div>
           </div>
           <div class="card-body p-0">
@@ -2831,9 +2849,15 @@ async def scheduler_page() -> HTMLResponse:
         <div class="card shadow-sm">
           <div class="card-header bg-light d-flex justify-content-between align-items-center">
             <h6 class="mb-0">TECH Reminders</h6>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="hideSentTech" onchange="loadJobs('TECH_REMINDER')">
-              <label class="form-check-label" for="hideSentTech">Hide sent</label>
+            <div class="d-flex gap-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="hideSentTech" onchange="loadJobs('TECH_REMINDER')">
+                <label class="form-check-label" for="hideSentTech">Hide sent</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="showPastTech" onchange="loadJobs('TECH_REMINDER')">
+                <label class="form-check-label" for="showPastTech">Show past</label>
+              </div>
             </div>
           </div>
           <div class="card-body p-0">
@@ -2873,9 +2897,15 @@ async def scheduler_page() -> HTMLResponse:
         <div class="card shadow-sm">
           <div class="card-header bg-light d-flex justify-content-between align-items-center">
             <h6 class="mb-0">SHIFT Reminders</h6>
-            <div class="form-check">
-              <input class="form-check-input" type="checkbox" id="hideSentShift" onchange="loadJobs('SHIFT_REMINDER')">
-              <label class="form-check-label" for="hideSentShift">Hide sent</label>
+            <div class="d-flex gap-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="hideSentShift" onchange="loadJobs('SHIFT_REMINDER')">
+                <label class="form-check-label" for="hideSentShift">Hide sent</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="showPastShift" onchange="loadJobs('SHIFT_REMINDER')">
+                <label class="form-check-label" for="showPastShift">Show past</label>
+              </div>
             </div>
           </div>
           <div class="card-body p-0">
@@ -2976,6 +3006,81 @@ async def scheduler_page() -> HTMLResponse:
       updateSettings('enabled_shift', e.target.checked);
     });
     
+    // Fetch future events and sync to scheduler
+    async function fetchFutureEvents() {
+      const fetchBtn = document.getElementById('fetchBtn');
+      fetchBtn.disabled = true;
+      fetchBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Fetching...';
+      
+      try {
+        const response = await fetch(`/api/scheduler/fetch?org_id=${ORG_ID}`, {
+          method: 'POST'
+        });
+        
+        if (!response.ok) {
+          throw new Error('Fetch failed');
+        }
+        
+        const result = await response.json();
+        
+        // Show success message with counts
+        alert(
+          `✅ Fetch completed!\n\n` +
+          `Events scanned: ${result.events_scanned}\n` +
+          `Shifts scanned: ${result.shifts_scanned}\n` +
+          `Jobs created: ${result.jobs_created}\n` +
+          `Jobs updated: ${result.jobs_updated}\n` +
+          `Jobs blocked: ${result.jobs_blocked}`
+        );
+        
+        // Reload all jobs to show the new/updated ones
+        loadAllJobs();
+        
+      } catch (error) {
+        console.error('Error fetching future events:', error);
+        alert('❌ Error fetching future events. See console for details.');
+      } finally {
+        fetchBtn.disabled = false;
+        fetchBtn.innerHTML = '🔄 Fetch Future Events';
+      }
+    }
+    
+    // Cleanup past logs
+    async function cleanupPastLogs() {
+      if (!confirm('Delete old completed logs (older than 30 days)?\n\nThis will remove sent/failed/skipped jobs that are no longer needed.')) {
+        return;
+      }
+      
+      const cleanupBtn = document.getElementById('cleanupBtn');
+      cleanupBtn.disabled = true;
+      cleanupBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Cleaning...';
+      
+      try {
+        const response = await fetch(`/api/scheduler/past-logs?org_id=${ORG_ID}&days=30`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+          throw new Error('Cleanup failed');
+        }
+        
+        const result = await response.json();
+        
+        // Show success message
+        alert(`✅ Cleanup completed!\n\nDeleted ${result.deleted_count} old log entries.`);
+        
+        // Reload all jobs to reflect the cleanup
+        loadAllJobs();
+        
+      } catch (error) {
+        console.error('Error cleaning up past logs:', error);
+        alert('❌ Error cleaning up past logs. See console for details.');
+      } finally {
+        cleanupBtn.disabled = false;
+        cleanupBtn.innerHTML = '🗑️ Cleanup Old Logs';
+      }
+    }
+    
     // Load jobs for a specific message type
     async function loadJobs(messageType) {
       const prefix = messageType === 'INIT' ? 'init' : 
@@ -2999,6 +3104,10 @@ async def scheduler_page() -> HTMLResponse:
       const hideSentCheckbox = document.getElementById(`hideSent${checkboxSuffix}`);
       const hideSent = hideSentCheckbox ? hideSentCheckbox.checked : false;
       
+      // Get show_past checkbox value
+      const showPastCheckbox = document.getElementById(`showPast${checkboxSuffix}`);
+      const showPast = showPastCheckbox ? showPastCheckbox.checked : false;
+      
       // Show loading
       loadingEl.classList.remove('d-none');
       tableEl.classList.add('d-none');
@@ -3006,7 +3115,7 @@ async def scheduler_page() -> HTMLResponse:
       
       try {
         const response = await fetch(
-          `/api/scheduler/jobs?org_id=${ORG_ID}&message_type=${messageType}&hide_sent=${hideSent}`
+          `/api/scheduler/jobs?org_id=${ORG_ID}&message_type=${messageType}&hide_sent=${hideSent}&show_past=${showPast ? '1' : '0'}`
         );
         const jobs = await response.json();
         
@@ -3017,6 +3126,8 @@ async def scheduler_page() -> HTMLResponse:
         loadingEl.classList.add('d-none');
         
         if (jobs.length === 0) {
+          // Show empty state
+          emptyEl.innerHTML = '<p class="text-muted">אין אירועים עתידיים. לחץ "Fetch Future Events" כדי לסנכרן.</p>';
           emptyEl.classList.remove('d-none');
         } else {
           tableEl.classList.remove('d-none');
