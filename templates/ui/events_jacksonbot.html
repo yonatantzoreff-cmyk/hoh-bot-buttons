@@ -701,6 +701,12 @@
             background: var(--bg-secondary);
         }
 
+        .events-table th[data-col="status"],
+        .events-table td[data-col="status"] {
+            width: 190px;
+            max-width: 220px;
+        }
+
         .events-table th::before {
             content: '⋮⋮';
             color: var(--text-muted);
@@ -766,6 +772,13 @@
         .event-cell {
             display: grid;
             gap: 0.5rem;
+        }
+
+        .event-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.5rem;
+            align-items: center;
         }
 
         .event-cell.compact {
@@ -1039,7 +1052,8 @@
 
         .status-select-container {
             position: relative;
-            min-width: 170px;
+            min-width: 140px;
+            max-width: 220px;
         }
 
         .status-select-trigger {
@@ -1906,8 +1920,8 @@
         const COLUMN_VISIBILITY_KEY = 'events.columnVisibility';
         const TABLE_COLUMNS = [
             { key: 'status', label: 'Status' },
-            { key: 'info', label: 'General Info' },
-            { key: 'name', label: 'Event' },
+            { key: 'info', label: 'Date / Day / Event' },
+            { key: 'times', label: 'Times' },
             { key: 'contacts', label: 'Contacts' },
             { key: 'notes', label: 'Notes' },
             { key: 'delivery', label: 'Message' },
@@ -2142,8 +2156,8 @@
                                                 <tr id="header-row-${hallName.replace(/\s+/g, '-')}">
                                                     <th data-col="expander" style="width: 40px;"></th>
                                                     <th class="sortable" draggable="true" data-col="status" onclick="sortTable(this, 'status')">Status</th>
-                                                    <th class="sortable sorted-asc" draggable="true" data-col="info" data-default-sort="true" onclick="sortTable(this, 'event_date')">General Info</th>
-                                                    <th class="sortable" draggable="true" data-col="name" onclick="sortTable(this, 'name')">Event</th>
+                                                    <th class="sortable sorted-asc" draggable="true" data-col="info" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date / Event</th>
+                                                    <th class="sortable" draggable="true" data-col="times" onclick="sortTable(this, 'show_time')">Times</th>
                                                     <th draggable="true" data-col="contacts">Contacts</th>
                                                     <th draggable="true" data-col="notes">Notes</th>
                                                     <th draggable="true" data-col="delivery">Message</th>
@@ -2353,31 +2367,33 @@
                                 <span class="meta-chip">${eventDate || '—'}</span>
                                 <span class="meta-chip">${getDayOfWeek(event.event_date)}</span>
                             </div>
-                            <div class="event-cell compact">
+                            <div class="event-info-grid">
                                 <div>
-                                    <small>Show Time</small>
-                                    <input type="time" class="inline-edit" data-field="show_time" value="${showTime}" 
-                                           onchange="markDirty(${event.event_id}, 'show_time', this.value)">
+                                    <small>Date</small>
+                                    <input type="date" class="inline-edit" data-field="event_date" value="${eventDate}" 
+                                           onchange="markDirty(${event.event_id}, 'event_date', this.value)">
                                 </div>
+                                <div>
+                                    <small>Event</small>
+                                    <input type="text" class="inline-edit" data-field="name" value="${escapeHtml(event.name || '')}" 
+                                           onchange="markDirty(${event.event_id}, 'name', this.value)">
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                    <td data-col="times">
+                        <div class="info-pill">
+                            <div class="event-cell compact">
                                 <div>
                                     <small>Load In</small>
                                     <input type="time" class="inline-edit" data-field="load_in_time" value="${loadInTime}" 
                                            onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
                                 </div>
                                 <div>
-                                    <small>Date</small>
-                                    <input type="date" class="inline-edit" data-field="event_date" value="${eventDate}" 
-                                           onchange="markDirty(${event.event_id}, 'event_date', this.value)">
+                                    <small>Show Time</small>
+                                    <input type="time" class="inline-edit" data-field="show_time" value="${showTime}" 
+                                           onchange="markDirty(${event.event_id}, 'show_time', this.value)">
                                 </div>
-                            </div>
-                        </div>
-                    </td>
-                    <td data-col="name">
-                        <div class="event-cell">
-                            <div>
-                                <small>Event</small>
-                                <input type="text" class="inline-edit" data-field="name" value="${escapeHtml(event.name || '')}" 
-                                       onchange="markDirty(${event.event_id}, 'name', this.value)">
                             </div>
                         </div>
                     </td>
