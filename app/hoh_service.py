@@ -33,6 +33,7 @@ from app.repositories import (
     TemplateRepository,
     _NO_UPDATE,
 )
+from app.services.scheduler_job_builder import build_or_update_jobs_for_event
 from app.utils.actions import ParsedAction, parse_action_id
 from app.utils.phone import normalize_phone_to_e164_il
 from app.time_utils import (
@@ -570,7 +571,6 @@ class HOHService:
         
         # Build/update scheduled jobs for the new event
         try:
-            from app.services.scheduler_job_builder import build_or_update_jobs_for_event
             build_or_update_jobs_for_event(org_id=org_id, event_id=event_id)
         except Exception as e:
             logger.warning(f"Failed to build/update jobs for new event {event_id}: {e}")
@@ -862,7 +862,6 @@ class HOHService:
         
         # Build/update scheduled jobs for this event
         try:
-            from app.services.scheduler_job_builder import build_or_update_jobs_for_event
             build_or_update_jobs_for_event(org_id=org_id, event_id=event_id)
         except Exception as e:
             logger.warning(f"Failed to build/update jobs for event {event_id}: {e}")

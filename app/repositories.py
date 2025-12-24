@@ -1,6 +1,7 @@
 # repositories.py
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+import logging
 
 import json
 
@@ -12,6 +13,7 @@ from .time_utils import now_utc
 
 
 _NO_UPDATE = object()
+logger = logging.getLogger(__name__)
 
 
 class OrgRepository:
@@ -1694,10 +1696,7 @@ class EmployeeShiftRepository:
                 from app.services.scheduler_job_builder import build_or_update_jobs_for_shifts
                 build_or_update_jobs_for_shifts(org_id=org_id, event_id=event_id)
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(
-                    f"Failed to build/update jobs for shift {shift_id}: {e}"
-                )
+                logger.warning(f"Failed to build/update jobs for shift {shift_id}: {e}")
             
             return shift_id
 
@@ -1851,10 +1850,7 @@ class EmployeeShiftRepository:
                     from app.services.scheduler_job_builder import build_or_update_jobs_for_shifts
                     build_or_update_jobs_for_shifts(org_id=org_id, event_id=event_id)
                 except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).warning(
-                        f"Failed to build/update jobs for shift {shift_id}: {e}"
-                    )
+                    logger.warning(f"Failed to build/update jobs for shift {shift_id}: {e}")
 
     def delete_shift(self, org_id: int, shift_id: int):
         """מחיקה מוחלטת של משמרת"""

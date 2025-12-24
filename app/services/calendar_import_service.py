@@ -17,6 +17,7 @@ from app.repositories import (
     ImportJobRepository,
     StagingEventRepository,
 )
+from app.services.scheduler_job_builder import build_or_update_jobs_for_event
 from app.utils.excel_parser import parse_excel_file
 from app.time_utils import parse_local_time_to_utc, now_utc
 
@@ -378,7 +379,6 @@ class CalendarImportService:
             session.commit()
             
             # Build/update scheduled jobs for all created events
-            from app.services.scheduler_job_builder import build_or_update_jobs_for_event
             for event_id in created_event_ids:
                 try:
                     build_or_update_jobs_for_event(org_id=org_id, event_id=event_id)
