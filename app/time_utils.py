@@ -13,7 +13,7 @@ Key principles:
 """
 
 import logging
-from datetime import date, datetime, time, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo
 from typing import Optional
 
@@ -288,8 +288,6 @@ def compute_send_at(
         >>> compute_send_at(date(2024, 7, 20), "09:00", 1, now_utc(), False)
         # Returns Friday 2024-07-19 09:00 Israel time (as UTC)
     """
-    from datetime import timedelta
-    
     # Ensure now is timezone-aware
     if now.tzinfo is None:
         logger.warning("compute_send_at received naive datetime for 'now', assuming UTC")
