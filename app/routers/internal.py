@@ -1,7 +1,7 @@
 """Internal API endpoints."""
 
 import logging
-from typing import Annotated
+from typing import Annotated, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from fastapi.responses import JSONResponse
@@ -59,7 +59,7 @@ def verify_scheduler_token(authorization: Annotated[str, Header()] = None):
 @router.post("/run-scheduler")
 async def run_scheduler(
     _verified: bool = Depends(verify_scheduler_token),
-    org_id: int = None
+    org_id: Optional[int] = None
 ):
     """
     Run the scheduler once for all orgs or a specific org.

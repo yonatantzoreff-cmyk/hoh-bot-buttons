@@ -2,7 +2,7 @@
 
 import logging
 import time
-from typing import Optional
+from typing import Optional, List
 from datetime import datetime
 
 from app.hoh_service import HOHService
@@ -48,6 +48,7 @@ class SchedulerService:
         
         # Process each org
         for current_org_id in org_ids:
+            due_followups = []  # Initialize here to avoid reference before assignment
             try:
                 # Find due followups for this org
                 from app.time_utils import now_utc
@@ -139,7 +140,7 @@ class SchedulerService:
             except Exception as e:
                 logger.error(f"Error processing org {current_org_id}: {e}")
                 # Count all due items for this org as failed
-                failed += len(due_followups) if 'due_followups' in locals() else 0
+                failed += len(due_followups)
         
         # Calculate duration
         duration_ms = int((time.time() - start_time) * 1000)
@@ -161,7 +162,7 @@ class SchedulerService:
             "duration_ms": duration_ms,
         }
     
-    def _get_all_org_ids(self) -> list[int]:
+    def _get_all_org_ids(self) -> List[int]:
         """Get list of all org IDs."""
         with get_session() as session:
             result = session.execute(text("SELECT org_id FROM orgs ORDER BY org_id"))
