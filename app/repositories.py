@@ -2681,10 +2681,6 @@ class SchedulerSettingsRepository:
         with get_session() as session:
             session.execute(query, params)
 
-    def create_default_settings(self, org_id: int) -> dict:
-        """Create default scheduler settings for a new organization."""
-        return self.get_or_create_settings(org_id)
-
     def delete_settings(self, org_id: int) -> None:
         """Delete scheduler settings for an organization."""
         query = text("""
