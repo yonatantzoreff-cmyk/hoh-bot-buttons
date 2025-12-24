@@ -768,6 +768,9 @@ class HOHService:
 
         return event_dict
 
+    def list_messages_for_event(self, org_id: int, event_id: int) -> list[dict]:
+        return self.messages.list_messages_for_event(org_id=org_id, event_id=event_id)
+
     def update_event_with_contacts(
         self,
         *,

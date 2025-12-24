@@ -773,6 +773,20 @@ async def create_contact(
         logger.exception("Failed to create contact")
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/events/{event_id}/messages")
+async def list_event_messages(
+    event_id: int,
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """Return message log for a specific event."""
+    try:
+        messages = hoh.list_messages_for_event(org_id=org_id, event_id=event_id)
+        return {"messages": messages}
+    except Exception as e:
+        logger.exception(f"Failed to list messages for event {event_id}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get("/employees")
 async def get_employees(

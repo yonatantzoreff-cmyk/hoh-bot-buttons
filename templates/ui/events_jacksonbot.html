@@ -1902,6 +1902,21 @@
         </div>
     </div>
 
+    <!-- Call Log Modal -->
+    <div class="modal-overlay" id="callLogModal" onclick="closeCallLogModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()" style="max-width: 720px;">
+            <div class="modal-header">
+                <h3>לוג שיחות</h3>
+            </div>
+            <div class="modal-body" id="callLogBody" style="max-height: 60vh; overflow-y: auto; display: grid; gap: 0.75rem;">
+                <div style="text-align: center; color: var(--text-muted); padding: 1rem;">טוען...</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeCallLogModal()">סגור</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Confirmation Modal -->
     <div class="modal-overlay" id="confirmModal" onclick="closeConfirmModal()">
         <div class="modal-dialog" onclick="event.stopPropagation()">
@@ -1969,6 +1984,7 @@
         let activeColumnMenu = null;
         let activeAddContactEventId = null;
         let activeAddContactRole = 'producer';
+        let activeCallLogEventId = null;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
@@ -2837,6 +2853,55 @@
             }
         }
 
+        function closeCallLogModal() {
+            document.getElementById('callLogModal').classList.remove('visible');
+            document.getElementById('callLogBody').innerHTML = '';
+            activeCallLogEventId = null;
+        }
+
+        async function openCallLog(eventId) {
+            activeCallLogEventId = eventId;
+            const body = document.getElementById('callLogBody');
+            body.innerHTML = '<div style="text-align:center; color: var(--text-muted); padding:1rem;">טוען...</div>';
+            document.getElementById('callLogModal').classList.add('visible');
+
+            try {
+                const resp = await fetch(`/api/events/${eventId}/messages?org_id=${ORG_ID}`);
+                if (!resp.ok) {
+                    throw new Error('Failed to load log');
+                }
+                const data = await resp.json();
+                const messages = data.messages || [];
+                if (messages.length === 0) {
+                    body.innerHTML = '<div style="text-align:center; color: var(--text-muted); padding:1rem;">אין הודעות עבור אירוע זה</div>';
+                    return;
+                }
+
+                body.innerHTML = messages.map(msg => {
+                    const ts = msg.sent_at || msg.received_at || msg.created_at || '';
+                    const direction = msg.direction === 'incoming' ? '⬅️ נכנס' : '➡️ נשלח';
+                    const status = msg.delivery_status ? `<span style="color: var(--text-secondary); font-size:0.85rem;">(${msg.delivery_status})</span>` : '';
+                    return `
+                        <div style="border:1px solid var(--border-color); border-radius:10px; padding:0.75rem; display:grid; gap:0.35rem;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">
+                                <strong>${direction}</strong>
+                                <span style="color: var(--text-muted); font-size:0.85rem;">${ts}</span>
+                            </div>
+                            <div style="color: var(--text-secondary); font-size:0.9rem;">${escapeHtml(msg.body || '')}</div>
+                            <div style="display:flex; gap:0.5rem; flex-wrap:wrap; color: var(--text-muted); font-size:0.85rem;">
+                                ${msg.contact_name ? `<span>${escapeHtml(msg.contact_name)}</span>` : ''}
+                                ${msg.contact_phone ? `<span>${escapeHtml(msg.contact_phone)}</span>` : ''}
+                                ${status}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                console.error('Failed to load call log', e);
+                body.innerHTML = '<div style="text-align:center; color: var(--danger-color); padding:1rem;">שגיאה בטעינת הלוג</div>';
+            }
+        }
+
         function attachRowClickHandlers() {
             document.querySelectorAll('.events-table tbody tr.event-row').forEach(row => {
                 row.onclick = (e) => {
@@ -2910,6 +2975,7 @@
                         <button class="btn btn-secondary" onclick="showSuggestions(${event.event_id}, this)">הצעות טכנאים</button>
                         <button class="btn btn-secondary" onclick="removeContactFromEvent(${event.event_id}, 'producer')">הסר מפיק</button>
                         <button class="btn btn-secondary" onclick="removeContactFromEvent(${event.event_id}, 'technical')">הסר טכנאי</button>
+                        <button class="btn btn-secondary" onclick="openCallLog(${event.event_id})">לוג שיחות</button>
                     </div>
                 </div>
                 <div class="panel-section">
