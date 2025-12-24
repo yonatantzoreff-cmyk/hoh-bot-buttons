@@ -2676,7 +2676,7 @@ class SchedulerSettingsRepository:
                 created_at, updated_at
             )
             VALUES (
-                :org_id, TRUE, TRUE, TRUE, TRUE,
+                :org_id, TRUE, TRUE, FALSE, TRUE,
                 28, '10:00',
                 2, '12:00',
                 1, '12:00',

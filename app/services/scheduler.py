@@ -158,7 +158,12 @@ class SchedulerService:
         
         This ensures that if multiple scheduler instances run concurrently,
         each job is processed by only one instance. We immediately mark
-        jobs as 'processing' to prevent other instances from picking them up.
+        jobs as 'processing' within the locked transaction to prevent other
+        instances from picking them up, then restore the original status
+        for processing logic.
+        
+        Note: The temporary 'processing' status is not exposed externally and
+        is only used to hold the lock while fetching full job details.
         """
         query_select = text("""
             SELECT job_id
@@ -438,35 +443,54 @@ class SchedulerService:
         # Query messages table for existing messages
         query_params = {
             "org_id": org_id,
-            "message_type": message_type,
         }
         
         if event_id:
             # Check for messages for this event with this message type
+            # Look for specific message type indicators in the raw_payload JSON
+            if message_type == "INIT":
+                query = text("""
+                    SELECT COUNT(*) 
+                    FROM messages
+                    WHERE org_id = :org_id
+                      AND event_id = :event_id
+                      AND direction = 'outgoing'
+                      AND (
+                        raw_payload::text LIKE '%\"content_sid\":\"' || :content_sid_init || '\"%'
+                      )
+                    LIMIT 1
+                """)
+                # Get INIT content SID from environment
+                import os
+                query_params["content_sid_init"] = os.environ.get("CONTENT_SID_INIT", "")
+            elif message_type == "TECH_REMINDER":
+                # TECH_REMINDER not yet implemented, so no messages would exist
+                return False
+            else:
+                # Generic check for other message types
+                query = text("""
+                    SELECT COUNT(*) 
+                    FROM messages
+                    WHERE org_id = :org_id
+                      AND event_id = :event_id
+                      AND direction = 'outgoing'
+                    LIMIT 1
+                """)
+            query_params["event_id"] = event_id
+        elif shift_id:
+            # Check for messages for this shift (shift reminders)
             query = text("""
                 SELECT COUNT(*) 
                 FROM messages
                 WHERE org_id = :org_id
-                  AND event_id = :event_id
                   AND direction = 'outgoing'
                   AND (
-                    raw_payload::text LIKE '%INIT%'
-                    OR raw_payload::text LIKE '%TECH_REMINDER%'
+                    raw_payload::text LIKE '%\"shift_id\":' || :shift_id || ',%'
+                    OR raw_payload::text LIKE '%\"shift_id\":' || :shift_id || '}%'
                   )
                 LIMIT 1
             """)
-            query_params["event_id"] = event_id
-        elif shift_id:
-            # Check for messages for this shift
-            query = text("""
-                SELECT COUNT(*) 
-                FROM messages
-                WHERE org_id = :org_id
-                  AND direction = 'outgoing'
-                  AND raw_payload::text LIKE :shift_pattern
-                LIMIT 1
-            """)
-            query_params["shift_pattern"] = f"%shift_id%{shift_id}%"
+            query_params["shift_id"] = shift_id
         else:
             return False
         
@@ -543,6 +567,8 @@ class SchedulerService:
             
             elif message_type == "INIT":
                 # Use existing send_init_for_event implementation
+                # Note: We pass the contact_id we resolved so send_init_for_event
+                # will use it directly instead of resolving again
                 await self.hoh.send_init_for_event(
                     event_id=event_id,
                     org_id=org_id,
@@ -551,10 +577,9 @@ class SchedulerService:
                 return {"success": True}
             
             elif message_type == "TECH_REMINDER":
-                # TECH_REMINDER doesn't have a dedicated function yet
-                # We'll need to implement it or use a generic message sending approach
-                # For now, return an error
-                return {"success": False, "error": "TECH_REMINDER sending not implemented yet"}
+                # TECH_REMINDER is not yet implemented
+                # Return error to prevent jobs from being marked as sent
+                return {"success": False, "error": "TECH_REMINDER sending not yet implemented"}
             
             else:
                 return {"success": False, "error": f"Unknown message type: {message_type}"}
