@@ -2127,7 +2127,6 @@ async def shift_organizer_page(
     
     function renderSlot(eventId, shift, index) {{
       const startValue = formatDateTimeLocal(shift.start_at || shift.call_time);
-      const endValue = formatDateTimeLocal(shift.end_at || shift.call_time);
       const isLocked = shift.is_locked || false;
       const lockIcon = isLocked ? '🔒' : '';
       
@@ -2135,18 +2134,15 @@ async def shift_organizer_page(
         <div class="row mb-2 align-items-center slot-row" 
              data-slot-index="${{index}}"
              data-event-id="${{eventId}}"
-             data-start="${{shift.start_at || ''}}"
-             data-end="${{shift.end_at || ''}}"
+             data-start="${{shift.start_at || shift.call_time || ''}}"
+             data-end="${{shift.end_at || shift.call_time || ''}}"
              data-is-locked="${{isLocked}}"
              data-shift-id="${{shift.shift_id || ''}}"
              data-shift-type="${{shift.shift_type || ''}}">
-          <div class="col-md-3">
+          <div class="col-md-4">
             <input type="datetime-local" class="form-control form-control-sm start-at" value="${{startValue}}" ${{isLocked ? 'disabled' : ''}}>
           </div>
-          <div class="col-md-3">
-            <input type="datetime-local" class="form-control form-control-sm end-at" value="${{endValue}}" ${{isLocked ? 'disabled' : ''}}>
-          </div>
-          <div class="col-md-3">
+          <div class="col-md-5">
             <select class="form-select form-select-sm employee-select" ${{isLocked ? 'disabled' : ''}}>
               ${{buildEmployeeOptions(shift.employee_id)}}
             </select>
@@ -2170,21 +2166,28 @@ async def shift_organizer_page(
       if (event.target.closest('.slot-row')) {{
         document.getElementById('saveBtn').disabled = false;
       }}
+      
+      if (event.target.classList.contains('start-at')) {{
+        const row = event.target.closest('.slot-row');
+        if (row && event.target.value) {{
+          const iso = new Date(event.target.value).toISOString();
+          row.dataset.start = iso;
+          row.dataset.end = iso;
+        }}
+      }}
     }});
     
     function getDefaultTimes(eventId) {{
       const event = eventsById[eventId];
       const now = new Date();
       if (!event) {{
-        const fallbackEnd = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-        return {{ start: now, end: fallbackEnd }};
+        return {{ start: now, end: now }};
       }}
       
       const baseDate = new Date(event.event_date + 'T00:00:00');
-      const start = event.show_time ? new Date(event.show_time) :
-                    (event.load_in_time ? new Date(event.load_in_time) : new Date(baseDate.setHours(18, 0, 0, 0)));
-      const end = new Date(start.getTime() + 4 * 60 * 60 * 1000);
-      return {{ start, end }};
+      const start = event.load_in_time ? new Date(event.load_in_time) :
+                    (event.show_time ? new Date(event.show_time) : new Date(baseDate.setHours(18, 0, 0, 0)));
+      return {{ start, end: start }};
     }}
     
     function addSlot(eventId) {{
@@ -2280,13 +2283,10 @@ async def shift_organizer_page(
              data-is-locked="false"
              data-shift-type="${{slot.shift_type || 'shift'}}"
              title="${{reason}}">
-          <div class="col-md-3">
+          <div class="col-md-4">
             <input type="datetime-local" class="form-control form-control-sm start-at" value="${{formatDateTimeLocal(slot.start_at)}}">
           </div>
-          <div class="col-md-3">
-            <input type="datetime-local" class="form-control form-control-sm end-at" value="${{formatDateTimeLocal(slot.end_at)}}">
-          </div>
-          <div class="col-md-3">
+          <div class="col-md-5">
             <select class="form-select form-select-sm employee-select">
               ${{employeeOptions}}
             </select>
@@ -2314,9 +2314,8 @@ async def shift_organizer_page(
           const employeeSelect = row.querySelector('.employee-select');
           const employeeId = employeeSelect && employeeSelect.value ? parseInt(employeeSelect.value) : null;
           const startInput = row.querySelector('.start-at');
-          const endInput = row.querySelector('.end-at');
           const startAt = startInput && startInput.value ? new Date(startInput.value).toISOString() : null;
-          const endAt = endInput && endInput.value ? new Date(endInput.value).toISOString() : null;
+          const endAt = row.dataset.end ? row.dataset.end : startAt;
           const shiftId = row.dataset.shiftId ? parseInt(row.dataset.shiftId) : null;
           const shiftType = row.dataset.shiftType || null;
           const isLocked = row.dataset.isLocked === 'true';
