@@ -138,8 +138,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
         # Compute send_at for INIT
         init_days_before = settings.get("init_days_before", 28)
         init_send_time = settings.get("init_send_time") or "10:00"
-        if isinstance(init_send_time, datetime):
-            init_send_time = init_send_time.strftime("%H:%M")
+        # parse_time helper now handles datetime.time, datetime, and string formats
         
         init_send_at = compute_send_at(
             base_date=event_date,
@@ -220,8 +219,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
         # Compute send_at for TECH_REMINDER
         tech_days_before = settings.get("tech_days_before", 2)
         tech_send_time = settings.get("tech_send_time") or "12:00"
-        if isinstance(tech_send_time, datetime):
-            tech_send_time = tech_send_time.strftime("%H:%M")
+        # parse_time helper now handles datetime.time, datetime, and string formats
         
         tech_send_at = compute_send_at(
             base_date=event_date,
@@ -338,8 +336,7 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
     
     shift_days_before = settings.get("shift_days_before", 1)
     shift_send_time = settings.get("shift_send_time") or "12:00"
-    if isinstance(shift_send_time, datetime):
-        shift_send_time = shift_send_time.strftime("%H:%M")
+    # parse_time helper now handles datetime.time, datetime, and string formats
     
     for shift in shifts:
         shift_id = shift.get("shift_id")

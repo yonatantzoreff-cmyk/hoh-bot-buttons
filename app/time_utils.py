@@ -33,17 +33,75 @@ def get_il_tz() -> ZoneInfo:
     return ISRAEL_TZ
 
 
-def parse_local_time_to_utc(event_date: date, hhmm: str) -> datetime:
+def parse_time(value) -> Optional[time]:
     """
-    Parse a local Israel time string and combine with date to create UTC datetime.
+    Parse a time value that can be a datetime.time object, a string, or None.
     
-    This function takes a date and a time string in HH:MM format (local Israel time),
+    This helper handles time values from various sources (database, user input, etc.)
+    and normalizes them to datetime.time objects.
+    
+    Args:
+        value: Can be:
+            - datetime.time object (returned as-is)
+            - string in "HH:MM" or "HH:MM:SS" format
+            - None or empty string
+    
+    Returns:
+        datetime.time object, or None if input is None/empty
+    
+    Examples:
+        >>> parse_time(time(21, 0))
+        time(21, 0)
+        >>> parse_time("21:00")
+        time(21, 0)
+        >>> parse_time("21:00:00")
+        time(21, 0)
+        >>> parse_time(None)
+        None
+    """
+    if value is None:
+        return None
+    
+    # Already a time object
+    if isinstance(value, time):
+        return value
+    
+    # Handle string
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return None
+        
+        # Try HH:MM:SS format first
+        try:
+            return datetime.strptime(value, "%H:%M:%S").time()
+        except ValueError:
+            pass
+        
+        # Try HH:MM format
+        try:
+            return datetime.strptime(value, "%H:%M").time()
+        except ValueError as e:
+            raise ValueError(f"Invalid time format: {value}. Expected HH:MM or HH:MM:SS") from e
+    
+    # Handle datetime object (extract time part)
+    if isinstance(value, datetime):
+        return value.time()
+    
+    raise TypeError(f"Cannot parse time from type {type(value).__name__}: {value}")
+
+
+def parse_local_time_to_utc(event_date: date, hhmm) -> datetime:
+    """
+    Parse a local Israel time and combine with date to create UTC datetime.
+    
+    This function takes a date and a time value (string or datetime.time object),
     combines them into a timezone-aware datetime in Asia/Jerusalem, then converts
     to UTC. Automatically handles DST transitions.
     
     Args:
         event_date: The date for the event
-        hhmm: Time string in "HH:MM" format (local Israel time)
+        hhmm: Time value - can be string in "HH:MM" format or datetime.time object
         
     Returns:
         Timezone-aware datetime in UTC
@@ -51,10 +109,12 @@ def parse_local_time_to_utc(event_date: date, hhmm: str) -> datetime:
     Example:
         >>> parse_local_time_to_utc(date(2024, 7, 15), "21:00")
         # Returns datetime representing 21:00 Israel time (18:00 UTC in summer)
-        >>> parse_local_time_to_utc(date(2024, 1, 15), "21:00")
+        >>> parse_local_time_to_utc(date(2024, 1, 15), time(21, 0))
         # Returns datetime representing 21:00 Israel time (19:00 UTC in winter)
     """
-    time_part = datetime.strptime(hhmm, "%H:%M").time()
+    time_part = parse_time(hhmm)
+    if time_part is None:
+        raise ValueError(f"Cannot parse time from: {hhmm}")
     
     # Combine date and time with timezone in one step
     # This is safe with zoneinfo (unlike pytz) and handles DST correctly
@@ -246,7 +306,7 @@ def format_datetime_for_display(dt: datetime, include_date: bool = True) -> str:
 
 def compute_send_at(
     base_date: date,
-    fixed_time: str,
+    fixed_time,
     days_before: int,
     now: datetime,
     apply_weekend_rule: bool
@@ -267,7 +327,7 @@ def compute_send_at(
     
     Args:
         base_date: The base event date (e.g., event_date)
-        fixed_time: Time string in "HH:MM" format for the scheduled message (e.g., "09:00")
+        fixed_time: Time value - can be string ("HH:MM") or datetime.time object
         days_before: Number of days before base_date to schedule (e.g., 3 for "3 days before event")
         now: Current datetime (timezone-aware, for comparison)
         apply_weekend_rule: If True, move Friday/Saturday to Sunday (use for INIT only)
