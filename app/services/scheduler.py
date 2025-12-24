@@ -157,10 +157,11 @@ class SchedulerService:
         Get due jobs for an org using SELECT FOR UPDATE SKIP LOCKED.
         
         This ensures that if multiple scheduler instances run concurrently,
-        each job is processed by only one instance.
+        each job is processed by only one instance. We immediately mark
+        jobs as 'processing' to prevent other instances from picking them up.
         """
-        query = text("""
-            SELECT *
+        query_select = text("""
+            SELECT job_id
             FROM scheduled_messages
             WHERE org_id = :org_id
               AND status IN ('scheduled', 'retrying')
@@ -171,9 +172,45 @@ class SchedulerService:
             FOR UPDATE SKIP LOCKED
         """)
         
+        query_fetch = text("""
+            SELECT *
+            FROM scheduled_messages
+            WHERE job_id = :job_id
+        """)
+        
+        query_mark = text("""
+            UPDATE scheduled_messages
+            SET status = 'processing',
+                updated_at = :now
+            WHERE job_id = :job_id
+        """)
+        
+        jobs = []
+        
         with get_session() as session:
-            result = session.execute(query, {"org_id": org_id, "now": now})
-            return [dict(row) for row in result.mappings().all()]
+            # First, get and lock job IDs
+            result = session.execute(query_select, {"org_id": org_id, "now": now})
+            job_ids = [row[0] for row in result.fetchall()]
+            
+            # For each job ID, mark it as processing within the same transaction
+            for job_id in job_ids:
+                session.execute(query_mark, {"job_id": job_id, "now": now})
+            
+            session.commit()
+            
+            # Now fetch the full job details (can be done outside the lock)
+            for job_id in job_ids:
+                job_result = session.execute(query_fetch, {"job_id": job_id})
+                row = job_result.mappings().first()
+                if row:
+                    job = dict(row)
+                    # Restore the original status for processing
+                    # (we'll update it properly during processing)
+                    original_status = "scheduled" if job["attempt_count"] == 0 else "retrying"
+                    job["status"] = original_status
+                    jobs.append(job)
+        
+        return jobs
     
     async def _process_job(self, job: dict, settings: dict, now: datetime) -> str:
         """

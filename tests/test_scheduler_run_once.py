@@ -290,7 +290,7 @@ async def test_skip_locked_query_structure():
     
     with patch("app.services.scheduler.get_session") as mock_session:
         mock_execute = Mock()
-        mock_execute.mappings.return_value.all.return_value = []
+        mock_execute.fetchall.return_value = []  # No jobs found
         
         mock_session_instance = MagicMock()
         mock_session_instance.__enter__.return_value = mock_session_instance
@@ -303,9 +303,9 @@ async def test_skip_locked_query_structure():
         # Verify execute was called
         assert mock_session_instance.execute.called
         
-        # Get the SQL query that was executed
-        call_args = mock_session_instance.execute.call_args[0]
-        sql_text = str(call_args[0])
+        # Get the first SQL query that was executed (the SELECT with FOR UPDATE)
+        first_call = mock_session_instance.execute.call_args_list[0]
+        sql_text = str(first_call[0][0])
         
         # Verify the query includes FOR UPDATE SKIP LOCKED
         assert "FOR UPDATE SKIP LOCKED" in sql_text.upper()
