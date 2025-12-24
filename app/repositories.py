@@ -2363,3 +2363,330 @@ class ImportJobRepository:
             result = session.execute(query, {"org_id": org_id, "job_type": job_type})
             row = result.mappings().first()
             return dict(row) if row else None
+
+
+class ScheduledMessageRepository:
+    """Repository for scheduled_messages table - manages scheduled message delivery."""
+
+    def create_scheduled_message(
+        self,
+        job_id: str,
+        org_id: int,
+        message_type: str,
+        send_at: datetime,
+        event_id: Optional[int] = None,
+        shift_id: Optional[int] = None,
+        is_enabled: bool = True,
+        max_attempts: int = 3,
+    ) -> str:
+        """Create a new scheduled message and return its job_id."""
+        query = text("""
+            INSERT INTO scheduled_messages (
+                job_id, org_id, message_type, event_id, shift_id,
+                send_at, status, is_enabled, attempt_count, max_attempts,
+                created_at, updated_at
+            )
+            VALUES (
+                :job_id, :org_id, :message_type, :event_id, :shift_id,
+                :send_at, 'scheduled', :is_enabled, 0, :max_attempts,
+                :now, :now
+            )
+            RETURNING job_id
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {
+                "job_id": job_id,
+                "org_id": org_id,
+                "message_type": message_type,
+                "event_id": event_id,
+                "shift_id": shift_id,
+                "send_at": send_at,
+                "is_enabled": is_enabled,
+                "max_attempts": max_attempts,
+                "now": now_utc(),
+            })
+            return result.scalar_one()
+
+    def get_scheduled_message(self, job_id: str) -> Optional[dict]:
+        """Get a scheduled message by job_id."""
+        query = text("""
+            SELECT *
+            FROM scheduled_messages
+            WHERE job_id = :job_id
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"job_id": job_id})
+            row = result.mappings().first()
+            return dict(row) if row else None
+
+    def list_due_messages(self, now: datetime) -> list[dict]:
+        """List all messages that are due to be sent."""
+        query = text("""
+            SELECT *
+            FROM scheduled_messages
+            WHERE status IN ('scheduled', 'retrying')
+              AND is_enabled = TRUE
+              AND send_at <= :now
+              AND attempt_count < max_attempts
+            ORDER BY send_at ASC
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"now": now})
+            return [dict(row) for row in result.mappings().all()]
+
+    def list_scheduled_for_event(self, org_id: int, event_id: int) -> list[dict]:
+        """List all scheduled messages for a specific event."""
+        query = text("""
+            SELECT *
+            FROM scheduled_messages
+            WHERE org_id = :org_id
+              AND event_id = :event_id
+            ORDER BY send_at ASC
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "event_id": event_id})
+            return [dict(row) for row in result.mappings().all()]
+
+    def list_scheduled_for_shift(self, org_id: int, shift_id: int) -> list[dict]:
+        """List all scheduled messages for a specific shift."""
+        query = text("""
+            SELECT *
+            FROM scheduled_messages
+            WHERE org_id = :org_id
+              AND shift_id = :shift_id
+            ORDER BY send_at ASC
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "shift_id": shift_id})
+            return [dict(row) for row in result.mappings().all()]
+
+    def update_status(
+        self,
+        job_id: str,
+        status: str,
+        last_error: Optional[str] = None,
+        sent_at: Optional[datetime] = None,
+        last_resolved_to_name: Optional[str] = None,
+        last_resolved_to_phone: Optional[str] = None,
+    ) -> None:
+        """Update the status and metadata of a scheduled message."""
+        sets = ["status = :status", "updated_at = :now"]
+        params = {"job_id": job_id, "status": status, "now": now_utc()}
+
+        if last_error is not None:
+            sets.append("last_error = :last_error")
+            params["last_error"] = last_error
+
+        if sent_at is not None:
+            sets.append("sent_at = :sent_at")
+            params["sent_at"] = sent_at
+
+        if last_resolved_to_name is not None:
+            sets.append("last_resolved_to_name = :last_resolved_to_name")
+            params["last_resolved_to_name"] = last_resolved_to_name
+
+        if last_resolved_to_phone is not None:
+            sets.append("last_resolved_to_phone = :last_resolved_to_phone")
+            params["last_resolved_to_phone"] = last_resolved_to_phone
+
+        query = text(f"""
+            UPDATE scheduled_messages
+            SET {', '.join(sets)}
+            WHERE job_id = :job_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, params)
+
+    def increment_attempt(self, job_id: str) -> None:
+        """Increment the attempt count for a scheduled message."""
+        query = text("""
+            UPDATE scheduled_messages
+            SET attempt_count = attempt_count + 1,
+                updated_at = :now
+            WHERE job_id = :job_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {"job_id": job_id, "now": now_utc()})
+
+    def delete_scheduled_message(self, job_id: str) -> None:
+        """Delete a scheduled message."""
+        query = text("""
+            DELETE FROM scheduled_messages
+            WHERE job_id = :job_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {"job_id": job_id})
+
+    def delete_by_event(self, org_id: int, event_id: int) -> None:
+        """Delete all scheduled messages for an event."""
+        query = text("""
+            DELETE FROM scheduled_messages
+            WHERE org_id = :org_id
+              AND event_id = :event_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id, "event_id": event_id})
+
+    def delete_by_shift(self, org_id: int, shift_id: int) -> None:
+        """Delete all scheduled messages for a shift."""
+        query = text("""
+            DELETE FROM scheduled_messages
+            WHERE org_id = :org_id
+              AND shift_id = :shift_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id, "shift_id": shift_id})
+
+    def set_enabled(self, job_id: str, is_enabled: bool) -> None:
+        """Enable or disable a scheduled message."""
+        query = text("""
+            UPDATE scheduled_messages
+            SET is_enabled = :is_enabled,
+                updated_at = :now
+            WHERE job_id = :job_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {
+                "job_id": job_id,
+                "is_enabled": is_enabled,
+                "now": now_utc()
+            })
+
+
+class SchedulerSettingsRepository:
+    """Repository for scheduler_settings table - manages per-org scheduler configuration."""
+
+    def get_settings(self, org_id: int) -> Optional[dict]:
+        """Get scheduler settings for an organization."""
+        query = text("""
+            SELECT *
+            FROM scheduler_settings
+            WHERE org_id = :org_id
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id})
+            row = result.mappings().first()
+            return dict(row) if row else None
+
+    def get_or_create_settings(self, org_id: int) -> dict:
+        """Get scheduler settings for an org, creating default settings if none exist."""
+        settings = self.get_settings(org_id)
+        if settings:
+            return settings
+
+        # Create default settings
+        query = text("""
+            INSERT INTO scheduler_settings (
+                org_id, enabled_global, enabled_init, enabled_tech, enabled_shift,
+                init_days_before, init_send_time,
+                tech_days_before, tech_send_time,
+                shift_days_before, shift_send_time,
+                created_at, updated_at
+            )
+            VALUES (
+                :org_id, TRUE, TRUE, TRUE, TRUE,
+                28, '10:00',
+                2, '12:00',
+                1, '12:00',
+                :now, :now
+            )
+            RETURNING *
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "now": now_utc()})
+            row = result.mappings().first()
+            return dict(row) if row else {}
+
+    def update_settings(
+        self,
+        org_id: int,
+        *,
+        enabled_global: Optional[bool] = _NO_UPDATE,
+        enabled_init: Optional[bool] = _NO_UPDATE,
+        enabled_tech: Optional[bool] = _NO_UPDATE,
+        enabled_shift: Optional[bool] = _NO_UPDATE,
+        init_days_before: Optional[int] = _NO_UPDATE,
+        init_send_time: Optional[str] = _NO_UPDATE,
+        tech_days_before: Optional[int] = _NO_UPDATE,
+        tech_send_time: Optional[str] = _NO_UPDATE,
+        shift_days_before: Optional[int] = _NO_UPDATE,
+        shift_send_time: Optional[str] = _NO_UPDATE,
+    ) -> None:
+        """Update scheduler settings for an organization."""
+        sets = ["updated_at = :now"]
+        params = {"org_id": org_id, "now": now_utc()}
+
+        if enabled_global is not _NO_UPDATE:
+            sets.append("enabled_global = :enabled_global")
+            params["enabled_global"] = enabled_global
+
+        if enabled_init is not _NO_UPDATE:
+            sets.append("enabled_init = :enabled_init")
+            params["enabled_init"] = enabled_init
+
+        if enabled_tech is not _NO_UPDATE:
+            sets.append("enabled_tech = :enabled_tech")
+            params["enabled_tech"] = enabled_tech
+
+        if enabled_shift is not _NO_UPDATE:
+            sets.append("enabled_shift = :enabled_shift")
+            params["enabled_shift"] = enabled_shift
+
+        if init_days_before is not _NO_UPDATE:
+            sets.append("init_days_before = :init_days_before")
+            params["init_days_before"] = init_days_before
+
+        if init_send_time is not _NO_UPDATE:
+            sets.append("init_send_time = :init_send_time")
+            params["init_send_time"] = init_send_time
+
+        if tech_days_before is not _NO_UPDATE:
+            sets.append("tech_days_before = :tech_days_before")
+            params["tech_days_before"] = tech_days_before
+
+        if tech_send_time is not _NO_UPDATE:
+            sets.append("tech_send_time = :tech_send_time")
+            params["tech_send_time"] = tech_send_time
+
+        if shift_days_before is not _NO_UPDATE:
+            sets.append("shift_days_before = :shift_days_before")
+            params["shift_days_before"] = shift_days_before
+
+        if shift_send_time is not _NO_UPDATE:
+            sets.append("shift_send_time = :shift_send_time")
+            params["shift_send_time"] = shift_send_time
+
+        if len(sets) == 1:  # Only updated_at
+            return
+
+        query = text(f"""
+            UPDATE scheduler_settings
+            SET {', '.join(sets)}
+            WHERE org_id = :org_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, params)
+
+    def delete_settings(self, org_id: int) -> None:
+        """Delete scheduler settings for an organization."""
+        query = text("""
+            DELETE FROM scheduler_settings
+            WHERE org_id = :org_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id})
