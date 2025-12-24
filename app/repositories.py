@@ -2580,6 +2580,7 @@ class ScheduledMessageRepository:
 
         with get_session() as session:
             session.execute(query, params)
+            session.commit()
 
     def increment_attempt(self, job_id: str) -> None:
         """Increment the attempt count for a scheduled message."""
@@ -2592,6 +2593,7 @@ class ScheduledMessageRepository:
 
         with get_session() as session:
             session.execute(query, {"job_id": job_id, "now": now_utc()})
+            session.commit()
 
     def delete_scheduled_message(self, job_id: str) -> None:
         """Delete a scheduled message."""
