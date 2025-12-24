@@ -79,6 +79,7 @@ def _render_page(title: str, body: str) -> str:
               <a class="btn btn-outline-success btn-sm ms-2" href="/ui/calendar-import">Import Calendar</a>
               <a class="btn btn-outline-warning btn-sm ms-2" href="/ui/shift-organizer">Shift Organizer</a>
               <a class="btn btn-outline-info btn-sm ms-2" href="/ui/availability">Availability</a>
+              <a class="btn btn-outline-primary btn-sm ms-2" href="/ui/scheduler">Scheduler</a>
             </div>
           </div>
         </nav>
@@ -2712,3 +2713,579 @@ async def availability_page(
     """
     
     return HTMLResponse(_render_page("Employee Availability", body))
+
+
+@router.get("/ui/scheduler", response_class=HTMLResponse)
+async def scheduler_page() -> HTMLResponse:
+    """Scheduler UI - View and manage scheduled message delivery."""
+    
+    body = """
+    <div class="row mb-3">
+      <div class="col">
+        <h2>📅 Scheduler - Message Delivery Management</h2>
+        <p class="text-muted">View and manage automated message delivery for events and shifts</p>
+      </div>
+    </div>
+    
+    <!-- Global Settings Card -->
+    <div class="card mb-4 shadow-sm">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">⚙️ Scheduler Settings</h5>
+      </div>
+      <div class="card-body">
+        <div class="row align-items-center">
+          <div class="col-md-3">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="globalToggle" checked>
+              <label class="form-check-label fw-bold" for="globalToggle">
+                Global Scheduler Enabled
+              </label>
+            </div>
+            <small class="text-muted">Master switch for all scheduled messages</small>
+          </div>
+          <div class="col-md-9">
+            <div class="d-flex gap-3 justify-content-end">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="initToggle" checked>
+                <label class="form-check-label" for="initToggle">INIT Messages</label>
+              </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="techToggle" checked>
+                <label class="form-check-label" for="techToggle">TECH Reminders</label>
+              </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="shiftToggle" checked>
+                <label class="form-check-label" for="shiftToggle">SHIFT Reminders</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Tabs Navigation -->
+    <ul class="nav nav-tabs mb-3" id="schedulerTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="init-tab" data-bs-toggle="tab" data-bs-target="#init-panel" type="button" role="tab">
+          INIT Messages <span class="badge bg-secondary" id="init-count">0</span>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tech-tab" data-bs-toggle="tab" data-bs-target="#tech-panel" type="button" role="tab">
+          TECH Reminders <span class="badge bg-secondary" id="tech-count">0</span>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="shift-tab" data-bs-toggle="tab" data-bs-target="#shift-panel" type="button" role="tab">
+          SHIFT Reminders <span class="badge bg-secondary" id="shift-count">0</span>
+        </button>
+      </li>
+    </ul>
+    
+    <!-- Tab Content -->
+    <div class="tab-content" id="schedulerTabContent">
+      <!-- INIT Tab -->
+      <div class="tab-pane fade show active" id="init-panel" role="tabpanel">
+        <div class="card shadow-sm">
+          <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">INIT Messages</h6>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="hideSentInit" onchange="loadJobs('INIT')">
+              <label class="form-check-label" for="hideSentInit">Hide sent</label>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div id="init-loading" class="text-center py-4">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+            <div id="init-table-container" class="d-none">
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="init-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Event</th>
+                      <th>Producer</th>
+                      <th>Technician</th>
+                      <th>Recipient</th>
+                      <th>Send Time</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="init-tbody">
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div id="init-empty" class="text-center text-muted py-4 d-none">
+              No INIT messages scheduled.
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- TECH Tab -->
+      <div class="tab-pane fade" id="tech-panel" role="tabpanel">
+        <div class="card shadow-sm">
+          <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">TECH Reminders</h6>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="hideSentTech" onchange="loadJobs('TECH_REMINDER')">
+              <label class="form-check-label" for="hideSentTech">Hide sent</label>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div id="tech-loading" class="text-center py-4">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+            <div id="tech-table-container" class="d-none">
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="tech-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Event</th>
+                      <th>Producer</th>
+                      <th>Technician</th>
+                      <th>Recipient</th>
+                      <th>Send Time</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tech-tbody">
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div id="tech-empty" class="text-center text-muted py-4 d-none">
+              No TECH reminders scheduled.
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- SHIFT Tab -->
+      <div class="tab-pane fade" id="shift-panel" role="tabpanel">
+        <div class="card shadow-sm">
+          <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">SHIFT Reminders</h6>
+            <div class="form-check">
+              <input class="form-check-input" type="checkbox" id="hideSentShift" onchange="loadJobs('SHIFT_REMINDER')">
+              <label class="form-check-label" for="hideSentShift">Hide sent</label>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div id="shift-loading" class="text-center py-4">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+            <div id="shift-table-container" class="d-none">
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="shift-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Event</th>
+                      <th>Employee</th>
+                      <th>Shift Time</th>
+                      <th>Recipient</th>
+                      <th>Send Time</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="shift-tbody">
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div id="shift-empty" class="text-center text-muted py-4 d-none">
+              No SHIFT reminders scheduled.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script>
+    const ORG_ID = 1;
+    let countdownInterval = null;
+    let currentSettings = {};
+    
+    // Constants for localization
+    const MISSING_RECIPIENT_TEXT = 'חסר'; // Hebrew: "Missing"
+    
+    // Load settings on page load
+    async function loadSettings() {
+      try {
+        const response = await fetch(`/api/scheduler/settings?org_id=${ORG_ID}`);
+        const settings = await response.json();
+        currentSettings = settings;
+        
+        // Update toggles
+        document.getElementById('globalToggle').checked = settings.enabled_global;
+        document.getElementById('initToggle').checked = settings.enabled_init;
+        document.getElementById('techToggle').checked = settings.enabled_tech;
+        document.getElementById('shiftToggle').checked = settings.enabled_shift;
+        
+      } catch (error) {
+        console.error('Error loading settings:', error);
+      }
+    }
+    
+    // Update settings on toggle change
+    async function updateSettings(field, value) {
+      try {
+        const response = await fetch(`/api/scheduler/settings?org_id=${ORG_ID}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ [field]: value })
+        });
+        
+        if (response.ok) {
+          currentSettings = await response.json();
+          // Reload jobs to reflect new settings
+          loadAllJobs();
+        } else {
+          alert('Failed to update settings');
+          // Revert toggle
+          loadSettings();
+        }
+      } catch (error) {
+        console.error('Error updating settings:', error);
+        alert('Error updating settings');
+        loadSettings();
+      }
+    }
+    
+    // Attach toggle listeners
+    document.getElementById('globalToggle').addEventListener('change', (e) => {
+      updateSettings('enabled_global', e.target.checked);
+    });
+    document.getElementById('initToggle').addEventListener('change', (e) => {
+      updateSettings('enabled_init', e.target.checked);
+    });
+    document.getElementById('techToggle').addEventListener('change', (e) => {
+      updateSettings('enabled_tech', e.target.checked);
+    });
+    document.getElementById('shiftToggle').addEventListener('change', (e) => {
+      updateSettings('enabled_shift', e.target.checked);
+    });
+    
+    // Load jobs for a specific message type
+    async function loadJobs(messageType) {
+      const prefix = messageType === 'INIT' ? 'init' : 
+                     messageType === 'TECH_REMINDER' ? 'tech' : 'shift';
+      
+      const loadingEl = document.getElementById(`${prefix}-loading`);
+      const tableEl = document.getElementById(`${prefix}-table-container`);
+      const emptyEl = document.getElementById(`${prefix}-empty`);
+      const tbodyEl = document.getElementById(`${prefix}-tbody`);
+      const countEl = document.getElementById(`${prefix}-count`);
+      
+      // Map message type to checkbox suffix
+      const checkboxSuffixMap = {
+        'INIT': 'Init',
+        'TECH_REMINDER': 'Tech',
+        'SHIFT_REMINDER': 'Shift'
+      };
+      const checkboxSuffix = checkboxSuffixMap[messageType] || 'Init';
+      
+      // Get hide_sent checkbox value
+      const hideSentCheckbox = document.getElementById(`hideSent${checkboxSuffix}`);
+      const hideSent = hideSentCheckbox ? hideSentCheckbox.checked : false;
+      
+      // Show loading
+      loadingEl.classList.remove('d-none');
+      tableEl.classList.add('d-none');
+      emptyEl.classList.add('d-none');
+      
+      try {
+        const response = await fetch(
+          `/api/scheduler/jobs?org_id=${ORG_ID}&message_type=${messageType}&hide_sent=${hideSent}`
+        );
+        const jobs = await response.json();
+        
+        // Update count
+        countEl.textContent = jobs.length;
+        
+        // Hide loading
+        loadingEl.classList.add('d-none');
+        
+        if (jobs.length === 0) {
+          emptyEl.classList.remove('d-none');
+        } else {
+          tableEl.classList.remove('d-none');
+          renderJobsTable(jobs, tbodyEl, messageType);
+        }
+      } catch (error) {
+        console.error(`Error loading ${messageType} jobs:`, error);
+        loadingEl.classList.add('d-none');
+        emptyEl.classList.remove('d-none');
+        emptyEl.innerHTML = `<div class="alert alert-danger">Error loading jobs: ${error.message}</div>`;
+      }
+    }
+    
+    // Render jobs into a table
+    function renderJobsTable(jobs, tbody, messageType) {
+      tbody.innerHTML = jobs.map(job => {
+        const eventSummary = formatEventSummary(job);
+        const producerInfo = formatContactInfo(job.producer_name, job.producer_phone);
+        const technicianInfo = formatContactInfo(job.technical_name, job.technical_phone);
+        const recipientInfo = formatRecipientInfo(job);
+        const sendTimeInfo = formatSendTime(job);
+        const statusBadge = formatStatusBadge(job);
+        const actions = formatActions(job);
+        
+        // Different columns for SHIFT_REMINDER
+        if (messageType === 'SHIFT_REMINDER') {
+          const employeeInfo = formatContactInfo(job.recipient_name, job.recipient_phone);
+          const shiftTime = job.shift_call_time ? 
+            new Date(job.shift_call_time).toLocaleString('en-GB', {
+              dateStyle: 'short',
+              timeStyle: 'short'
+            }) : '—';
+          
+          return `
+            <tr data-job-id="${job.job_id}" class="${job.recipient_missing ? 'table-warning' : ''}">
+              <td>${eventSummary}</td>
+              <td>${employeeInfo}</td>
+              <td>${shiftTime}</td>
+              <td>${recipientInfo}</td>
+              <td>${sendTimeInfo}</td>
+              <td>${statusBadge}</td>
+              <td class="text-nowrap">${actions}</td>
+            </tr>
+          `;
+        } else {
+          return `
+            <tr data-job-id="${job.job_id}" class="${job.recipient_missing ? 'table-warning' : ''}">
+              <td>${eventSummary}</td>
+              <td>${producerInfo}</td>
+              <td>${technicianInfo}</td>
+              <td>${recipientInfo}</td>
+              <td>${sendTimeInfo}</td>
+              <td>${statusBadge}</td>
+              <td class="text-nowrap">${actions}</td>
+            </tr>
+          `;
+        }
+      }).join('');
+      
+      // Store jobs data for countdown updates
+      tbody.dataset.jobs = JSON.stringify(jobs);
+    }
+    
+    // Format event summary
+    function formatEventSummary(job) {
+      const name = job.event_name || 'Unknown Event';
+      const date = job.event_date ? new Date(job.event_date).toLocaleDateString('en-GB') : '';
+      const showTime = job.show_time ? new Date(job.show_time).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}) : '';
+      const loadIn = job.load_in_time ? new Date(job.load_in_time).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}) : '';
+      
+      let summary = `<strong>${name}</strong>`;
+      if (date) summary += `<br><small class="text-muted">${date}`;
+      if (showTime) summary += ` | Show: ${showTime}`;
+      if (loadIn) summary += ` | Load-in: ${loadIn}`;
+      if (date) summary += '</small>';
+      
+      return summary;
+    }
+    
+    // Format contact info
+    function formatContactInfo(name, phone) {
+      if (!name && !phone) return '<span class="text-muted">—</span>';
+      if (name && phone) return `${name}<br><small class="text-muted">${phone}</small>`;
+      return name || phone || '<span class="text-muted">—</span>';
+    }
+    
+    // Format recipient info with missing indicator
+    function formatRecipientInfo(job) {
+      if (job.recipient_missing) {
+        return `<span class="badge bg-danger">${MISSING_RECIPIENT_TEXT}</span>`;
+      }
+      return formatContactInfo(job.recipient_name, job.recipient_phone);
+    }
+    
+    // Format send time with countdown
+    function formatSendTime(job) {
+      const sendAt = new Date(job.send_at);
+      const sendAtStr = sendAt.toLocaleString('en-GB', {
+        dateStyle: 'short',
+        timeStyle: 'short'
+      });
+      
+      return `
+        <div>
+          <div>${sendAtStr}</div>
+          <small class="countdown text-muted" data-send-at="${job.send_at}"></small>
+        </div>
+      `;
+    }
+    
+    // Format status badge
+    function formatStatusBadge(job) {
+      const status = job.status || 'unknown';
+      const statusMap = {
+        'scheduled': 'primary',
+        'sent': 'success',
+        'failed': 'danger',
+        'blocked': 'warning',
+        'retrying': 'info',
+        'skipped': 'secondary',
+        'paused': 'secondary'
+      };
+      const badgeClass = statusMap[status] || 'secondary';
+      
+      let badge = `<span class="badge bg-${badgeClass}">${status}</span>`;
+      
+      // Show error if present
+      if (job.last_error) {
+        badge += `<br><small class="text-danger" title="${job.last_error}">⚠️ ${job.last_error.substring(0, 30)}...</small>`;
+      }
+      
+      // Show attempt count if retrying
+      if (job.attempt_count > 0) {
+        badge += `<br><small class="text-muted">Attempt ${job.attempt_count}/${job.max_attempts}</small>`;
+      }
+      
+      return badge;
+    }
+    
+    // Format action buttons
+    function formatActions(job) {
+      const jobId = job.job_id;
+      const isEnabled = job.is_enabled;
+      const canSend = !['sent', 'failed'].includes(job.status);
+      
+      let actions = [];
+      
+      // Enable/Disable toggle
+      actions.push(`
+        <button class="btn btn-sm btn-outline-${isEnabled ? 'secondary' : 'success'}" 
+                onclick="toggleEnabled('${jobId}', ${!isEnabled})"
+                title="${isEnabled ? 'Disable' : 'Enable'} this job">
+          ${isEnabled ? '⏸️' : '▶️'}
+        </button>
+      `);
+      
+      // Send Now button
+      if (canSend) {
+        actions.push(`
+          <button class="btn btn-sm btn-outline-primary" 
+                  onclick="sendNow('${jobId}')"
+                  title="Send this message immediately">
+            📤 Send Now
+          </button>
+        `);
+      }
+      
+      return actions.join(' ');
+    }
+    
+    // Toggle job enabled status
+    async function toggleEnabled(jobId, enabled) {
+      try {
+        const response = await fetch(
+          `/api/scheduler/jobs/${jobId}/enable?org_id=${ORG_ID}&enabled=${enabled}`,
+          { method: 'POST' }
+        );
+        
+        if (response.ok) {
+          // Reload jobs
+          loadAllJobs();
+        } else {
+          alert('Failed to update job status');
+        }
+      } catch (error) {
+        console.error('Error toggling job:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+    
+    // Send job now
+    async function sendNow(jobId) {
+      if (!confirm('Send this message now?')) return;
+      
+      try {
+        const response = await fetch(
+          `/api/scheduler/jobs/${jobId}/send-now?org_id=${ORG_ID}`,
+          { method: 'POST' }
+        );
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          alert('Message sent successfully!');
+          loadAllJobs();
+        } else {
+          alert('Send failed: ' + result.message);
+        }
+      } catch (error) {
+        console.error('Error sending job:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+    
+    // Update countdowns every second
+    function updateCountdowns() {
+      document.querySelectorAll('.countdown').forEach(el => {
+        const sendAt = new Date(el.dataset.sendAt);
+        const now = new Date();
+        const diff = sendAt - now;
+        
+        if (diff < 0) {
+          el.textContent = 'Overdue';
+          el.classList.add('text-danger');
+          el.classList.remove('text-muted');
+        } else {
+          el.textContent = formatTimeDiff(diff);
+          el.classList.add('text-muted');
+          el.classList.remove('text-danger');
+        }
+      });
+    }
+    
+    // Format time difference
+    function formatTimeDiff(ms) {
+      const seconds = Math.floor(ms / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+      
+      if (days > 0) return `in ${days}d ${hours % 24}h`;
+      if (hours > 0) return `in ${hours}h ${minutes % 60}m`;
+      if (minutes > 0) return `in ${minutes}m ${seconds % 60}s`;
+      return `in ${seconds}s`;
+    }
+    
+    // Load all job tabs
+    function loadAllJobs() {
+      loadJobs('INIT');
+      loadJobs('TECH_REMINDER');
+      loadJobs('SHIFT_REMINDER');
+    }
+    
+    // Initial load
+    document.addEventListener('DOMContentLoaded', () => {
+      loadSettings();
+      loadAllJobs();
+      
+      // Start countdown updates
+      countdownInterval = setInterval(updateCountdowns, 1000);
+    });
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+      }
+    });
+    </script>
+    """
+    
+    return HTMLResponse(_render_page("Scheduler", body))

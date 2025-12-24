@@ -10,6 +10,7 @@ from app.routers import availability
 from app.routers import events_api
 from app.routers import notifications
 from app.routers import internal
+from app.routers import scheduler
 from app.db_schema import SchemaMissingError, ensure_calendar_schema
 
 logger = logging.getLogger(__name__)
@@ -40,6 +41,7 @@ app.include_router(availability.router)
 app.include_router(events_api.router)
 app.include_router(notifications.router)
 app.include_router(internal.router)
+app.include_router(scheduler.router)
 
 @app.get("/health")
 def health():
