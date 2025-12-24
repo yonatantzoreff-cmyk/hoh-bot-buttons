@@ -297,6 +297,51 @@ class EventRepository:
             result = session.execute(query, {"org_id": org_id})
             return result.mappings().all()
 
+    def list_future_events_for_org(self, org_id: int):
+        """List only future events for an organization (event_date >= today in Israel time)."""
+        from app.time_utils import utc_to_local_datetime, now_utc
+        
+        # Get today in Israel time
+        now = now_utc()
+        israel_now = utc_to_local_datetime(now)
+        today = israel_now.date()
+        
+        query = text(
+            """
+            SELECT
+                e.event_id,
+                e.name,
+                e.event_date,
+                e.show_time,
+                e.load_in_time,
+                e.hall_id,
+                h.name AS hall_name,
+                e.notes,
+                e.status,
+                e.producer_contact_id,
+                prod.name AS producer_name,
+                prod.phone AS producer_phone,
+                e.technical_contact_id,
+                tech.name AS technical_name,
+                tech.phone AS technical_phone,
+                e.next_followup_at,
+                e.created_at
+            FROM events e
+            LEFT JOIN halls h ON e.hall_id = h.hall_id
+            LEFT JOIN contacts prod
+              ON e.org_id = prod.org_id AND e.producer_contact_id = prod.contact_id
+            LEFT JOIN contacts tech
+              ON e.org_id = tech.org_id AND e.technical_contact_id = tech.contact_id
+            WHERE e.org_id = :org_id
+              AND e.event_date >= :today
+            ORDER BY e.event_date ASC, e.event_id ASC
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "today": today})
+            return result.mappings().all()
+
     def delete_event(self, org_id: int, event_id: int) -> None:
         query = text(
             """

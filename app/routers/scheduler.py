@@ -2,7 +2,7 @@
 
 import logging
 from typing import Optional, List
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -15,9 +15,14 @@ from app.repositories import (
     EventRepository,
     ContactRepository,
     EmployeeRepository,
+    EmployeeShiftRepository,
 )
 from app.time_utils import now_utc, utc_to_local_datetime
 from app.services.scheduler import SchedulerService
+from app.services.scheduler_job_builder import (
+    build_or_update_jobs_for_event,
+    build_or_update_jobs_for_shifts,
+)
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -42,6 +47,7 @@ async def list_scheduler_jobs(
     org_id: int = Query(1, description="Organization ID"),
     message_type: Optional[str] = Query(None, description="Filter by message type: INIT, TECH_REMINDER, SHIFT_REMINDER"),
     hide_sent: bool = Query(False, description="Hide sent messages"),
+    show_past: bool = Query(False, description="Show past messages (send_at < now or completed status)"),
 ) -> List[dict]:
     """
     List scheduled message jobs with full context for UI display.
@@ -87,6 +93,12 @@ async def list_scheduler_jobs(
     # Apply hide_sent filter
     if hide_sent:
         query += " AND sm.status != 'sent'"
+    
+    # Apply show_past filter (default is to hide past)
+    if not show_past:
+        # Hide past jobs: send_at < now OR status in completed states
+        query += " AND (sm.send_at >= :now OR sm.status NOT IN ('sent', 'failed', 'skipped'))"
+        params["now"] = now_utc()
     
     query += " ORDER BY sm.send_at ASC"
     
@@ -242,6 +254,159 @@ async def update_scheduler_settings(
     
     # Return updated settings
     return settings_repo.get_or_create_settings(org_id)
+
+
+class FetchResponse(BaseModel):
+    """Response for fetch action."""
+    success: bool
+    message: str
+    events_scanned: int
+    shifts_scanned: int
+    jobs_created: int
+    jobs_updated: int
+    jobs_blocked: int
+
+
+@router.post("/api/scheduler/fetch")
+async def fetch_future_events(
+    org_id: int = Query(1, description="Organization ID"),
+) -> FetchResponse:
+    """
+    Fetch and synchronize all future events into scheduled_messages.
+    
+    This endpoint:
+    1. Queries all future events (event_date >= today in Israel time)
+    2. For each event, creates/updates INIT and TECH_REMINDER jobs
+    3. For each event, creates/updates SHIFT_REMINDER jobs for all shifts
+    4. Returns counts of operations performed
+    
+    This operation is idempotent - running it multiple times won't create duplicates.
+    """
+    try:
+        events_repo = EventRepository()
+        
+        # Get all future events
+        future_events = events_repo.list_future_events_for_org(org_id)
+        events_scanned = len(future_events)
+        
+        jobs_created = 0
+        jobs_updated = 0
+        jobs_blocked = 0
+        shifts_scanned = 0
+        
+        logger.info(f"Fetching scheduler jobs for {events_scanned} future events (org_id={org_id})")
+        
+        for event in future_events:
+            event_id = event["event_id"]
+            
+            try:
+                # Build/update event-based jobs (INIT + TECH_REMINDER)
+                event_result = build_or_update_jobs_for_event(org_id, event_id)
+                
+                # Count jobs created/updated/blocked for this event
+                if event_result.get("init_status") == "created":
+                    jobs_created += 1
+                elif event_result.get("init_status") == "updated":
+                    jobs_updated += 1
+                elif event_result.get("init_status") == "blocked":
+                    jobs_blocked += 1
+                
+                if event_result.get("tech_status") == "created":
+                    jobs_created += 1
+                elif event_result.get("tech_status") == "updated":
+                    jobs_updated += 1
+                elif event_result.get("tech_status") == "blocked":
+                    jobs_blocked += 1
+                
+                # Build/update shift-based jobs (SHIFT_REMINDER)
+                shifts_result = build_or_update_jobs_for_shifts(org_id, event_id)
+                
+                if not shifts_result.get("disabled"):
+                    shifts_scanned += shifts_result.get("processed_count", 0)
+                    jobs_created += shifts_result.get("created", 0)
+                    jobs_updated += shifts_result.get("updated", 0)
+                    jobs_blocked += shifts_result.get("blocked", 0)
+                    
+            except Exception as e:
+                logger.error(f"Error building jobs for event {event_id}: {e}", exc_info=True)
+                # Continue processing other events
+        
+        message = f"Synced {events_scanned} events and {shifts_scanned} shifts"
+        logger.info(
+            f"Fetch complete: events_scanned={events_scanned}, shifts_scanned={shifts_scanned}, "
+            f"jobs_created={jobs_created}, jobs_updated={jobs_updated}, jobs_blocked={jobs_blocked}"
+        )
+        
+        return FetchResponse(
+            success=True,
+            message=message,
+            events_scanned=events_scanned,
+            shifts_scanned=shifts_scanned,
+            jobs_created=jobs_created,
+            jobs_updated=jobs_updated,
+            jobs_blocked=jobs_blocked,
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in fetch_future_events: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class CleanupResponse(BaseModel):
+    """Response for cleanup action."""
+    success: bool
+    message: str
+    deleted_count: int
+
+
+@router.delete("/api/scheduler/past-logs")
+async def cleanup_past_logs(
+    org_id: int = Query(1, description="Organization ID"),
+    days: int = Query(30, description="Delete logs older than this many days"),
+) -> CleanupResponse:
+    """
+    Delete old scheduler logs to keep the database clean.
+    
+    Deletes scheduled_messages where:
+    - status IN (sent, failed, skipped) 
+    - AND send_at < now - {days} days
+    
+    This only removes completed jobs that are old. It will not delete:
+    - Future scheduled jobs
+    - Jobs in 'scheduled', 'retrying', or 'blocked' status
+    """
+    try:
+        from sqlalchemy import text
+        from app.appdb import get_session
+        
+        # Calculate cutoff date
+        now = now_utc()
+        cutoff_date = now - timedelta(days=days)
+        
+        # Delete old completed jobs
+        query = text("""
+            DELETE FROM scheduled_messages
+            WHERE org_id = :org_id
+              AND status IN ('sent', 'failed', 'skipped')
+              AND send_at < :cutoff_date
+        """)
+        
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "cutoff_date": cutoff_date})
+            deleted_count = result.rowcount
+        
+        message = f"Deleted {deleted_count} old log entries"
+        logger.info(f"Cleanup complete for org {org_id}: deleted {deleted_count} logs older than {days} days")
+        
+        return CleanupResponse(
+            success=True,
+            message=message,
+            deleted_count=deleted_count,
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in cleanup_past_logs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 def _preview_recipient(

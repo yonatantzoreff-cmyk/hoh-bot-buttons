@@ -21,6 +21,7 @@ NEXT_FOLLOWUP_MIGRATION_PATH = Path(__file__).resolve().parents[1] / "db" / "mig
 SHIFT_EMPLOYEE_NULLABLE_MIGRATION_PATH = Path(__file__).resolve().parents[1] / "db" / "migrations" / "007_make_shift_employee_nullable.sql"
 CONVERSATION_STATE_MACHINE_MIGRATION_PATH = Path(__file__).resolve().parents[1] / "db" / "migrations" / "008_conversation_state_machine.sql"
 SCHEDULED_MESSAGES_MIGRATION_PATH = Path(__file__).resolve().parents[1] / "db" / "migrations" / "009_scheduled_messages.sql"
+SCHEDULED_MESSAGES_UNIQUE_CONSTRAINTS_MIGRATION_PATH = Path(__file__).resolve().parents[1] / "db" / "migrations" / "010_scheduled_messages_unique_constraints.sql"
 
 
 class SchemaMissingError(RuntimeError):
@@ -203,6 +204,25 @@ def _apply_scheduled_messages_migration() -> None:
                     raise
 
 
+def _apply_scheduled_messages_unique_constraints_migration() -> None:
+    """Apply migration to add unique constraints to scheduled_messages for idempotency."""
+    sql = SCHEDULED_MESSAGES_UNIQUE_CONSTRAINTS_MIGRATION_PATH.read_text(encoding="utf-8")
+    logger.info("Applying scheduled messages unique constraints migration from %s", SCHEDULED_MESSAGES_UNIQUE_CONSTRAINTS_MIGRATION_PATH)
+    
+    statements = [stmt.strip() for stmt in sql.split(";") if stmt.strip()]
+    
+    with engine.begin() as conn:
+        for stmt in statements:
+            try:
+                conn.exec_driver_sql(stmt)
+            except Exception as e:
+                # Log but don't fail if already applied (idempotent)
+                if "already exists" in str(e).lower() or "duplicate" in str(e).lower():
+                    logger.info(f"Skipping statement (already applied or N/A): {stmt[:50]}...")
+                else:
+                    raise
+
+
 def ensure_calendar_schema() -> None:
     """Ensure the staging_events table exists and indexes are present.
 
@@ -270,6 +290,13 @@ def ensure_calendar_schema() -> None:
         _apply_scheduled_messages_migration()
     except Exception as e:
         logger.warning(f"Scheduled messages migration issue (may already be applied): {e}")
+        # Don't block startup if migration already applied
+    
+    # Apply scheduled messages unique constraints migration
+    try:
+        _apply_scheduled_messages_unique_constraints_migration()
+    except Exception as e:
+        logger.warning(f"Scheduled messages unique constraints migration issue (may already be applied): {e}")
         # Don't block startup if migration already applied
 
 
