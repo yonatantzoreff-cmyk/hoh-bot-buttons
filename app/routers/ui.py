@@ -2736,6 +2736,9 @@ async def scheduler_page() -> HTMLResponse:
         <button id="cleanupBtn" class="btn btn-outline-danger" onclick="cleanupPastLogs()">
           🗑️ Cleanup Old Logs
         </button>
+        <button class="btn btn-outline-secondary btn-sm ms-3" onclick="alert('JavaScript is working! Check console for logs.')">
+          🔍 Test JavaScript
+        </button>
       </div>
     </div>
     
@@ -2952,8 +2955,15 @@ async def scheduler_page() -> HTMLResponse:
     // Load settings on page load
     async function loadSettings() {
       try {
+        console.log('Fetching scheduler settings...');
         const response = await fetch(`/api/scheduler/settings?org_id=${ORG_ID}`);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to load settings: ${response.status} ${response.statusText}`);
+        }
+        
         const settings = await response.json();
+        console.log('Settings loaded:', settings);
         currentSettings = settings;
         
         // Update toggles
@@ -2964,6 +2974,8 @@ async def scheduler_page() -> HTMLResponse:
         
       } catch (error) {
         console.error('Error loading settings:', error);
+        // Show user-friendly error
+        alert(`⚠️ Warning: Could not load scheduler settings.\n${error.message}\n\nSome features may not work correctly.`);
       }
     }
     
@@ -3008,20 +3020,34 @@ async def scheduler_page() -> HTMLResponse:
     
     // Fetch future events and sync to scheduler
     async function fetchFutureEvents() {
+      console.log('fetchFutureEvents called');
+      
       const fetchBtn = document.getElementById('fetchBtn');
+      if (!fetchBtn) {
+        console.error('Fetch button not found!');
+        alert('❌ Error: Fetch button not found in DOM');
+        return;
+      }
+      
       fetchBtn.disabled = true;
       fetchBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Fetching...';
       
       try {
+        console.log('Starting fetch request to /api/scheduler/fetch');
         const response = await fetch(`/api/scheduler/fetch?org_id=${ORG_ID}`, {
           method: 'POST'
         });
         
+        console.log('Fetch response status:', response.status);
+        
         if (!response.ok) {
-          throw new Error('Fetch failed');
+          const errorText = await response.text();
+          console.error('Fetch failed with status:', response.status, 'Error:', errorText);
+          throw new Error(`Fetch failed with status ${response.status}: ${errorText}`);
         }
         
         const result = await response.json();
+        console.log('Fetch result:', result);
         
         // Show success message with counts
         alert(
@@ -3034,11 +3060,12 @@ async def scheduler_page() -> HTMLResponse:
         );
         
         // Reload all jobs to show the new/updated ones
+        console.log('Reloading all jobs...');
         loadAllJobs();
         
       } catch (error) {
         console.error('Error fetching future events:', error);
-        alert('❌ Error fetching future events. See console for details.');
+        alert(`❌ Error fetching future events:\n${error.message}\n\nCheck browser console for details.`);
       } finally {
         fetchBtn.disabled = false;
         fetchBtn.innerHTML = '🔄 Fetch Future Events';
@@ -3083,6 +3110,8 @@ async def scheduler_page() -> HTMLResponse:
     
     // Load jobs for a specific message type
     async function loadJobs(messageType) {
+      console.log(`Loading jobs for ${messageType}...`);
+      
       const prefix = messageType === 'INIT' ? 'init' : 
                      messageType === 'TECH_REMINDER' ? 'tech' : 'shift';
       
@@ -3114,10 +3143,17 @@ async def scheduler_page() -> HTMLResponse:
       emptyEl.classList.add('d-none');
       
       try {
-        const response = await fetch(
-          `/api/scheduler/jobs?org_id=${ORG_ID}&message_type=${messageType}&hide_sent=${hideSent}&show_past=${showPast ? '1' : '0'}`
-        );
+        const url = `/api/scheduler/jobs?org_id=${ORG_ID}&message_type=${messageType}&hide_sent=${hideSent}&show_past=${showPast ? '1' : '0'}`;
+        console.log(`Fetching jobs from: ${url}`);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to load jobs: ${response.status} ${response.statusText}`);
+        }
+        
         const jobs = await response.json();
+        console.log(`Loaded ${jobs.length} ${messageType} jobs`);
         
         // Update count
         countEl.textContent = jobs.length;
@@ -3383,11 +3419,24 @@ async def scheduler_page() -> HTMLResponse:
     
     // Initial load
     document.addEventListener('DOMContentLoaded', () => {
-      loadSettings();
-      loadAllJobs();
+      console.log('Scheduler page loaded - initializing...');
       
-      // Start countdown updates
-      countdownInterval = setInterval(updateCountdowns, 1000);
+      try {
+        console.log('Loading scheduler settings...');
+        loadSettings();
+        
+        console.log('Loading all jobs...');
+        loadAllJobs();
+        
+        // Start countdown updates
+        console.log('Starting countdown interval...');
+        countdownInterval = setInterval(updateCountdowns, 1000);
+        
+        console.log('Scheduler page initialization complete');
+      } catch (error) {
+        console.error('Error during page initialization:', error);
+        alert(`❌ Error initializing scheduler page:\n${error.message}\n\nCheck browser console for details.`);
+      }
     });
     
     // Cleanup on page unload
