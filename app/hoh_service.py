@@ -784,6 +784,7 @@ class HOHService:
         technical_phone: Optional[str] = None,
         technical_contact_id: Optional[int] = None,
         notes: Optional[str] = None,
+        status: Optional[str] = None,
     ) -> None:
         event = self.events.get_event_by_id(org_id=org_id, event_id=event_id)
         if not event:
@@ -840,6 +841,9 @@ class HOHService:
         # Handle notes
         if notes is not None:
             update_params["notes"] = notes
+
+        if status is not None:
+            update_params["status"] = status
         
         # Only update if there are changes
         if update_params:
