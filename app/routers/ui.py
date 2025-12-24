@@ -2916,6 +2916,9 @@ async def scheduler_page() -> HTMLResponse:
     let countdownInterval = null;
     let currentSettings = {};
     
+    // Constants for localization
+    const MISSING_RECIPIENT_TEXT = 'חסר'; // Hebrew: "Missing"
+    
     // Load settings on page load
     async function loadSettings() {
       try {
@@ -2984,8 +2987,16 @@ async def scheduler_page() -> HTMLResponse:
       const tbodyEl = document.getElementById(`${prefix}-tbody`);
       const countEl = document.getElementById(`${prefix}-count`);
       
+      // Map message type to checkbox suffix
+      const checkboxSuffixMap = {
+        'INIT': 'Init',
+        'TECH_REMINDER': 'Tech',
+        'SHIFT_REMINDER': 'Shift'
+      };
+      const checkboxSuffix = checkboxSuffixMap[messageType] || 'Init';
+      
       // Get hide_sent checkbox value
-      const hideSentCheckbox = document.getElementById(`hideSent${messageType === 'INIT' ? 'Init' : messageType === 'TECH_REMINDER' ? 'Tech' : 'Shift'}`);
+      const hideSentCheckbox = document.getElementById(`hideSent${checkboxSuffix}`);
       const hideSent = hideSentCheckbox ? hideSentCheckbox.checked : false;
       
       // Show loading
@@ -3095,7 +3106,7 @@ async def scheduler_page() -> HTMLResponse:
     // Format recipient info with missing indicator
     function formatRecipientInfo(job) {
       if (job.recipient_missing) {
-        return '<span class="badge bg-danger">חסר</span>';
+        return `<span class="badge bg-danger">${MISSING_RECIPIENT_TEXT}</span>`;
       }
       return formatContactInfo(job.recipient_name, job.recipient_phone);
     }

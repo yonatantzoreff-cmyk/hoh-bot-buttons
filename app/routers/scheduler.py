@@ -180,6 +180,9 @@ async def send_job_now(
         )
     
     # Process the job using the scheduler service
+    # Note: We call the internal _process_job method directly here.
+    # TODO: Consider refactoring to use a public method in SchedulerService
+    # or extracting this logic to a shared module for better encapsulation.
     scheduler = SchedulerService()
     settings = settings_repo.get_or_create_settings(org_id)
     now = now_utc()
