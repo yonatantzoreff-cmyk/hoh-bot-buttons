@@ -187,6 +187,8 @@ async def update_event(
             update_params["technical_contact_id"] = updates.technical_contact_id
         if updates.notes is not None:
             update_params["notes"] = updates.notes
+        if updates.status is not None:
+            update_params["status"] = updates.status
         
         # Use existing service method which has all the validation
         hoh.update_event_with_contacts(
