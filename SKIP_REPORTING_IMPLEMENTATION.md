@@ -90,13 +90,14 @@ The `/api/scheduler/fetch` endpoint now:
 
 | Reason | Description | Action Taken |
 |--------|-------------|--------------|
-| `missing_recipient_phone` | Producer/technician/employee phone is missing or invalid | **Creates BLOCKED job** with error message |
 | `missing_event_id` | Event not found in database | Skips job creation |
 | `missing_event_date` | Event has no event_date | Skips job creation |
 | `missing_required_time_fields` | Shift has no call_time | Skips job creation |
 | `already_up_to_date` | Job exists and send_at hasn't changed | Skips update |
 | `already_sent_or_failed` | Job exists in terminal state | Skips update |
 | `disabled_by_settings` | Message type disabled in org settings | Skips job creation |
+
+**Note**: Missing recipient phone does NOT create a skip. Instead, it creates a **BLOCKED job** with `status='blocked'` and `last_error='Missing recipient phone'` so it appears in the UI.
 
 ## Testing
 

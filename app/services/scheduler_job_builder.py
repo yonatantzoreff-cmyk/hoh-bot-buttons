@@ -31,6 +31,28 @@ logger = logging.getLogger(__name__)
 # Phone validation constants
 MIN_PHONE_DIGITS = 10  # Minimum number of digits required for a valid phone number
 
+# Skip reason constants
+SKIP_REASON_MISSING_EVENT_ID = "missing_event_id"
+SKIP_REASON_MISSING_EVENT_DATE = "missing_event_date"
+SKIP_REASON_MISSING_REQUIRED_TIME_FIELDS = "missing_required_time_fields"
+SKIP_REASON_ALREADY_UP_TO_DATE = "already_up_to_date"
+SKIP_REASON_ALREADY_SENT_OR_FAILED = "already_sent_or_failed"
+SKIP_REASON_DISABLED_BY_SETTINGS = "disabled_by_settings"
+
+
+def _has_send_at_changed(existing_send_at, new_send_at) -> bool:
+    """
+    Check if send_at timestamp has changed.
+    
+    Args:
+        existing_send_at: Existing send_at timestamp
+        new_send_at: New send_at timestamp
+    
+    Returns:
+        True if send_at has changed, False otherwise
+    """
+    return existing_send_at != new_send_at
+
 
 def _generate_job_key(org_id: int, entity_type: str, entity_id: int, message_type: str) -> str:
     """
@@ -107,9 +129,9 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
         return {
             "error": "Event not found",
             "init_status": "skipped",
-            "init_skip_reason": "missing_event_id",
+            "init_skip_reason": SKIP_REASON_MISSING_EVENT_ID,
             "tech_status": "skipped",
-            "tech_skip_reason": "missing_event_id"
+            "tech_skip_reason": SKIP_REASON_MISSING_EVENT_ID
         }
     
     event_date = event.get("event_date")
@@ -118,9 +140,9 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
         return {
             "error": "Event date missing",
             "init_status": "skipped",
-            "init_skip_reason": "missing_event_date",
+            "init_skip_reason": SKIP_REASON_MISSING_EVENT_DATE,
             "tech_status": "skipped",
-            "tech_skip_reason": "missing_event_date"
+            "tech_skip_reason": SKIP_REASON_MISSING_EVENT_DATE
         }
     
     # Get scheduler settings (with defaults)
@@ -171,7 +193,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
             if existing_status not in ("sent", "failed"):
                 # Check if send_at changed
                 existing_send_at = init_job.get("send_at")
-                send_at_changed = (existing_send_at != init_send_at)
+                send_at_changed = _has_send_at_changed(existing_send_at, init_send_at)
                 
                 if send_at_changed:
                     # Update send_at
@@ -199,7 +221,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                 else:
                     # No changes - already up to date
                     result["init_status"] = "skipped"
-                    result["init_skip_reason"] = "already_up_to_date"
+                    result["init_skip_reason"] = SKIP_REASON_ALREADY_UP_TO_DATE
                 
                 result["init_job_id"] = init_job["job_id"]
                 if result.get("init_status") == "updated":
@@ -207,7 +229,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
             else:
                 result["init_job_id"] = init_job["job_id"]
                 result["init_status"] = "skipped"
-                result["init_skip_reason"] = "already_sent_or_failed"
+                result["init_skip_reason"] = SKIP_REASON_ALREADY_SENT_OR_FAILED
         else:
             # Create new job - ALWAYS create even if phone is missing (status=blocked)
             job_key = _generate_job_key(org_id, "event", event_id, "INIT")
@@ -238,7 +260,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
             logger.info(f"Created INIT job {job_id} (key={job_key}) for event {event_id}, status={status}")
     else:
         result["init_status"] = "skipped"
-        result["init_skip_reason"] = "disabled_by_settings"
+        result["init_skip_reason"] = SKIP_REASON_DISABLED_BY_SETTINGS
     
     # --- TECH_REMINDER Job ---
     if settings.get("enabled_global") and settings.get("enabled_tech"):
@@ -266,7 +288,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
             if existing_status not in ("sent", "failed"):
                 # Check if send_at changed
                 existing_send_at = tech_job.get("send_at")
-                send_at_changed = (existing_send_at != tech_send_at)
+                send_at_changed = _has_send_at_changed(existing_send_at, tech_send_at)
                 
                 if send_at_changed:
                     # Update send_at
@@ -294,7 +316,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                 else:
                     # No changes - already up to date
                     result["tech_status"] = "skipped"
-                    result["tech_skip_reason"] = "already_up_to_date"
+                    result["tech_skip_reason"] = SKIP_REASON_ALREADY_UP_TO_DATE
                 
                 result["tech_job_id"] = tech_job["job_id"]
                 if result.get("tech_status") == "updated":
@@ -302,7 +324,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
             else:
                 result["tech_job_id"] = tech_job["job_id"]
                 result["tech_status"] = "skipped"
-                result["tech_skip_reason"] = "already_sent_or_failed"
+                result["tech_skip_reason"] = SKIP_REASON_ALREADY_SENT_OR_FAILED
         else:
             # Create new job - ALWAYS create even if phone is missing (status=blocked)
             job_key = _generate_job_key(org_id, "event", event_id, "TECH_REMINDER")
@@ -333,7 +355,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
             logger.info(f"Created TECH_REMINDER job {job_id} (key={job_key}) for event {event_id}, status={status}")
     else:
         result["tech_status"] = "skipped"
-        result["tech_skip_reason"] = "disabled_by_settings"
+        result["tech_skip_reason"] = SKIP_REASON_DISABLED_BY_SETTINGS
     
     return result
 
@@ -371,7 +393,7 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
         return {
             "processed_count": 0, 
             "disabled": True,
-            "skip_reasons": {"disabled_by_settings": 0}
+            "skip_reasons": {SKIP_REASON_DISABLED_BY_SETTINGS: 0}
         }
     
     # Get all shifts for this event
@@ -396,7 +418,7 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
         if not call_time:
             logger.warning(f"Shift {shift_id} has no call_time, skipping")
             skipped += 1
-            skip_reasons["missing_required_time_fields"] = skip_reasons.get("missing_required_time_fields", 0) + 1
+            skip_reasons[SKIP_REASON_MISSING_REQUIRED_TIME_FIELDS] = skip_reasons.get(SKIP_REASON_MISSING_REQUIRED_TIME_FIELDS, 0) + 1
             continue
         
         # Get shift date (convert call_time to local date)
@@ -431,7 +453,7 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
             if existing_status not in ("sent", "failed"):
                 # Check if send_at changed
                 existing_send_at = existing_job.get("send_at")
-                send_at_changed = (existing_send_at != send_at)
+                send_at_changed = _has_send_at_changed(existing_send_at, send_at)
                 
                 if send_at_changed:
                     # Update send_at
@@ -462,14 +484,14 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
                     else:
                         # No changes - already up to date
                         skipped += 1
-                        skip_reasons["already_up_to_date"] = skip_reasons.get("already_up_to_date", 0) + 1
+                        skip_reasons[SKIP_REASON_ALREADY_UP_TO_DATE] = skip_reasons.get(SKIP_REASON_ALREADY_UP_TO_DATE, 0) + 1
                 
                 if job_was_updated or not phone_valid:
                     logger.info(f"Updated SHIFT_REMINDER job {existing_job['job_id']} for shift {shift_id}")
             else:
                 # Already sent or failed
                 skipped += 1
-                skip_reasons["already_sent_or_failed"] = skip_reasons.get("already_sent_or_failed", 0) + 1
+                skip_reasons[SKIP_REASON_ALREADY_SENT_OR_FAILED] = skip_reasons.get(SKIP_REASON_ALREADY_SENT_OR_FAILED, 0) + 1
         else:
             # Create new job - ALWAYS create even if phone is missing (status=blocked)
             job_key = _generate_job_key(org_id, "shift", shift_id, "SHIFT_REMINDER")
@@ -478,7 +500,7 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
             if event_id is None:
                 logger.error(f"Cannot create SHIFT_REMINDER for shift {shift_id}: event_id is None")
                 skipped += 1
-                skip_reasons["missing_event_id"] = skip_reasons.get("missing_event_id", 0) + 1
+                skip_reasons[SKIP_REASON_MISSING_EVENT_ID] = skip_reasons.get(SKIP_REASON_MISSING_EVENT_ID, 0) + 1
                 continue
             
             # Set status based on phone validation

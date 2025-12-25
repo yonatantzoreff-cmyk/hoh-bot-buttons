@@ -255,6 +255,15 @@ async def update_scheduler_settings(
     return settings_repo.get_or_create_settings(org_id)
 
 
+class SkippedJobSample(BaseModel):
+    """Sample of a skipped job for debugging."""
+    event_id: int
+    event_name: str
+    message_type: str
+    reason: str
+    count: Optional[int] = None  # For shift aggregations
+
+
 class FetchResponse(BaseModel):
     """Response for fetch action."""
     success: bool
@@ -266,7 +275,7 @@ class FetchResponse(BaseModel):
     jobs_blocked: int
     jobs_skipped: int = 0
     skipped_reasons: dict[str, int] = {}
-    skipped_samples: list[dict] = []
+    skipped_samples: list[SkippedJobSample] = []
     errors_count: int = 0
     errors: list[str] = []
 
