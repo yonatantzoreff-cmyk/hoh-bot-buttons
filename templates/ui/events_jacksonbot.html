@@ -912,9 +912,7 @@
 
         .table-toolbar {
             display: flex;
-            flex-direction: column;
-            align-items: flex-end;
-            gap: 0.35rem;
+            justify-content: flex-end;
             margin-bottom: 0.5rem;
         }
 
@@ -923,6 +921,7 @@
             gap: 0.5rem;
             align-items: center;
             flex-wrap: wrap;
+            justify-content: flex-end;
         }
 
         .btn-ghost {
@@ -2408,27 +2407,25 @@
                     <div class="hall-tab-panels">
                         ${hallEntries.map(([hallName, events]) => `
                 <div class="hall-tab-panel ${hallName === activeHall ? 'active' : ''}" data-hall="${escapeHtml(hallName)}">
-                    <div class="hall-section">
-                        <div class="hall-body">
-                            <div class="table-toolbar">
-                                <div class="table-toolbar-row">
-                                    ${renderStatusFilterControl()}
-                                </div>
-                                <div class="table-toolbar-row" style="justify-content: flex-end;">
-                                    <div style="position: relative;">
-                                        <button type="button" class="btn-ghost column-menu-toggle" data-hall="${escapeHtml(hallName)}" onclick="toggleColumnMenu('${escapeHtml(hallName)}')">Columns ▾</button>
-                                        <div class="column-menu" id="column-menu-${hallName.replace(/\s+/g, '-')}">
-                                            ${TABLE_COLUMNS.map(col => `
-                                                <label>
-                                                    <input type="checkbox" ${columnVisibility[col.key] !== false ? 'checked' : ''} onchange="setColumnVisibility('${col.key}', this.checked)">
-                                                    ${col.label}
-                                                </label>
-                                            `).join('')}
+                            <div class="hall-section">
+                                <div class="hall-body">
+                                    <div class="table-toolbar">
+                                        <div class="table-toolbar-row">
+                                            ${renderStatusFilterControl()}
+                                            <div style="position: relative;">
+                                                <button type="button" class="btn-ghost column-menu-toggle" data-hall="${escapeHtml(hallName)}" onclick="toggleColumnMenu('${escapeHtml(hallName)}')">Columns ▾</button>
+                                                <div class="column-menu" id="column-menu-${hallName.replace(/\s+/g, '-')}">
+                                                    ${TABLE_COLUMNS.map(col => `
+                                                        <label>
+                                                            <input type="checkbox" ${columnVisibility[col.key] !== false ? 'checked' : ''} onchange="setColumnVisibility('${col.key}', this.checked)">
+                                                            ${col.label}
+                                                        </label>
+                                                    `).join('')}
+                                                </div>
+                                            </div>
                                         </div>
                                     </div>
-                                </div>
-                            </div>
-                            <table class="events-table" data-hall="${escapeHtml(hallName)}">
+                                    <table class="events-table" data-hall="${escapeHtml(hallName)}">
                                             <thead>
                                                 <tr id="header-row-${hallName.replace(/\s+/g, '-')}">
                                                     <th data-col="expander" style="width: 40px;"></th>
