@@ -3556,7 +3556,7 @@ async def scheduler_page() -> HTMLResponse:
     
     // Delete all jobs
     async function deleteAllJobs() {
-      if (!confirm('⚠️ WARNING: Delete ALL scheduled jobs?\n\nThis cannot be undone!')) {
+      if (!confirm('⚠️ WARNING: Delete ALL scheduled jobs? This cannot be undone!')) {
         return;
       }
       
