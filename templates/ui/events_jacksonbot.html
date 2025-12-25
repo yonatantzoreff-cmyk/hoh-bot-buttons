@@ -3112,7 +3112,7 @@
                 tbody.appendChild(row);
                 // Find and move the associated details row if it exists
                 const eventId = row.dataset.eventId;
-                const detailsRow = tbody.querySelector(`tr.event-details[data-event-id="${eventId}"]`);
+                const detailsRow = tbody.querySelector(`tr.row-details[data-event-id="${eventId}"]`);
                 if (detailsRow) {
                     tbody.appendChild(detailsRow);
                 }
