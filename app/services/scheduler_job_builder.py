@@ -403,6 +403,11 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
             # Create new job
             job_key = _generate_job_key(org_id, "shift", shift_id, "SHIFT_REMINDER")
             
+            # Validate that we have event_id (should always be present from function argument)
+            if event_id is None:
+                logger.error(f"Cannot create SHIFT_REMINDER for shift {shift_id}: event_id is None")
+                continue
+            
             # Set status based on phone validation
             if not phone_valid:
                 status = "blocked"
@@ -416,6 +421,7 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
                 org_id=org_id,
                 message_type="SHIFT_REMINDER",
                 send_at=send_at,
+                event_id=event_id,  # Always set event_id for SHIFT_REMINDER
                 shift_id=shift_id,
                 is_enabled=True
             )
@@ -427,7 +433,7 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
             else:
                 created += 1
             
-            logger.info(f"Created SHIFT_REMINDER job {job_id} (key={job_key}) for shift {shift_id}, status={status}")
+            logger.info(f"Created SHIFT_REMINDER job {job_id} (key={job_key}) for shift {shift_id}, event {event_id}, status={status}")
     
     return {
         "processed_count": len(shifts),
