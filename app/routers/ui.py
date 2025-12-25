@@ -3074,7 +3074,7 @@ async def scheduler_page() -> HTMLResponse:
     
     // Cleanup past logs
     async function cleanupPastLogs() {
-      if (!confirm('Delete old completed logs (older than 30 days)?\n\nThis will remove sent/failed/skipped jobs that are no longer needed.')) {
+      if (!confirm('Delete old completed logs (older than 30 days)?\nThis will remove sent/failed/skipped jobs that are no longer needed.')) {
         return;
       }
       
