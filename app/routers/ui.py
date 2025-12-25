@@ -2800,6 +2800,20 @@ async def scheduler_page() -> HTMLResponse:
     """Scheduler UI - View and manage scheduled message delivery."""
     
     body = """
+    <style>
+      th.sortable {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+      }
+
+      .sort-indicator {
+        font-size: 0.8em;
+        margin-left: 4px;
+        color: #6c757d;
+      }
+    </style>
+
     <div class="row mb-3">
       <div class="col">
         <h2>📅 Scheduler - Message Delivery Management</h2>
@@ -2920,12 +2934,12 @@ async def scheduler_page() -> HTMLResponse:
                 <table class="table table-hover align-middle mb-0" id="init-table">
                   <thead class="table-light">
                     <tr>
-                      <th>Event</th>
-                      <th>Producer</th>
-                      <th>Technician</th>
-                      <th>Recipient</th>
-                      <th>Send Time</th>
-                      <th>Status</th>
+                      <th class="sortable" data-sort-key="event">Event <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="producer">Producer <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="technician">Technician <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="recipient">Recipient <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="send_at">Send Time <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="status">Status <span class="sort-indicator"></span></th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -2968,12 +2982,12 @@ async def scheduler_page() -> HTMLResponse:
                 <table class="table table-hover align-middle mb-0" id="tech-table">
                   <thead class="table-light">
                     <tr>
-                      <th>Event</th>
-                      <th>Producer</th>
-                      <th>Technician</th>
-                      <th>Recipient</th>
-                      <th>Send Time</th>
-                      <th>Status</th>
+                      <th class="sortable" data-sort-key="event">Event <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="producer">Producer <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="technician">Technician <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="recipient">Recipient <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="send_at">Send Time <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="status">Status <span class="sort-indicator"></span></th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -3016,12 +3030,12 @@ async def scheduler_page() -> HTMLResponse:
                 <table class="table table-hover align-middle mb-0" id="shift-table">
                   <thead class="table-light">
                     <tr>
-                      <th>Event</th>
-                      <th>Employee</th>
-                      <th>Shift Time</th>
-                      <th>Recipient</th>
-                      <th>Send Time</th>
-                      <th>Status</th>
+                      <th class="sortable" data-sort-key="event">Event <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="employee">Employee <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="shift_time">Shift Time <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="recipient">Recipient <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="send_at">Send Time <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="status">Status <span class="sort-indicator"></span></th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -3042,6 +3056,16 @@ async def scheduler_page() -> HTMLResponse:
     const ORG_ID = 1;
     let countdownInterval = null;
     let currentSettings = {};
+    const jobsCache = {
+      INIT: [],
+      TECH_REMINDER: [],
+      SHIFT_REMINDER: []
+    };
+    const sortState = {
+      INIT: { column: 'send_at', direction: 'asc' },
+      TECH_REMINDER: { column: 'send_at', direction: 'asc' },
+      SHIFT_REMINDER: { column: 'send_at', direction: 'asc' }
+    };
     
     // Constants for localization
     const MISSING_RECIPIENT_TEXT = 'חסר'; // Hebrew for Missing
@@ -3254,6 +3278,7 @@ async def scheduler_page() -> HTMLResponse:
         
         // Update count
         countEl.textContent = jobs.length;
+        jobsCache[messageType] = jobs;
         
         // Hide loading
         loadingEl.classList.add('d-none');
@@ -3264,7 +3289,8 @@ async def scheduler_page() -> HTMLResponse:
           emptyEl.classList.remove('d-none');
         } else {
           tableEl.classList.remove('d-none');
-          renderJobsTable(jobs, tbodyEl, messageType);
+          renderSortedTable(messageType);
+          updateSortIndicators(messageType);
         }
       } catch (error) {
         console.error(`Error loading ${messageType} jobs:`, error);
@@ -3272,6 +3298,48 @@ async def scheduler_page() -> HTMLResponse:
         emptyEl.classList.remove('d-none');
         emptyEl.innerHTML = `<div class="alert alert-danger">Error loading jobs: ${error.message}</div>`;
       }
+    }
+
+    function getSortValue(job, column, messageType) {
+      switch (column) {
+        case 'event':
+          return `${job.event_name || ''} ${job.event_date || ''}`.toLowerCase();
+        case 'producer':
+          return (job.producer_name || '').toLowerCase();
+        case 'technician':
+          return (job.technical_name || '').toLowerCase();
+        case 'employee':
+          return (job.recipient_name || '').toLowerCase();
+        case 'recipient':
+          return (job.recipient_name || '').toLowerCase();
+        case 'shift_time':
+          return job.shift_call_time ? new Date(job.shift_call_time).getTime() : 0;
+        case 'send_at':
+          return job.send_at ? new Date(job.send_at).getTime() : 0;
+        case 'status':
+          return (job.status || '').toLowerCase();
+        default:
+          return '';
+      }
+    }
+
+    function renderSortedTable(messageType) {
+      const tbodyId = messageType === 'INIT' ? 'init-tbody' :
+                      messageType === 'TECH_REMINDER' ? 'tech-tbody' : 'shift-tbody';
+      const tbody = document.getElementById(tbodyId);
+      const jobs = jobsCache[messageType] || [];
+      const { column, direction } = sortState[messageType];
+      
+      const sorted = [...jobs].sort((a, b) => {
+        const aVal = getSortValue(a, column, messageType);
+        const bVal = getSortValue(b, column, messageType);
+        
+        if (aVal === bVal) return 0;
+        const comparison = aVal > bVal ? 1 : -1;
+        return direction === 'asc' ? comparison : -comparison;
+      });
+      
+      renderJobsTable(sorted, tbody, messageType);
     }
     
     // Render jobs into a table
@@ -3322,6 +3390,53 @@ async def scheduler_page() -> HTMLResponse:
       
       // Store jobs data for countdown updates
       tbody.dataset.jobs = JSON.stringify(jobs);
+    }
+
+    function updateSortIndicators(messageType) {
+      const tableId = messageType === 'INIT' ? 'init-table' :
+                      messageType === 'TECH_REMINDER' ? 'tech-table' : 'shift-table';
+      const table = document.getElementById(tableId);
+      const { column, direction } = sortState[messageType];
+      table.querySelectorAll('th[data-sort-key]').forEach(th => {
+        const indicator = th.querySelector('.sort-indicator');
+        if (!indicator) return;
+        
+        if (th.dataset.sortKey === column) {
+          indicator.textContent = direction === 'asc' ? '▲' : '▼';
+          indicator.classList.remove('text-muted');
+        } else {
+          indicator.textContent = '';
+        }
+      });
+    }
+
+    function setupSortHandlers() {
+      const tableConfig = {
+        INIT: document.querySelectorAll('#init-table th[data-sort-key]'),
+        TECH_REMINDER: document.querySelectorAll('#tech-table th[data-sort-key]'),
+        SHIFT_REMINDER: document.querySelectorAll('#shift-table th[data-sort-key]')
+      };
+      
+      Object.entries(tableConfig).forEach(([messageType, headers]) => {
+        headers.forEach((th) => {
+          th.addEventListener('click', () => {
+            const column = th.dataset.sortKey;
+            const current = sortState[messageType];
+            
+            if (current.column === column) {
+              current.direction = current.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+              current.column = column;
+              current.direction = 'asc';
+            }
+            
+            renderSortedTable(messageType);
+            updateSortIndicators(messageType);
+          });
+        });
+        
+        updateSortIndicators(messageType);
+      });
     }
     
     // Format event summary
@@ -3759,6 +3874,7 @@ async def scheduler_page() -> HTMLResponse:
         
         console.log('Loading all jobs...');
         loadAllJobs();
+        setupSortHandlers();
         
         // Start countdown updates
         console.log('Starting countdown interval...');
