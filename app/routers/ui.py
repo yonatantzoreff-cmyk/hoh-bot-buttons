@@ -86,7 +86,7 @@ def _render_page(title: str, body: str) -> str:
         <main class="container py-4">
           $body
         </main>
-        <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-3gJwYpJPgH+U5Q5J5r3bJfFqvF8S2RkG8h6fWK3knlc=" crossorigin="anonymous"></script>
+        <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
         <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
         <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
         <script src="https://cdn.datatables.net/colreorder/1.6.3/js/dataTables.colReorder.min.js"></script>
@@ -3163,7 +3163,7 @@ async def scheduler_page() -> HTMLResponse:
         
         if (jobs.length === 0) {
           // Show empty state
-          emptyEl.innerHTML = '<p class="text-muted">אין אירועים עתידיים. לחץ "Fetch Future Events" כדי לסנכרן.</p>';
+          emptyEl.innerHTML = '<p class="text-muted">אין אירועים עתידיים. לחץ &quot;Fetch Future Events&quot; כדי לסנכרן.</p>';
           emptyEl.classList.remove('d-none');
         } else {
           tableEl.classList.remove('d-none');
