@@ -1884,11 +1884,11 @@
                                                     <th draggable="true" data-col="day" style="width: 80px;">Day</th>
                                                     <th class="sortable" draggable="true" data-col="show_time" onclick="sortTable(this, 'show_time')">Show Time</th>
                                                     <th class="sortable" draggable="true" data-col="load_in_time" onclick="sortTable(this, 'load_in_time')">Load In</th>
-                                                    <th draggable="true" data-col="status">Status</th>
-                                                    <th draggable="true" data-col="delivery">Delivery</th>
-                                                    <th draggable="true" data-col="producer">Producer</th>
-                                                    <th draggable="true" data-col="technical">Technical</th>
-                                                    <th draggable="true" data-col="notes">Notes</th>
+                                                    <th class="sortable" draggable="true" data-col="status" onclick="sortTable(this, 'status')">Status</th>
+                                                    <th class="sortable" draggable="true" data-col="delivery" onclick="sortTable(this, 'delivery')">Delivery</th>
+                                                    <th class="sortable" draggable="true" data-col="producer" onclick="sortTable(this, 'producer')">Producer</th>
+                                                    <th class="sortable" draggable="true" data-col="technical" onclick="sortTable(this, 'technical')">Technical</th>
+                                                    <th class="sortable" draggable="true" data-col="notes" onclick="sortTable(this, 'notes')">Notes</th>
                                                     <th draggable="true" data-col="actions">Actions</th>
                                                 </tr>
                                             </thead>
@@ -3046,7 +3046,7 @@
         function sortTable(th, field) {
             const table = th.closest('table');
             const tbody = table.querySelector('tbody');
-            const rows = Array.from(tbody.querySelectorAll('tr'));
+            const rows = Array.from(tbody.querySelectorAll('tr.event-row'));  // Only get event rows, not detail rows
 
             // Determine sort direction (toggle between asc/desc)
             let direction = 'asc';
@@ -3059,15 +3059,45 @@
                 h.classList.remove('sorted-asc', 'sorted-desc');
             });
 
+            // Get column index from the header
+            const headers = Array.from(table.querySelectorAll('thead th'));
+            const colIndex = headers.indexOf(th);
+
             // Sort rows
             rows.sort((a, b) => {
-                let aVal = a.querySelector(`input[onchange*="${field}"]`)?.value || '';
-                let bVal = b.querySelector(`input[onchange*="${field}"]`)?.value || '';
+                // Get the cells at this column index
+                const aCell = a.querySelectorAll('td')[colIndex];
+                const bCell = b.querySelectorAll('td')[colIndex];
+                
+                let aVal = '';
+                let bVal = '';
+                
+                // Try to get value from input field first
+                const aInput = aCell?.querySelector('input');
+                const bInput = bCell?.querySelector('input');
+                
+                if (aInput) {
+                    aVal = aInput.value || '';
+                } else {
+                    // Get text content from the cell
+                    aVal = aCell ? aCell.textContent.trim() : '';
+                }
+                
+                if (bInput) {
+                    bVal = bInput.value || '';
+                } else {
+                    // Get text content from the cell
+                    bVal = bCell ? bCell.textContent.trim() : '';
+                }
 
                 // Handle date/time fields - convert to timestamps for proper sorting
                 if (field === 'event_date' || field === 'show_time' || field === 'load_in_time') {
                     aVal = aVal ? new Date(aVal).getTime() : 0;
                     bVal = bVal ? new Date(bVal).getTime() : 0;
+                } else {
+                    // Convert to lowercase for case-insensitive text comparison
+                    if (typeof aVal === 'string') aVal = aVal.toLowerCase();
+                    if (typeof bVal === 'string') bVal = bVal.toLowerCase();
                 }
 
                 if (direction === 'asc') {
@@ -3077,8 +3107,16 @@
                 }
             });
 
-            // Re-append sorted rows to DOM
-            rows.forEach(row => tbody.appendChild(row));
+            // Re-append sorted rows to DOM (need to also move their detail rows)
+            rows.forEach(row => {
+                tbody.appendChild(row);
+                // Find and move the associated details row if it exists
+                const eventId = row.dataset.eventId;
+                const detailsRow = tbody.querySelector(`tr.event-details[data-event-id="${eventId}"]`);
+                if (detailsRow) {
+                    tbody.appendChild(detailsRow);
+                }
+            });
 
             // Update sort indicator on clicked column
             th.classList.add(direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
