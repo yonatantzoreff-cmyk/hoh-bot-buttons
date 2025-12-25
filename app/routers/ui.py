@@ -2975,7 +2975,7 @@ async def scheduler_page() -> HTMLResponse:
       } catch (error) {
         console.error('Error loading settings:', error);
         // Show user-friendly error
-        alert(`⚠️ Warning: Could not load scheduler settings.\n${error.message}\n\nSome features may not work correctly.`);
+        alert(`Warning: Could not load scheduler settings.\n${error.message}\n\nSome features may not work correctly.`);
       }
     }
     
