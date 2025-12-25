@@ -199,3 +199,146 @@ On startup the app now checks for the `staging_events` table and will try to
 apply the migration if it's missing. If the table still doesn't exist, the
 process will fail fast with a clear error so you know to run the command above
 against the correct database (the logs include the DB host/name).
+
+## Scheduler Diagnostics
+
+The scheduler diagnostics endpoint helps troubleshoot why scheduled messages may not be visible in the UI/API. It performs comprehensive checks on database connection, schema, data visibility, org scoping, endpoint queries, fetch logic, and timezone configuration.
+
+### Running Diagnostics
+
+**Via API (recommended):**
+```bash
+curl -H "Authorization: Bearer <SCHEDULER_RUN_TOKEN>" \
+     "https://<your-host>/internal/diagnostics/scheduler?org_id=1"
+```
+
+**Via CLI (local development):**
+```bash
+python -m app.diagnostics.scheduler --org-id 1
+```
+
+### Authentication
+
+The diagnostics endpoint is protected by the same Bearer token as the scheduler run endpoint. Set the `SCHEDULER_RUN_TOKEN` environment variable:
+
+```bash
+export SCHEDULER_RUN_TOKEN="your-secret-token"
+```
+
+The endpoint will:
+- Return **401** if the token is invalid or missing
+- Return **500** if the token is not configured
+
+### Response Structure
+
+The endpoint returns a JSON report with three main sections:
+
+```json
+{
+  "summary": {
+    "suspected_root_cause": "All scheduled jobs are in the past (show_past=false filters them out)",
+    "confidence": 85,
+    "key_evidence": [
+      "5 jobs exist but 0 are future",
+      "Status distribution: {'sent': 3, 'scheduled': 2}",
+      "Future events available for fetch: 0"
+    ],
+    "checks_summary": {
+      "total": 7,
+      "passed": 4,
+      "warnings": 3,
+      "failed": 0
+    }
+  },
+  "checks": [
+    {
+      "name": "DB_FINGERPRINT",
+      "status": "pass",
+      "details": { ... },
+      "why_it_matters": "Confirms which database the application is connected to",
+      "likely_root_cause": null,
+      "next_actions": ["Compare with DBeaver connection settings"]
+    },
+    ...
+  ],
+  "recommendations": [
+    {
+      "priority": "P1",
+      "title": "Create events with future dates",
+      "description": "All events are in the past. Create events with event_date >= today.",
+      "commands": ["Check event_date values", "Create new events or update existing ones"]
+    },
+    ...
+  ]
+}
+```
+
+### Diagnostic Checks
+
+The diagnostics run the following checks:
+
+1. **DB_FINGERPRINT** — Verifies database connection and reports:
+   - Database name, schema, server address/port
+   - PostgreSQL version
+   - Current timestamp and timezone
+
+2. **SCHEMA_CHECK** — Verifies table existence and structure:
+   - scheduled_messages, scheduler_settings, events, employee_shifts
+   - Column definitions, data types, constraints
+   - Primary keys and enum values
+
+3. **SCHEDULED_MESSAGES_DATA** — Inspects data visibility:
+   - Total row counts (future vs past)
+   - Distribution by message_type and status
+   - Sample of last 10 rows
+   - Detection of orphaned rows (missing event_id/shift_id)
+
+4. **ORG_SCOPING_CHECK** — Verifies org_id filtering:
+   - Distribution of org_id values in scheduled_messages
+   - Distribution of org_id values in events
+   - Potential mismatches that would hide data
+
+5. **ENDPOINT_SIMULATION** — Simulates API queries:
+   - Reproduces `/api/scheduler/jobs` with different filter combinations
+   - Shows how many rows would be returned
+   - Explains why rows were excluded
+
+6. **FETCH_DIAGNOSTICS** — Explains why fetch button doesn't import:
+   - Counts future events found by fetch query
+   - Shows sample events with date fields
+   - Detects timezone issues in date filtering
+
+7. **TIMEZONE_CHECK** — Verifies timezone configuration:
+   - Database timezone setting
+   - Comparison of DB time vs app time
+   - Sample send_at timestamps in different timezones
+
+### Common Issues Detected
+
+- **Empty scheduled_messages table** → Fetch button hasn't been clicked
+- **All jobs in the past** → show_past=false filter hides them
+- **No future events** → All events have past dates
+- **Org ID mismatch** → Jobs exist for different org_id than UI requests
+- **Database mismatch** → App connected to different DB than DBeaver
+- **Missing tables** → Migrations not run
+- **Timezone confusion** → UTC/local time mixing
+
+### Troubleshooting Tips
+
+1. **If you see 0 scheduled messages:**
+   - Click "Fetch future events" button in UI
+   - Check that events with future dates exist
+
+2. **If fetch finds 0 future events:**
+   - Verify events table has rows with `event_date >= today` (Israel time)
+   - Check timezone configuration matches Asia/Jerusalem
+
+3. **If scheduled messages exist but don't show in UI:**
+   - Try `show_past=true` filter
+   - Check org_id parameter matches your data
+   - Compare DB fingerprint with DBeaver connection
+
+4. **If all tests pass but UI still has issues:**
+   - Check browser console for JavaScript errors
+   - Verify API endpoint is being called correctly
+   - Look at network tab to see actual API responses

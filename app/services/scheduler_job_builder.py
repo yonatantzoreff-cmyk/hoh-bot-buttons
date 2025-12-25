@@ -32,9 +32,9 @@ logger = logging.getLogger(__name__)
 MIN_PHONE_DIGITS = 10  # Minimum number of digits required for a valid phone number
 
 
-def _generate_job_id(org_id: int, entity_type: str, entity_id: int, message_type: str) -> str:
+def _generate_job_key(org_id: int, entity_type: str, entity_id: int, message_type: str) -> str:
     """
-    Generate a deterministic job_id for scheduled messages.
+    Generate a deterministic job_key for scheduled messages.
     
     Format: org_{org_id}_{entity_type}_{entity_id}_{message_type}_{uuid}
     
@@ -45,7 +45,7 @@ def _generate_job_id(org_id: int, entity_type: str, entity_id: int, message_type
         message_type: "INIT", "TECH_REMINDER", or "SHIFT_REMINDER"
     
     Returns:
-        A unique job_id string
+        A unique job_key string used for idempotency
     """
     unique_suffix = str(uuid.uuid4())[:8]
     return f"org_{org_id}_{entity_type}_{entity_id}_{message_type}_{unique_suffix}"
@@ -138,8 +138,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
         # Compute send_at for INIT
         init_days_before = settings.get("init_days_before", 28)
         init_send_time = settings.get("init_send_time") or "10:00"
-        if isinstance(init_send_time, datetime):
-            init_send_time = init_send_time.strftime("%H:%M")
+        # parse_time helper now handles datetime.time, datetime, and string formats
         
         init_send_at = compute_send_at(
             base_date=event_date,
@@ -184,7 +183,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                 result["init_status"] = "already_sent_or_failed"
         else:
             # Create new job
-            job_id = _generate_job_id(org_id, "event", event_id, "INIT")
+            job_key = _generate_job_key(org_id, "event", event_id, "INIT")
             
             # Set status based on phone validation
             if not phone_valid:
@@ -194,8 +193,8 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                 status = "scheduled"
                 last_error = None
             
-            scheduled_repo.create_scheduled_message(
-                job_id=job_id,
+            job_id = scheduled_repo.create_scheduled_message(
+                job_key=job_key,
                 org_id=org_id,
                 message_type="INIT",
                 send_at=init_send_at,
@@ -209,7 +208,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
             
             result["init_job_id"] = job_id
             result["init_status"] = "blocked" if status == "blocked" else "created"
-            logger.info(f"Created INIT job {job_id} for event {event_id}, status={status}")
+            logger.info(f"Created INIT job {job_id} (key={job_key}) for event {event_id}, status={status}")
     else:
         result["init_status"] = "disabled"
     
@@ -220,8 +219,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
         # Compute send_at for TECH_REMINDER
         tech_days_before = settings.get("tech_days_before", 2)
         tech_send_time = settings.get("tech_send_time") or "12:00"
-        if isinstance(tech_send_time, datetime):
-            tech_send_time = tech_send_time.strftime("%H:%M")
+        # parse_time helper now handles datetime.time, datetime, and string formats
         
         tech_send_at = compute_send_at(
             base_date=event_date,
@@ -266,7 +264,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                 result["tech_status"] = "already_sent_or_failed"
         else:
             # Create new job
-            job_id = _generate_job_id(org_id, "event", event_id, "TECH_REMINDER")
+            job_key = _generate_job_key(org_id, "event", event_id, "TECH_REMINDER")
             
             # Set status based on phone validation
             if not phone_valid:
@@ -276,8 +274,8 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                 status = "scheduled"
                 last_error = None
             
-            scheduled_repo.create_scheduled_message(
-                job_id=job_id,
+            job_id = scheduled_repo.create_scheduled_message(
+                job_key=job_key,
                 org_id=org_id,
                 message_type="TECH_REMINDER",
                 send_at=tech_send_at,
@@ -291,7 +289,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
             
             result["tech_job_id"] = job_id
             result["tech_status"] = "blocked" if status == "blocked" else "created"
-            logger.info(f"Created TECH_REMINDER job {job_id} for event {event_id}, status={status}")
+            logger.info(f"Created TECH_REMINDER job {job_id} (key={job_key}) for event {event_id}, status={status}")
     else:
         result["tech_status"] = "disabled"
     
@@ -338,8 +336,7 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
     
     shift_days_before = settings.get("shift_days_before", 1)
     shift_send_time = settings.get("shift_send_time") or "12:00"
-    if isinstance(shift_send_time, datetime):
-        shift_send_time = shift_send_time.strftime("%H:%M")
+    # parse_time helper now handles datetime.time, datetime, and string formats
     
     for shift in shifts:
         shift_id = shift.get("shift_id")
@@ -404,7 +401,12 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
                 logger.info(f"Updated SHIFT_REMINDER job {existing_job['job_id']} for shift {shift_id}")
         else:
             # Create new job
-            job_id = _generate_job_id(org_id, "shift", shift_id, "SHIFT_REMINDER")
+            job_key = _generate_job_key(org_id, "shift", shift_id, "SHIFT_REMINDER")
+            
+            # Validate that we have event_id (should always be present from function argument)
+            if event_id is None:
+                logger.error(f"Cannot create SHIFT_REMINDER for shift {shift_id}: event_id is None")
+                continue
             
             # Set status based on phone validation
             if not phone_valid:
@@ -414,11 +416,12 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
                 status = "scheduled"
                 last_error = None
             
-            scheduled_repo.create_scheduled_message(
-                job_id=job_id,
+            job_id = scheduled_repo.create_scheduled_message(
+                job_key=job_key,
                 org_id=org_id,
                 message_type="SHIFT_REMINDER",
                 send_at=send_at,
+                event_id=event_id,  # Always set event_id for SHIFT_REMINDER
                 shift_id=shift_id,
                 is_enabled=True
             )
@@ -430,7 +433,7 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
             else:
                 created += 1
             
-            logger.info(f"Created SHIFT_REMINDER job {job_id} for shift {shift_id}, status={status}")
+            logger.info(f"Created SHIFT_REMINDER job {job_id} (key={job_key}) for shift {shift_id}, event {event_id}, status={status}")
     
     return {
         "processed_count": len(shifts),

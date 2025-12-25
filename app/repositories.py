@@ -2436,7 +2436,7 @@ class ScheduledMessageRepository:
 
     def create_scheduled_message(
         self,
-        job_id: str,
+        job_key: str,
         org_id: int,
         message_type: str,
         send_at: datetime,
@@ -2444,25 +2444,43 @@ class ScheduledMessageRepository:
         shift_id: Optional[int] = None,
         is_enabled: bool = True,
         max_attempts: int = 3,
-    ) -> str:
-        """Create a new scheduled message and return its job_id."""
+    ) -> int:
+        """
+        Create or update a scheduled message and return its job_id.
+        
+        Uses job_key for idempotency - if a message with the same (org_id, job_key)
+        exists, it will be updated instead of creating a duplicate.
+        
+        Note: ON CONFLICT only updates jobs in 'scheduled' status to avoid
+        accidentally resending jobs that are already 'sent' or 'failed'.
+        """
         query = text("""
             INSERT INTO scheduled_messages (
-                job_id, org_id, message_type, event_id, shift_id,
+                job_key, org_id, message_type, event_id, shift_id,
                 send_at, status, is_enabled, attempt_count, max_attempts,
                 created_at, updated_at
             )
             VALUES (
-                :job_id, :org_id, :message_type, :event_id, :shift_id,
+                :job_key, :org_id, :message_type, :event_id, :shift_id,
                 :send_at, 'scheduled', :is_enabled, 0, :max_attempts,
                 :now, :now
             )
+            ON CONFLICT (org_id, job_key) 
+            DO UPDATE SET
+                send_at = EXCLUDED.send_at,
+                message_type = EXCLUDED.message_type,
+                event_id = EXCLUDED.event_id,
+                shift_id = EXCLUDED.shift_id,
+                is_enabled = EXCLUDED.is_enabled,
+                max_attempts = EXCLUDED.max_attempts,
+                updated_at = EXCLUDED.updated_at
+            WHERE scheduled_messages.status = 'scheduled'
             RETURNING job_id
         """)
 
         with get_session() as session:
             result = session.execute(query, {
-                "job_id": job_id,
+                "job_key": job_key,
                 "org_id": org_id,
                 "message_type": message_type,
                 "event_id": event_id,
@@ -2472,10 +2490,12 @@ class ScheduledMessageRepository:
                 "max_attempts": max_attempts,
                 "now": now_utc(),
             })
-            return result.scalar_one()
+            job_id = result.scalar_one()
+            session.commit()
+            return job_id
 
-    def get_scheduled_message(self, job_id: str) -> Optional[dict]:
-        """Get a scheduled message by job_id."""
+    def get_scheduled_message(self, job_id: int) -> Optional[dict]:
+        """Get a scheduled message by job_id (numeric)."""
         query = text("""
             SELECT *
             FROM scheduled_messages
@@ -2571,7 +2591,7 @@ class ScheduledMessageRepository:
             row = result.mappings().first()
             return dict(row) if row else None
 
-    def update_send_at(self, job_id: str, send_at: datetime) -> None:
+    def update_send_at(self, job_id: int, send_at: datetime) -> None:
         """Update the send_at time for a scheduled message."""
         query = text("""
             UPDATE scheduled_messages
@@ -2590,7 +2610,7 @@ class ScheduledMessageRepository:
 
     def update_status(
         self,
-        job_id: str,
+        job_id: int,
         status: str,
         last_error: Optional[str] = None,
         sent_at: Optional[datetime] = None,
@@ -2627,7 +2647,7 @@ class ScheduledMessageRepository:
             session.execute(query, params)
             session.commit()
 
-    def increment_attempt(self, job_id: str) -> None:
+    def increment_attempt(self, job_id: int) -> None:
         """Increment the attempt count for a scheduled message."""
         query = text("""
             UPDATE scheduled_messages
@@ -2640,7 +2660,7 @@ class ScheduledMessageRepository:
             session.execute(query, {"job_id": job_id, "now": now_utc()})
             session.commit()
 
-    def delete_scheduled_message(self, job_id: str) -> None:
+    def delete_scheduled_message(self, job_id: int) -> None:
         """Delete a scheduled message."""
         query = text("""
             DELETE FROM scheduled_messages
@@ -2672,7 +2692,7 @@ class ScheduledMessageRepository:
         with get_session() as session:
             session.execute(query, {"org_id": org_id, "shift_id": shift_id})
 
-    def set_enabled(self, job_id: str, is_enabled: bool) -> None:
+    def set_enabled(self, job_id: int, is_enabled: bool) -> None:
         """Enable or disable a scheduled message."""
         query = text("""
             UPDATE scheduled_messages

@@ -3,11 +3,12 @@
 import logging
 from typing import Annotated, Optional
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from fastapi.responses import JSONResponse
 
 from app.services.scheduler import SchedulerService
 from app.utils.env import get_scheduler_token, is_scheduler_token_configured
+from app.diagnostics.scheduler import run_scheduler_diagnostics
 
 logger = logging.getLogger(__name__)
 
@@ -74,3 +75,48 @@ async def run_scheduler(
     result = await scheduler.run_once(org_id=org_id)
     
     return JSONResponse(result)
+
+
+@router.get("/diagnostics/scheduler")
+async def get_scheduler_diagnostics(
+    _verified: bool = Depends(verify_scheduler_token),
+    org_id: Optional[int] = Query(None, description="Organization ID to focus diagnostics on")
+):
+    """
+    Run comprehensive scheduler diagnostics to troubleshoot visibility issues.
+    
+    This endpoint performs a series of checks to diagnose why scheduled messages
+    may not be visible in the UI/API:
+    - Database connection and fingerprint
+    - Schema existence and structure
+    - Data visibility (row counts, filtering)
+    - Organization scoping
+    - Endpoint query simulation
+    - Fetch logic diagnostics
+    - Timezone configuration
+    
+    Args:
+        org_id: Optional organization ID to focus on for scoping checks
+    
+    Returns:
+        JSON with structured diagnostic report including:
+        - summary: Suspected root cause, confidence, key evidence
+        - checks: Detailed results of each diagnostic check
+        - recommendations: Prioritized list of fixes
+    
+    Authentication:
+        Requires Bearer token via SCHEDULER_RUN_TOKEN environment variable
+        
+    Example:
+        curl -H "Authorization: Bearer <token>" \\
+             "https://<host>/internal/diagnostics/scheduler?org_id=1"
+    """
+    try:
+        report = run_scheduler_diagnostics(org_id=org_id)
+        return JSONResponse(content=report)
+    except Exception as e:
+        logger.error(f"Scheduler diagnostics failed: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Diagnostics execution failed: {str(e)}"
+        )

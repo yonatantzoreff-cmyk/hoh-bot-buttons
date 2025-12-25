@@ -140,7 +140,7 @@ async def list_scheduler_jobs(
 
 @router.post("/api/scheduler/jobs/{job_id}/enable")
 async def toggle_job_enabled(
-    job_id: str,
+    job_id: int,
     enabled: bool = Query(..., description="Enable or disable the job"),
     org_id: int = Query(1, description="Organization ID"),
 ) -> dict:
@@ -167,7 +167,7 @@ async def toggle_job_enabled(
 
 @router.post("/api/scheduler/jobs/{job_id}/send-now")
 async def send_job_now(
-    job_id: str,
+    job_id: int,
     org_id: int = Query(1, description="Organization ID"),
 ) -> SendNowResponse:
     """Send a scheduled message immediately."""
@@ -264,6 +264,8 @@ class FetchResponse(BaseModel):
     jobs_created: int
     jobs_updated: int
     jobs_blocked: int
+    errors_count: int = 0
+    errors: list[str] = []
 
 
 @router.post("/api/scheduler/fetch")
@@ -277,7 +279,7 @@ async def fetch_future_events(
     1. Queries all future events (event_date >= today in Israel time)
     2. For each event, creates/updates INIT and TECH_REMINDER jobs
     3. For each event, creates/updates SHIFT_REMINDER jobs for all shifts
-    4. Returns counts of operations performed
+    4. Returns counts of operations performed and any errors encountered
     
     This operation is idempotent - running it multiple times won't create duplicates.
     """
@@ -292,11 +294,18 @@ async def fetch_future_events(
         jobs_updated = 0
         jobs_blocked = 0
         shifts_scanned = 0
+        errors = []
         
         logger.info(f"Fetching scheduler jobs for {events_scanned} future events (org_id={org_id})")
         
         for event in future_events:
             event_id = event["event_id"]
+            event_name = event.get("name", f"event_{event_id}")
+            
+            # Track counts for this event
+            event_created = 0
+            event_updated = 0
+            event_blocked = 0
             
             try:
                 # Build/update event-based jobs (INIT + TECH_REMINDER)
@@ -305,35 +314,64 @@ async def fetch_future_events(
                 # Count jobs created/updated/blocked for this event
                 if event_result.get("init_status") == "created":
                     jobs_created += 1
+                    event_created += 1
                 elif event_result.get("init_status") == "updated":
                     jobs_updated += 1
+                    event_updated += 1
                 elif event_result.get("init_status") == "blocked":
                     jobs_blocked += 1
+                    event_blocked += 1
                 
                 if event_result.get("tech_status") == "created":
                     jobs_created += 1
+                    event_created += 1
                 elif event_result.get("tech_status") == "updated":
                     jobs_updated += 1
+                    event_updated += 1
                 elif event_result.get("tech_status") == "blocked":
                     jobs_blocked += 1
+                    event_blocked += 1
                 
                 # Build/update shift-based jobs (SHIFT_REMINDER)
                 shifts_result = build_or_update_jobs_for_shifts(org_id, event_id)
                 
                 if not shifts_result.get("disabled"):
                     shifts_scanned += shifts_result.get("processed_count", 0)
-                    jobs_created += shifts_result.get("created", 0)
-                    jobs_updated += shifts_result.get("updated", 0)
-                    jobs_blocked += shifts_result.get("blocked", 0)
+                    shift_created = shifts_result.get("created", 0)
+                    shift_updated = shifts_result.get("updated", 0)
+                    shift_blocked = shifts_result.get("blocked", 0)
+                    
+                    jobs_created += shift_created
+                    jobs_updated += shift_updated
+                    jobs_blocked += shift_blocked
+                    
+                    event_created += shift_created
+                    event_updated += shift_updated
+                    event_blocked += shift_blocked
+                
+                # Log detailed results for this event
+                logger.info(
+                    f"scheduler fetch: event_id={event_id}, name='{event_name}', "
+                    f"created={event_created}, updated={event_updated}, blocked={event_blocked}"
+                )
                     
             except Exception as e:
+                error_msg = f"Event {event_id} ('{event_name}'): {type(e).__name__}: {str(e)}"
                 logger.error(f"Error building jobs for event {event_id}: {e}", exc_info=True)
-                # Continue processing other events
+                errors.append(error_msg)
+        
+        # Limit errors to first 10 in response
+        errors_to_return = errors[:10]
+        errors_count = len(errors)
         
         message = f"Synced {events_scanned} events and {shifts_scanned} shifts"
+        if errors_count > 0:
+            message += f" ({errors_count} error(s))"
+        
         logger.info(
             f"Fetch complete: events_scanned={events_scanned}, shifts_scanned={shifts_scanned}, "
-            f"jobs_created={jobs_created}, jobs_updated={jobs_updated}, jobs_blocked={jobs_blocked}"
+            f"jobs_created={jobs_created}, jobs_updated={jobs_updated}, jobs_blocked={jobs_blocked}, "
+            f"errors_count={errors_count}"
         )
         
         return FetchResponse(
@@ -344,6 +382,8 @@ async def fetch_future_events(
             jobs_created=jobs_created,
             jobs_updated=jobs_updated,
             jobs_blocked=jobs_blocked,
+            errors_count=errors_count,
+            errors=errors_to_return,
         )
         
     except Exception as e:
