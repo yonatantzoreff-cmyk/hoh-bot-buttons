@@ -79,13 +79,14 @@ def _render_page(title: str, body: str) -> str:
               <a class="btn btn-outline-success btn-sm ms-2" href="/ui/calendar-import">Import Calendar</a>
               <a class="btn btn-outline-warning btn-sm ms-2" href="/ui/shift-organizer">Shift Organizer</a>
               <a class="btn btn-outline-info btn-sm ms-2" href="/ui/availability">Availability</a>
+              <a class="btn btn-outline-primary btn-sm ms-2" href="/ui/scheduler">Scheduler</a>
             </div>
           </div>
         </nav>
         <main class="container py-4">
           $body
         </main>
-        <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-3gJwYpJPgH+U5Q5J5r3bJfFqvF8S2RkG8h6fWK3knlc=" crossorigin="anonymous"></script>
+        <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
         <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
         <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
         <script src="https://cdn.datatables.net/colreorder/1.6.3/js/dataTables.colReorder.min.js"></script>
@@ -2792,3 +2793,991 @@ async def availability_page(
     """
     
     return HTMLResponse(_render_page("Employee Availability", body))
+
+
+@router.get("/ui/scheduler", response_class=HTMLResponse)
+async def scheduler_page() -> HTMLResponse:
+    """Scheduler UI - View and manage scheduled message delivery."""
+    
+    body = """
+    <div class="row mb-3">
+      <div class="col">
+        <h2>📅 Scheduler - Message Delivery Management</h2>
+        <p class="text-muted">View and manage automated message delivery for events and shifts</p>
+      </div>
+    </div>
+    
+    <!-- Heartbeat Status Row -->
+    <div class="row mb-3">
+      <div class="col">
+        <span id="heartbeatBadge" class="badge bg-secondary">
+          <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+          Loading cron status...
+        </span>
+        <small class="text-muted ms-2" id="heartbeatDetails"></small>
+      </div>
+    </div>
+    
+    <!-- Action Buttons Row -->
+    <div class="row mb-3">
+      <div class="col">
+        <button id="fetchBtn" class="btn btn-success me-2">
+          🔄 Fetch Future Events
+        </button>
+        <button id="cleanupBtn" class="btn btn-outline-danger me-2">
+          🗑️ Cleanup Old Logs
+        </button>
+        <button id="deleteAllBtn" class="btn btn-danger me-2">
+          🗑️ Delete All Jobs
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" id="testJsBtn">
+          🔍 Test JavaScript
+        </button>
+      </div>
+    </div>
+    
+    <!-- Global Settings Card -->
+    <div class="card mb-4 shadow-sm">
+      <div class="card-header bg-primary text-white">
+        <h5 class="mb-0">⚙️ Scheduler Settings</h5>
+      </div>
+      <div class="card-body">
+        <div class="row align-items-center">
+          <div class="col-md-3">
+            <div class="form-check form-switch">
+              <input class="form-check-input" type="checkbox" id="globalToggle" checked>
+              <label class="form-check-label fw-bold" for="globalToggle">
+                Global Scheduler Enabled
+              </label>
+            </div>
+            <small class="text-muted">Master switch for all scheduled messages</small>
+          </div>
+          <div class="col-md-9">
+            <div class="d-flex gap-3 justify-content-end">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="initToggle" checked>
+                <label class="form-check-label" for="initToggle">INIT Messages</label>
+              </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="techToggle" checked>
+                <label class="form-check-label" for="techToggle">TECH Reminders</label>
+              </div>
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="shiftToggle" checked>
+                <label class="form-check-label" for="shiftToggle">SHIFT Reminders</label>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Tabs Navigation -->
+    <ul class="nav nav-tabs mb-3" id="schedulerTabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <button class="nav-link active" id="init-tab" data-bs-toggle="tab" data-bs-target="#init-panel" type="button" role="tab">
+          INIT Messages <span class="badge bg-secondary" id="init-count">0</span>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="tech-tab" data-bs-toggle="tab" data-bs-target="#tech-panel" type="button" role="tab">
+          TECH Reminders <span class="badge bg-secondary" id="tech-count">0</span>
+        </button>
+      </li>
+      <li class="nav-item" role="presentation">
+        <button class="nav-link" id="shift-tab" data-bs-toggle="tab" data-bs-target="#shift-panel" type="button" role="tab">
+          SHIFT Reminders <span class="badge bg-secondary" id="shift-count">0</span>
+        </button>
+      </li>
+    </ul>
+    
+    <!-- Tab Content -->
+    <div class="tab-content" id="schedulerTabContent">
+      <!-- INIT Tab -->
+      <div class="tab-pane fade show active" id="init-panel" role="tabpanel">
+        <div class="card shadow-sm">
+          <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">INIT Messages</h6>
+            <div class="d-flex gap-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="hideSentInit" onchange="loadJobs('INIT')">
+                <label class="form-check-label" for="hideSentInit">Hide sent</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="showPastInit" onchange="loadJobs('INIT')">
+                <label class="form-check-label" for="showPastInit">Show past</label>
+              </div>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div id="init-loading" class="text-center py-4">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+            <div id="init-table-container" class="d-none">
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="init-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Event</th>
+                      <th>Producer</th>
+                      <th>Technician</th>
+                      <th>Recipient</th>
+                      <th>Send Time</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="init-tbody">
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div id="init-empty" class="text-center text-muted py-4 d-none">
+              No INIT messages scheduled.
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- TECH Tab -->
+      <div class="tab-pane fade" id="tech-panel" role="tabpanel">
+        <div class="card shadow-sm">
+          <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">TECH Reminders</h6>
+            <div class="d-flex gap-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="hideSentTech" onchange="loadJobs('TECH_REMINDER')">
+                <label class="form-check-label" for="hideSentTech">Hide sent</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="showPastTech" onchange="loadJobs('TECH_REMINDER')">
+                <label class="form-check-label" for="showPastTech">Show past</label>
+              </div>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div id="tech-loading" class="text-center py-4">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+            <div id="tech-table-container" class="d-none">
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="tech-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Event</th>
+                      <th>Producer</th>
+                      <th>Technician</th>
+                      <th>Recipient</th>
+                      <th>Send Time</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tech-tbody">
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div id="tech-empty" class="text-center text-muted py-4 d-none">
+              No TECH reminders scheduled.
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- SHIFT Tab -->
+      <div class="tab-pane fade" id="shift-panel" role="tabpanel">
+        <div class="card shadow-sm">
+          <div class="card-header bg-light d-flex justify-content-between align-items-center">
+            <h6 class="mb-0">SHIFT Reminders</h6>
+            <div class="d-flex gap-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="hideSentShift" onchange="loadJobs('SHIFT_REMINDER')">
+                <label class="form-check-label" for="hideSentShift">Hide sent</label>
+              </div>
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" id="showPastShift" onchange="loadJobs('SHIFT_REMINDER')">
+                <label class="form-check-label" for="showPastShift">Show past</label>
+              </div>
+            </div>
+          </div>
+          <div class="card-body p-0">
+            <div id="shift-loading" class="text-center py-4">
+              <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Loading...</span>
+              </div>
+            </div>
+            <div id="shift-table-container" class="d-none">
+              <div class="table-responsive">
+                <table class="table table-hover align-middle mb-0" id="shift-table">
+                  <thead class="table-light">
+                    <tr>
+                      <th>Event</th>
+                      <th>Employee</th>
+                      <th>Shift Time</th>
+                      <th>Recipient</th>
+                      <th>Send Time</th>
+                      <th>Status</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="shift-tbody">
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div id="shift-empty" class="text-center text-muted py-4 d-none">
+              No SHIFT reminders scheduled.
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <script>
+    const ORG_ID = 1;
+    let countdownInterval = null;
+    let currentSettings = {};
+    
+    // Constants for localization
+    const MISSING_RECIPIENT_TEXT = 'חסר'; // Hebrew for Missing
+    
+    // Load settings on page load
+    async function loadSettings() {
+      try {
+        console.log('Fetching scheduler settings...');
+        const response = await fetch(`/api/scheduler/settings?org_id=${ORG_ID}`);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to load settings: ${response.status} ${response.statusText}`);
+        }
+        
+        const settings = await response.json();
+        console.log('Settings loaded:', settings);
+        currentSettings = settings;
+        
+        // Update toggles
+        document.getElementById('globalToggle').checked = settings.enabled_global;
+        document.getElementById('initToggle').checked = settings.enabled_init;
+        document.getElementById('techToggle').checked = settings.enabled_tech;
+        document.getElementById('shiftToggle').checked = settings.enabled_shift;
+        
+      } catch (error) {
+        console.error('Error loading settings:', error);
+        // Show user-friendly error
+        alert(`Warning: Could not load scheduler settings.\n${error.message}\n\nSome features may not work correctly.`);
+      }
+    }
+    
+    // Update settings on toggle change
+    async function updateSettings(field, value) {
+      try {
+        const response = await fetch(`/api/scheduler/settings?org_id=${ORG_ID}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ [field]: value })
+        });
+        
+        if (response.ok) {
+          currentSettings = await response.json();
+          // Reload jobs to reflect new settings
+          loadAllJobs();
+        } else {
+          alert('Failed to update settings');
+          // Revert toggle
+          loadSettings();
+        }
+      } catch (error) {
+        console.error('Error updating settings:', error);
+        alert('Error updating settings');
+        loadSettings();
+      }
+    }
+    
+    // Attach toggle listeners
+    document.getElementById('globalToggle').addEventListener('change', (e) => {
+      updateSettings('enabled_global', e.target.checked);
+    });
+    document.getElementById('initToggle').addEventListener('change', (e) => {
+      updateSettings('enabled_init', e.target.checked);
+    });
+    document.getElementById('techToggle').addEventListener('change', (e) => {
+      updateSettings('enabled_tech', e.target.checked);
+    });
+    document.getElementById('shiftToggle').addEventListener('change', (e) => {
+      updateSettings('enabled_shift', e.target.checked);
+    });
+    
+    // Fetch future events and sync to scheduler
+    async function fetchFutureEvents() {
+      console.log('fetchFutureEvents called');
+      
+      const fetchBtn = document.getElementById('fetchBtn');
+      if (!fetchBtn) {
+        console.error('Fetch button not found!');
+        alert('Error: Fetch button not found in DOM');
+        return;
+      }
+      
+      fetchBtn.disabled = true;
+      fetchBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Fetching...';
+      
+      try {
+        console.log('Starting fetch request to /api/scheduler/fetch');
+        const response = await fetch(`/api/scheduler/fetch?org_id=${ORG_ID}`, {
+          method: 'POST'
+        });
+        
+        console.log('Fetch response status:', response.status);
+        
+        if (!response.ok) {
+          const errorText = await response.text();
+          console.error('Fetch failed with status:', response.status, 'Error:', errorText);
+          throw new Error(`Fetch failed with status ${response.status}: ${errorText}`);
+        }
+        
+        const result = await response.json();
+        console.log('Fetch result:', result);
+        
+        // Show success message with counts
+        alert(
+          `Fetch completed!\n\n` +
+          `Events scanned: ${result.events_scanned}\n` +
+          `Shifts scanned: ${result.shifts_scanned}\n` +
+          `Jobs created: ${result.jobs_created}\n` +
+          `Jobs updated: ${result.jobs_updated}\n` +
+          `Jobs blocked: ${result.jobs_blocked}`
+        );
+        
+        // Reload all jobs to show the new/updated ones
+        console.log('Reloading all jobs...');
+        loadAllJobs();
+        
+      } catch (error) {
+        console.error('Error fetching future events:', error);
+        alert(`Error fetching future events:\n${error.message}\n\nCheck browser console for details.`);
+      } finally {
+        fetchBtn.disabled = false;
+        fetchBtn.innerHTML = '🔄 Fetch Future Events';
+      }
+    }
+    
+    // Cleanup past logs
+    async function cleanupPastLogs() {
+      if (!confirm(
+      "Delete old completed logs (older than 30 days)?" +
+      "This will remove sent/failed/skipped jobs that are no longer needed."
+        )) {
+      return;
+        }
+
+      const cleanupBtn = document.getElementById('cleanupBtn');
+      cleanupBtn.disabled = true;
+      cleanupBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Cleaning...';
+      
+      try {
+        const response = await fetch(`/api/scheduler/past-logs?org_id=${ORG_ID}&days=30`, {
+          method: 'DELETE'
+        });
+        
+        if (!response.ok) {
+          throw new Error('Cleanup failed');
+        }
+        
+        const result = await response.json();
+        
+        // Show success message
+        alert(`Cleanup completed!\n\nDeleted ${result.deleted_count} old log entries.`);
+        
+        // Reload all jobs to reflect the cleanup
+        loadAllJobs();
+        
+      } catch (error) {
+        console.error('Error cleaning up past logs:', error);
+        alert('Error cleaning up past logs. See console for details.');
+      } finally {
+        cleanupBtn.disabled = false;
+        cleanupBtn.innerHTML = '🗑️ Cleanup Old Logs';
+      }
+    }
+    
+    // Load jobs for a specific message type
+    async function loadJobs(messageType) {
+      console.log(`Loading jobs for ${messageType}...`);
+      
+      const prefix = messageType === 'INIT' ? 'init' : 
+                     messageType === 'TECH_REMINDER' ? 'tech' : 'shift';
+      
+      const loadingEl = document.getElementById(`${prefix}-loading`);
+      const tableEl = document.getElementById(`${prefix}-table-container`);
+      const emptyEl = document.getElementById(`${prefix}-empty`);
+      const tbodyEl = document.getElementById(`${prefix}-tbody`);
+      const countEl = document.getElementById(`${prefix}-count`);
+      
+      // Map message type to checkbox suffix
+      const checkboxSuffixMap = {
+        'INIT': 'Init',
+        'TECH_REMINDER': 'Tech',
+        'SHIFT_REMINDER': 'Shift'
+      };
+      const checkboxSuffix = checkboxSuffixMap[messageType] || 'Init';
+      
+      // Get hide_sent checkbox value
+      const hideSentCheckbox = document.getElementById(`hideSent${checkboxSuffix}`);
+      const hideSent = hideSentCheckbox ? hideSentCheckbox.checked : false;
+      
+      // Get show_past checkbox value
+      const showPastCheckbox = document.getElementById(`showPast${checkboxSuffix}`);
+      const showPast = showPastCheckbox ? showPastCheckbox.checked : false;
+      
+      // Show loading
+      loadingEl.classList.remove('d-none');
+      tableEl.classList.add('d-none');
+      emptyEl.classList.add('d-none');
+      
+      try {
+        const url = `/api/scheduler/jobs?org_id=${ORG_ID}&message_type=${messageType}&hide_sent=${hideSent}&show_past=${showPast ? '1' : '0'}`;
+        console.log(`Fetching jobs from: ${url}`);
+        
+        const response = await fetch(url);
+        
+        if (!response.ok) {
+          throw new Error(`Failed to load jobs: ${response.status} ${response.statusText}`);
+        }
+        
+        const jobs = await response.json();
+        console.log(`Loaded ${jobs.length} ${messageType} jobs`);
+        
+        // Update count
+        countEl.textContent = jobs.length;
+        
+        // Hide loading
+        loadingEl.classList.add('d-none');
+        
+        if (jobs.length === 0) {
+          // Show empty state
+          emptyEl.innerHTML = '<p class="text-muted">אין אירועים עתידיים. לחץ &quot;Fetch Future Events&quot; כדי לסנכרן.</p>';
+          emptyEl.classList.remove('d-none');
+        } else {
+          tableEl.classList.remove('d-none');
+          renderJobsTable(jobs, tbodyEl, messageType);
+        }
+      } catch (error) {
+        console.error(`Error loading ${messageType} jobs:`, error);
+        loadingEl.classList.add('d-none');
+        emptyEl.classList.remove('d-none');
+        emptyEl.innerHTML = `<div class="alert alert-danger">Error loading jobs: ${error.message}</div>`;
+      }
+    }
+    
+    // Render jobs into a table
+    function renderJobsTable(jobs, tbody, messageType) {
+      tbody.innerHTML = jobs.map(job => {
+        const eventSummary = formatEventSummary(job);
+        const producerInfo = formatContactInfo(job.producer_name, job.producer_phone);
+        const technicianInfo = formatContactInfo(job.technical_name, job.technical_phone);
+        const recipientInfo = formatRecipientInfo(job);
+        const sendTimeInfo = formatSendTime(job);
+        const statusBadge = formatStatusBadge(job);
+        const actions = formatActions(job);
+        
+        // Different columns for SHIFT_REMINDER
+        if (messageType === 'SHIFT_REMINDER') {
+          const employeeInfo = formatContactInfo(job.recipient_name, job.recipient_phone);
+          const shiftTime = job.shift_call_time ? 
+            new Date(job.shift_call_time).toLocaleString('en-GB', {
+              dateStyle: 'short',
+              timeStyle: 'short'
+            }) : '—';
+          
+          return `
+            <tr data-job-id="${job.job_id}" class="${job.recipient_missing ? 'table-warning' : ''}">
+              <td>${eventSummary}</td>
+              <td>${employeeInfo}</td>
+              <td>${shiftTime}</td>
+              <td>${recipientInfo}</td>
+              <td>${sendTimeInfo}</td>
+              <td>${statusBadge}</td>
+              <td class="text-nowrap">${actions}</td>
+            </tr>
+          `;
+        } else {
+          return `
+            <tr data-job-id="${job.job_id}" class="${job.recipient_missing ? 'table-warning' : ''}">
+              <td>${eventSummary}</td>
+              <td>${producerInfo}</td>
+              <td>${technicianInfo}</td>
+              <td>${recipientInfo}</td>
+              <td>${sendTimeInfo}</td>
+              <td>${statusBadge}</td>
+              <td class="text-nowrap">${actions}</td>
+            </tr>
+          `;
+        }
+      }).join('');
+      
+      // Store jobs data for countdown updates
+      tbody.dataset.jobs = JSON.stringify(jobs);
+    }
+    
+    // Format event summary
+    function formatEventSummary(job) {
+      const name = job.event_name || 'Unknown Event';
+      const date = job.event_date ? new Date(job.event_date).toLocaleDateString('en-GB') : '';
+      const showTime = job.show_time ? new Date(job.show_time).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}) : '';
+      const loadIn = job.load_in_time ? new Date(job.load_in_time).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}) : '';
+      
+      let summary = `<strong>${name}</strong>`;
+      if (date) summary += `<br><small class="text-muted">${date}`;
+      if (showTime) summary += ` | Show: ${showTime}`;
+      if (loadIn) summary += ` | Load-in: ${loadIn}`;
+      if (date) summary += '</small>';
+      
+      return summary;
+    }
+    
+    // Format contact info
+    function formatContactInfo(name, phone) {
+      if (!name && !phone) return '<span class="text-muted">—</span>';
+      if (name && phone) return `${name}<br><small class="text-muted">${phone}</small>`;
+      return name || phone || '<span class="text-muted">—</span>';
+    }
+    
+    // Format recipient info with missing indicator
+    function formatRecipientInfo(job) {
+      if (job.recipient_missing) {
+        return `<span class="badge bg-danger">${MISSING_RECIPIENT_TEXT}</span>`;
+      }
+      return formatContactInfo(job.recipient_name, job.recipient_phone);
+    }
+    
+    // Format send time with countdown
+    // Format send time with edit button
+    function formatSendTime(job) {
+      const sendAt = new Date(job.send_at);
+      const sendAtStr = sendAt.toLocaleString('en-GB', {
+        dateStyle: 'short',
+        timeStyle: 'medium'  // Changed from 'short' to 'medium' to include seconds
+      });
+      
+      // Format for datetime-local input (YYYY-MM-DDTHH:MM)
+      const year = sendAt.getFullYear();
+      const month = String(sendAt.getMonth() + 1).padStart(2, '0');
+      const day = String(sendAt.getDate()).padStart(2, '0');
+      const hours = String(sendAt.getHours()).padStart(2, '0');
+      const minutes = String(sendAt.getMinutes()).padStart(2, '0');
+      const sendAtLocal = `${year}-${month}-${day}T${hours}:${minutes}`;
+      
+      return `
+        <div>
+          <div id="send-at-display-${job.job_id}">${sendAtStr}</div>
+          <small class="countdown text-muted" data-send-at="${job.send_at}"></small>
+          <div id="send-at-edit-${job.job_id}" class="d-none mt-1">
+            <input type="datetime-local" class="form-control form-control-sm" id="send-at-input-${job.job_id}" value="${sendAtLocal}">
+            <div class="mt-1">
+              <button class="btn btn-sm btn-success" onclick="saveSendAt('${job.job_id}')">💾</button>
+              <button class="btn btn-sm btn-secondary" onclick="cancelEditSendAt('${job.job_id}')">✖️</button>
+            </div>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary mt-1" onclick="editSendAt('${job.job_id}')">📅 Edit</button>
+        </div>
+      `;
+    }
+    
+    // Format status badge with edit button
+    function formatStatusBadge(job) {
+      const status = job.status || 'unknown';
+      const statusMap = {
+        'scheduled': 'primary',
+        'sent': 'success',
+        'failed': 'danger',
+        'blocked': 'warning',
+        'retrying': 'info',
+        'skipped': 'secondary',
+        'paused': 'secondary'
+      };
+      const badgeClass = statusMap[status] || 'secondary';
+      
+      let badge = `
+        <div id="status-display-${job.job_id}">
+          <span class="badge bg-${badgeClass}">${status}</span>
+        </div>
+      `;
+      
+      // Show error if present
+      if (job.last_error) {
+        badge += `<small class="text-danger" title="${job.last_error}">⚠️ ${job.last_error.substring(0, 30)}...</small><br>`;
+      }
+      
+      // Show attempt count if retrying
+      if (job.attempt_count > 0) {
+        badge += `<small class="text-muted">Attempt ${job.attempt_count}/${job.max_attempts}</small><br>`;
+      }
+      
+      // Edit status UI (hidden by default)
+      badge += `
+        <div id="status-edit-${job.job_id}" class="d-none mt-1">
+          <select class="form-select form-select-sm" id="status-input-${job.job_id}">
+            <option value="scheduled" ${status === 'scheduled' ? 'selected' : ''}>Scheduled</option>
+            <option value="paused" ${status === 'paused' ? 'selected' : ''}>Paused</option>
+            <option value="blocked" ${status === 'blocked' ? 'selected' : ''}>Blocked</option>
+            <option value="sent" ${status === 'sent' ? 'selected' : ''}>Sent</option>
+            <option value="failed" ${status === 'failed' ? 'selected' : ''}>Failed</option>
+            <option value="skipped" ${status === 'skipped' ? 'selected' : ''}>Skipped</option>
+          </select>
+          <div class="mt-1">
+            <button class="btn btn-sm btn-success" onclick="saveStatus('${job.job_id}')">💾</button>
+            <button class="btn btn-sm btn-secondary" onclick="cancelEditStatus('${job.job_id}')">✖️</button>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary mt-1" onclick="editStatus('${job.job_id}')">✏️ Edit</button>
+      `;
+      
+      return badge;
+    }
+    
+    // Format action buttons
+    function formatActions(job) {
+      const jobId = job.job_id;
+      const isEnabled = job.is_enabled;
+      const canSend = !['sent', 'failed'].includes(job.status);
+      
+      let actions = [];
+      
+      // Enable/Disable toggle
+      actions.push(`
+        <button class="btn btn-sm btn-outline-${isEnabled ? 'secondary' : 'success'}" 
+                onclick="toggleEnabled('${jobId}', ${!isEnabled})"
+                title="${isEnabled ? 'Disable' : 'Enable'} this job">
+          ${isEnabled ? '⏸️' : '▶️'}
+        </button>
+      `);
+      
+      // Send Now button
+      if (canSend) {
+        actions.push(`
+          <button class="btn btn-sm btn-outline-primary" 
+                  onclick="sendNow('${jobId}')"
+                  title="Send this message immediately">
+            📤 Send Now
+          </button>
+        `);
+      }
+      
+      return actions.join(' ');
+    }
+    
+    // Toggle job enabled status
+    async function toggleEnabled(jobId, enabled) {
+      try {
+        const response = await fetch(
+          `/api/scheduler/jobs/${jobId}/enable?org_id=${ORG_ID}&enabled=${enabled}`,
+          { method: 'POST' }
+        );
+        
+        if (response.ok) {
+          // Reload jobs
+          loadAllJobs();
+        } else {
+          alert('Failed to update job status');
+        }
+      } catch (error) {
+        console.error('Error toggling job:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+    
+    // Send job now
+    async function sendNow(jobId) {
+      if (!confirm('Send this message now?')) return;
+      
+      try {
+        const response = await fetch(
+          `/api/scheduler/jobs/${jobId}/send-now?org_id=${ORG_ID}`,
+          { method: 'POST' }
+        );
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          alert('Message sent successfully!');
+          loadAllJobs();
+        } else {
+          // Show detailed error based on reason_code
+          const errorMessages = {
+            'MISSING_RECIPIENT': '❌ Cannot send: Recipient phone number missing',
+            'SEND_FAILED': '❌ Send failed: Twilio error',
+            'ALREADY_SENT': '❌ Message was already sent',
+            'EXCEPTION': '❌ An error occurred'
+          };
+          const errorMsg = errorMessages[result.reason_code] || result.message;
+          alert(errorMsg);
+          console.error('Send now failed:', result);
+        }
+      } catch (error) {
+        console.error('Error sending job:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+    
+    // Edit send date/time functions
+    function editSendAt(jobId) {
+      document.getElementById(`send-at-display-${jobId}`).classList.add('d-none');
+      document.getElementById(`send-at-edit-${jobId}`).classList.remove('d-none');
+    }
+    
+    function cancelEditSendAt(jobId) {
+      document.getElementById(`send-at-display-${jobId}`).classList.remove('d-none');
+      document.getElementById(`send-at-edit-${jobId}`).classList.add('d-none');
+    }
+    
+    async function saveSendAt(jobId) {
+      const input = document.getElementById(`send-at-input-${jobId}`);
+      const newSendAt = new Date(input.value).toISOString();
+      
+      try {
+        const response = await fetch(
+          `/api/scheduler/jobs/${jobId}?org_id=${ORG_ID}`,
+          {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ send_at: newSendAt })
+          }
+        );
+        
+        if (response.ok) {
+          alert('✅ Send time updated successfully!');
+          loadAllJobs();
+        } else {
+          const error = await response.json();
+          alert('❌ Failed to update: ' + error.detail);
+        }
+      } catch (error) {
+        console.error('Error updating send time:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+    
+    // Edit status functions
+    function editStatus(jobId) {
+      document.getElementById(`status-display-${jobId}`).classList.add('d-none');
+      document.getElementById(`status-edit-${jobId}`).classList.remove('d-none');
+    }
+    
+    function cancelEditStatus(jobId) {
+      document.getElementById(`status-display-${jobId}`).classList.remove('d-none');
+      document.getElementById(`status-edit-${jobId}`).classList.add('d-none');
+    }
+    
+    async function saveStatus(jobId) {
+      const select = document.getElementById(`status-input-${jobId}`);
+      const newStatus = select.value;
+      
+      try {
+        const response = await fetch(
+          `/api/scheduler/jobs/${jobId}?org_id=${ORG_ID}`,
+          {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ status: newStatus })
+          }
+        );
+        
+        if (response.ok) {
+          alert('✅ Status updated successfully!');
+          loadAllJobs();
+        } else {
+          const error = await response.json();
+          alert('❌ Failed to update: ' + error.detail);
+        }
+      } catch (error) {
+        console.error('Error updating status:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+    
+    // Load heartbeat status
+    async function loadHeartbeat() {
+      try {
+        const response = await fetch(`/api/scheduler/heartbeat?org_id=${ORG_ID}`);
+        const heartbeat = await response.json();
+        
+        const badge = document.getElementById('heartbeatBadge');
+        const details = document.getElementById('heartbeatDetails');
+        
+        const statusClass = heartbeat.connectivity_status === 'green' ? 'bg-success' : 
+                            heartbeat.connectivity_status === 'yellow' ? 'bg-warning' : 'bg-danger';
+        
+        badge.className = `badge ${statusClass}`;
+        
+        if (heartbeat.status === 'no_data') {
+          badge.textContent = '⚠️ Scheduler has not run yet';
+          details.textContent = '';
+        } else {
+          const icon = heartbeat.connectivity_status === 'green' ? '✅' : 
+                       heartbeat.connectivity_status === 'yellow' ? '⚠️' : '❌';
+          badge.textContent = `${icon} Cron: ${heartbeat.connectivity_message}`;
+          
+          const lastRun = heartbeat.minutes_since_last_run;
+          const stats = `Last run: ${lastRun} min ago | Sent: ${heartbeat.last_run_sent} | Failed: ${heartbeat.last_run_failed}`;
+          details.textContent = stats;
+        }
+      } catch (error) {
+        console.error('Error loading heartbeat:', error);
+        const badge = document.getElementById('heartbeatBadge');
+        badge.className = 'badge bg-danger';
+        badge.textContent = '❌ Error loading heartbeat';
+      }
+    }
+    
+    // Delete all jobs
+    async function deleteAllJobs() {
+      if (!confirm('⚠️ WARNING: Delete ALL scheduled jobs? This cannot be undone!')) {
+        return;
+      }
+      
+      if (!confirm('Are you REALLY sure? This will delete everything!')) {
+        return;
+      }
+      
+      const deleteBtn = document.getElementById('deleteAllBtn');
+      deleteBtn.disabled = true;
+      deleteBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Deleting...';
+      
+      try {
+        const response = await fetch(
+          `/api/scheduler/jobs?org_id=${ORG_ID}&confirm=true`,
+          { method: 'DELETE' }
+        );
+        
+        if (!response.ok) {
+          throw new Error('Delete failed');
+        }
+        
+        const result = await response.json();
+        alert(`✅ Deleted ${result.deleted_count} jobs successfully!`);
+        loadAllJobs();
+      } catch (error) {
+        console.error('Error deleting jobs:', error);
+        alert('❌ Error deleting jobs: ' + error.message);
+      } finally {
+        deleteBtn.disabled = false;
+        deleteBtn.innerHTML = '🗑️ Delete All Jobs';
+      }
+    }
+    
+    // Update countdowns every second
+    function updateCountdowns() {
+      document.querySelectorAll('.countdown').forEach(el => {
+        const sendAt = new Date(el.dataset.sendAt);
+        const now = new Date();
+        const diff = sendAt - now;
+        
+        if (diff < 0) {
+          el.textContent = 'Overdue';
+          el.classList.add('text-danger');
+          el.classList.remove('text-muted');
+        } else {
+          el.textContent = formatTimeDiff(diff);
+          el.classList.add('text-muted');
+          el.classList.remove('text-danger');
+        }
+      });
+    }
+    
+    // Format time difference
+    function formatTimeDiff(ms) {
+      const seconds = Math.floor(ms / 1000);
+      const minutes = Math.floor(seconds / 60);
+      const hours = Math.floor(minutes / 60);
+      const days = Math.floor(hours / 24);
+      
+      if (days > 0) return `in ${days}d ${hours % 24}h`;
+      if (hours > 0) return `in ${hours}h ${minutes % 60}m`;
+      if (minutes > 0) return `in ${minutes}m ${seconds % 60}s`;
+      return `in ${seconds}s`;
+    }
+    
+    // Load all job tabs
+    function loadAllJobs() {
+      loadJobs('INIT');
+      loadJobs('TECH_REMINDER');
+      loadJobs('SHIFT_REMINDER');
+    }
+    
+    // Initial load
+    document.addEventListener('DOMContentLoaded', () => {
+      console.log('Scheduler page loaded - initializing...');
+      
+      try {
+        // Attach event listeners to buttons
+        const fetchBtn = document.getElementById('fetchBtn');
+        const cleanupBtn = document.getElementById('cleanupBtn');
+        const deleteAllBtn = document.getElementById('deleteAllBtn');
+        const testJsBtn = document.getElementById('testJsBtn');
+        
+        if (fetchBtn) {
+          console.log('Fetch button found, attaching click listener');
+          fetchBtn.addEventListener('click', fetchFutureEvents);
+        } else {
+          console.error('Fetch button not found in DOM!');
+        }
+        
+        if (cleanupBtn) {
+          console.log('Cleanup button found, attaching click listener');
+          cleanupBtn.addEventListener('click', cleanupPastLogs);
+        } else {
+          console.error('Cleanup button not found in DOM!');
+        }
+        
+        if (deleteAllBtn) {
+          console.log('Delete all button found, attaching click listener');
+          deleteAllBtn.addEventListener('click', deleteAllJobs);
+        } else {
+          console.error('Delete all button not found in DOM!');
+        }
+        
+        if (testJsBtn) {
+          console.log('Test button found, attaching click listener');
+          testJsBtn.addEventListener('click', () => {
+            alert('JavaScript is working! Check console for logs.');
+            console.log('Test button clicked');
+          });
+        }
+        
+        console.log('Loading scheduler settings...');
+        loadSettings();
+        
+        console.log('Loading heartbeat status...');
+        loadHeartbeat();
+        // Refresh heartbeat every 30 seconds
+        setInterval(loadHeartbeat, 30000);
+        
+        console.log('Loading all jobs...');
+        loadAllJobs();
+        
+        // Start countdown updates
+        console.log('Starting countdown interval...');
+        countdownInterval = setInterval(updateCountdowns, 1000);
+        
+        console.log('Scheduler page initialization complete');
+      } catch (error) {
+        console.error('Error during page initialization:', error);
+        alert(`Error initializing scheduler page:\n${error.message}\n\nCheck browser console for details.`);
+      }
+    });
+    
+    // Cleanup on page unload
+    window.addEventListener('beforeunload', () => {
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+      }
+    });
+    </script>
+    """
+    
+    return HTMLResponse(_render_page("Scheduler", body))

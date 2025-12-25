@@ -46,20 +46,22 @@ def test_shift_creation_nullable_employee_id():
         mock_context.__enter__.return_value.commit = Mock()
         mock_session.return_value = mock_context
         
-        # Create shift with None employee_id (PHASE 2)
-        shift_id = repo.create_shift(
-            org_id=1,
-            event_id=1,
-            employee_id=None,  # Nullable - empty shift
-            call_time=now_utc(),
-            shift_role=None,
-            notes="Test shift",
-        )
-        
-        assert shift_id == 123
-        # Verify that execute was called with None for employee_id
-        call_args = mock_exec.call_args
-        assert call_args[0][1]['employee_id'] is None
+        # Mock the scheduler job builder to avoid additional DB calls
+        with patch('app.services.scheduler_job_builder.build_or_update_jobs_for_shifts'):
+            # Create shift with None employee_id (PHASE 2)
+            shift_id = repo.create_shift(
+                org_id=1,
+                event_id=1,
+                employee_id=None,  # Nullable - empty shift
+                call_time=now_utc(),
+                shift_role=None,
+                notes="Test shift",
+            )
+            
+            assert shift_id == 123
+            # Verify that execute was called with None for employee_id
+            call_args = mock_exec.call_args
+            assert call_args[0][1]['employee_id'] is None
 
 
 def test_shift_creation_with_employee_id():
@@ -76,19 +78,21 @@ def test_shift_creation_with_employee_id():
         mock_context.__enter__.return_value.commit = Mock()
         mock_session.return_value = mock_context
         
-        # Create shift with valid employee_id
-        shift_id = repo.create_shift(
-            org_id=1,
-            event_id=1,
-            employee_id=42,  # Valid employee
-            call_time=now_utc(),
-            shift_role="Setup",
-            notes="Setup shift",
-        )
-        
-        assert shift_id == 124
-        call_args = mock_exec.call_args
-        assert call_args[0][1]['employee_id'] == 42
+        # Mock the scheduler job builder to avoid additional DB calls
+        with patch('app.services.scheduler_job_builder.build_or_update_jobs_for_shifts'):
+            # Create shift with valid employee_id
+            shift_id = repo.create_shift(
+                org_id=1,
+                event_id=1,
+                employee_id=42,  # Valid employee
+                call_time=now_utc(),
+                shift_role="Setup",
+                notes="Setup shift",
+            )
+            
+            assert shift_id == 124
+            call_args = mock_exec.call_args
+            assert call_args[0][1]['employee_id'] == 42
 
 
 # PHASE 1: Test follow-up flow

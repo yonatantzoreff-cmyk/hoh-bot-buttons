@@ -17,6 +17,7 @@ from app.repositories import (
     ImportJobRepository,
     StagingEventRepository,
 )
+from app.services.scheduler_job_builder import build_or_update_jobs_for_event
 from app.utils.excel_parser import parse_excel_file
 from app.time_utils import parse_local_time_to_utc, now_utc
 
@@ -354,11 +355,13 @@ class CalendarImportService:
         committed_count = 0
         error_count = 0
         errors = []
+        created_event_ids = []
 
         try:
             for staging_event in staging_events:
                 try:
-                    self._commit_single_event(org_id, staging_event, session)
+                    event_id = self._commit_single_event(org_id, staging_event, session)
+                    created_event_ids.append(event_id)
                     committed_count += 1
                 except Exception as e:
                     error_count += 1
@@ -374,6 +377,13 @@ class CalendarImportService:
 
             # Commit transaction
             session.commit()
+            
+            # Build/update scheduled jobs for all created events
+            for event_id in created_event_ids:
+                try:
+                    build_or_update_jobs_for_event(org_id=org_id, event_id=event_id)
+                except Exception as e:
+                    logger.warning(f"Failed to build jobs for imported event {event_id}: {e}")
 
             # Clear all staging data on success
             self.staging_repo.clear_all(org_id)
@@ -395,8 +405,8 @@ class CalendarImportService:
 
     def _commit_single_event(
         self, org_id: int, staging_event: Dict[str, Any], session: Any
-    ) -> None:
-        """Commit a single staging event to the official events table."""
+    ) -> int:
+        """Commit a single staging event to the official events table. Returns event_id."""
         # Get or create contact if phone is provided
         producer_contact_id = None
         if staging_event.get("producer_phone"):
@@ -460,12 +470,13 @@ class CalendarImportService:
                 :notes,
                 :now, :now
             )
+            RETURNING event_id
             """
         )
 
         now = now_utc()
 
-        session.execute(
+        result = session.execute(
             query,
             {
                 "org_id": org_id,
@@ -481,6 +492,9 @@ class CalendarImportService:
                 "now": now,
             },
         )
+        
+        event_id = result.scalar_one()
+        return event_id
 
     def clear_all_staging(self, org_id: int) -> None:
         """Clear all staging events."""

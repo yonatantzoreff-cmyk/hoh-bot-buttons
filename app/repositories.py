@@ -1,6 +1,7 @@
 # repositories.py
 from datetime import datetime, timedelta, timezone
 from typing import Any, Optional
+import logging
 
 import json
 
@@ -12,6 +13,7 @@ from .time_utils import now_utc
 
 
 _NO_UPDATE = object()
+logger = logging.getLogger(__name__)
 
 
 class OrgRepository:
@@ -293,6 +295,51 @@ class EventRepository:
 
         with get_session() as session:
             result = session.execute(query, {"org_id": org_id})
+            return result.mappings().all()
+
+    def list_future_events_for_org(self, org_id: int):
+        """List only future events for an organization (event_date >= today in Israel time)."""
+        from app.time_utils import utc_to_local_datetime, now_utc
+        
+        # Get today in Israel time
+        now = now_utc()
+        israel_now = utc_to_local_datetime(now)
+        today = israel_now.date()
+        
+        query = text(
+            """
+            SELECT
+                e.event_id,
+                e.name,
+                e.event_date,
+                e.show_time,
+                e.load_in_time,
+                e.hall_id,
+                h.name AS hall_name,
+                e.notes,
+                e.status,
+                e.producer_contact_id,
+                prod.name AS producer_name,
+                prod.phone AS producer_phone,
+                e.technical_contact_id,
+                tech.name AS technical_name,
+                tech.phone AS technical_phone,
+                e.next_followup_at,
+                e.created_at
+            FROM events e
+            LEFT JOIN halls h ON e.hall_id = h.hall_id
+            LEFT JOIN contacts prod
+              ON e.org_id = prod.org_id AND e.producer_contact_id = prod.contact_id
+            LEFT JOIN contacts tech
+              ON e.org_id = tech.org_id AND e.technical_contact_id = tech.contact_id
+            WHERE e.org_id = :org_id
+              AND e.event_date >= :today
+            ORDER BY e.event_date ASC, e.event_id ASC
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "today": today})
             return result.mappings().all()
 
     def delete_event(self, org_id: int, event_id: int) -> None:
@@ -1728,6 +1775,14 @@ class EmployeeShiftRepository:
             )
             shift_id = res.scalar_one()
             session.commit()
+            
+            # Build/update scheduled jobs for this shift
+            try:
+                from app.services.scheduler_job_builder import build_or_update_jobs_for_shifts
+                build_or_update_jobs_for_shifts(org_id=org_id, event_id=event_id)
+            except Exception as e:
+                logger.warning(f"Failed to build/update jobs for shift {shift_id}: {e}")
+            
             return shift_id
 
     def list_shifts_for_event(self, org_id: int, event_id: int):
@@ -1870,6 +1925,17 @@ class EmployeeShiftRepository:
         with get_session() as session:
             session.execute(q, params)
             session.commit()
+            
+            # Build/update scheduled jobs for shifts in this event
+            # First get the event_id for this shift
+            shift = self.get_shift_by_id(org_id=org_id, shift_id=shift_id)
+            if shift:
+                event_id = shift.get("event_id")
+                try:
+                    from app.services.scheduler_job_builder import build_or_update_jobs_for_shifts
+                    build_or_update_jobs_for_shifts(org_id=org_id, event_id=event_id)
+                except Exception as e:
+                    logger.warning(f"Failed to build/update jobs for shift {shift_id}: {e}")
 
     def delete_shift(self, org_id: int, shift_id: int):
         """מחיקה מוחלטת של משמרת"""
@@ -2403,3 +2469,521 @@ class ImportJobRepository:
             result = session.execute(query, {"org_id": org_id, "job_type": job_type})
             row = result.mappings().first()
             return dict(row) if row else None
+
+
+class ScheduledMessageRepository:
+    """Repository for scheduled_messages table - manages scheduled message delivery."""
+
+    def create_scheduled_message(
+        self,
+        job_key: str,
+        org_id: int,
+        message_type: str,
+        send_at: datetime,
+        event_id: Optional[int] = None,
+        shift_id: Optional[int] = None,
+        is_enabled: bool = True,
+        max_attempts: int = 3,
+    ) -> int:
+        """
+        Create or update a scheduled message and return its job_id.
+        
+        Uses job_key for idempotency - if a message with the same (org_id, job_key)
+        exists, it will be updated instead of creating a duplicate.
+        
+        Note: ON CONFLICT only updates jobs in 'scheduled' status to avoid
+        accidentally resending jobs that are already 'sent' or 'failed'.
+        """
+        query = text("""
+            INSERT INTO scheduled_messages (
+                job_key, org_id, message_type, event_id, shift_id,
+                send_at, status, is_enabled, attempt_count, max_attempts,
+                created_at, updated_at
+            )
+            VALUES (
+                :job_key, :org_id, :message_type, :event_id, :shift_id,
+                :send_at, 'scheduled', :is_enabled, 0, :max_attempts,
+                :now, :now
+            )
+            ON CONFLICT (org_id, job_key) 
+            DO UPDATE SET
+                send_at = EXCLUDED.send_at,
+                message_type = EXCLUDED.message_type,
+                event_id = EXCLUDED.event_id,
+                shift_id = EXCLUDED.shift_id,
+                is_enabled = EXCLUDED.is_enabled,
+                max_attempts = EXCLUDED.max_attempts,
+                updated_at = EXCLUDED.updated_at
+            WHERE scheduled_messages.status = 'scheduled'
+            RETURNING job_id
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {
+                "job_key": job_key,
+                "org_id": org_id,
+                "message_type": message_type,
+                "event_id": event_id,
+                "shift_id": shift_id,
+                "send_at": send_at,
+                "is_enabled": is_enabled,
+                "max_attempts": max_attempts,
+                "now": now_utc(),
+            })
+            job_id = result.scalar_one()
+            session.commit()
+            return job_id
+
+    def get_scheduled_message(self, job_id: int) -> Optional[dict]:
+        """Get a scheduled message by job_id (numeric)."""
+        query = text("""
+            SELECT *
+            FROM scheduled_messages
+            WHERE job_id = :job_id
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"job_id": job_id})
+            row = result.mappings().first()
+            return dict(row) if row else None
+
+    def list_due_messages(self, now: datetime) -> list[dict]:
+        """List all messages that are due to be sent."""
+        query = text("""
+            SELECT *
+            FROM scheduled_messages
+            WHERE status IN ('scheduled', 'retrying')
+              AND is_enabled = TRUE
+              AND send_at <= :now
+              AND attempt_count < max_attempts
+            ORDER BY send_at ASC
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"now": now})
+            return [dict(row) for row in result.mappings().all()]
+
+    def list_scheduled_for_event(self, org_id: int, event_id: int) -> list[dict]:
+        """List all scheduled messages for a specific event."""
+        query = text("""
+            SELECT *
+            FROM scheduled_messages
+            WHERE org_id = :org_id
+              AND event_id = :event_id
+            ORDER BY send_at ASC
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "event_id": event_id})
+            return [dict(row) for row in result.mappings().all()]
+
+    def list_scheduled_for_shift(self, org_id: int, shift_id: int) -> list[dict]:
+        """List all scheduled messages for a specific shift."""
+        query = text("""
+            SELECT *
+            FROM scheduled_messages
+            WHERE org_id = :org_id
+              AND shift_id = :shift_id
+            ORDER BY send_at ASC
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "shift_id": shift_id})
+            return [dict(row) for row in result.mappings().all()]
+
+    def find_job_for_event(self, org_id: int, event_id: int, message_type: str) -> Optional[dict]:
+        """Find a scheduled job for a specific event and message type."""
+        query = text("""
+            SELECT *
+            FROM scheduled_messages
+            WHERE org_id = :org_id
+              AND event_id = :event_id
+              AND message_type = :message_type
+            LIMIT 1
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {
+                "org_id": org_id,
+                "event_id": event_id,
+                "message_type": message_type
+            })
+            row = result.mappings().first()
+            return dict(row) if row else None
+
+    def find_job_for_shift(self, org_id: int, shift_id: int, message_type: str) -> Optional[dict]:
+        """Find a scheduled job for a specific shift and message type."""
+        query = text("""
+            SELECT *
+            FROM scheduled_messages
+            WHERE org_id = :org_id
+              AND shift_id = :shift_id
+              AND message_type = :message_type
+            LIMIT 1
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {
+                "org_id": org_id,
+                "shift_id": shift_id,
+                "message_type": message_type
+            })
+            row = result.mappings().first()
+            return dict(row) if row else None
+
+    def update_send_at(self, job_id: int, send_at: datetime) -> None:
+        """Update the send_at time for a scheduled message."""
+        query = text("""
+            UPDATE scheduled_messages
+            SET send_at = :send_at,
+                updated_at = :now
+            WHERE job_id = :job_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {
+                "job_id": job_id,
+                "send_at": send_at,
+                "now": now_utc()
+            })
+            session.commit()
+
+    def update_status(
+        self,
+        job_id: int,
+        status: str,
+        last_error: Optional[str] = None,
+        sent_at: Optional[datetime] = None,
+        last_resolved_to_name: Optional[str] = None,
+        last_resolved_to_phone: Optional[str] = None,
+    ) -> None:
+        """Update the status and metadata of a scheduled message."""
+        sets = ["status = :status", "updated_at = :now"]
+        params = {"job_id": job_id, "status": status, "now": now_utc()}
+
+        if last_error is not None:
+            sets.append("last_error = :last_error")
+            params["last_error"] = last_error
+
+        if sent_at is not None:
+            sets.append("sent_at = :sent_at")
+            params["sent_at"] = sent_at
+
+        if last_resolved_to_name is not None:
+            sets.append("last_resolved_to_name = :last_resolved_to_name")
+            params["last_resolved_to_name"] = last_resolved_to_name
+
+        if last_resolved_to_phone is not None:
+            sets.append("last_resolved_to_phone = :last_resolved_to_phone")
+            params["last_resolved_to_phone"] = last_resolved_to_phone
+
+        query = text(f"""
+            UPDATE scheduled_messages
+            SET {', '.join(sets)}
+            WHERE job_id = :job_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, params)
+            session.commit()
+
+    def increment_attempt(self, job_id: int) -> None:
+        """Increment the attempt count for a scheduled message."""
+        query = text("""
+            UPDATE scheduled_messages
+            SET attempt_count = attempt_count + 1,
+                updated_at = :now
+            WHERE job_id = :job_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {"job_id": job_id, "now": now_utc()})
+            session.commit()
+
+    def delete_scheduled_message(self, job_id: int) -> None:
+        """Delete a scheduled message."""
+        query = text("""
+            DELETE FROM scheduled_messages
+            WHERE job_id = :job_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {"job_id": job_id})
+
+    def delete_by_event(self, org_id: int, event_id: int) -> None:
+        """Delete all scheduled messages for an event."""
+        query = text("""
+            DELETE FROM scheduled_messages
+            WHERE org_id = :org_id
+              AND event_id = :event_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id, "event_id": event_id})
+
+    def delete_by_shift(self, org_id: int, shift_id: int) -> None:
+        """Delete all scheduled messages for a shift."""
+        query = text("""
+            DELETE FROM scheduled_messages
+            WHERE org_id = :org_id
+              AND shift_id = :shift_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id, "shift_id": shift_id})
+
+    def set_enabled(self, job_id: int, is_enabled: bool) -> None:
+        """Enable or disable a scheduled message."""
+        query = text("""
+            UPDATE scheduled_messages
+            SET is_enabled = :is_enabled,
+                updated_at = :now
+            WHERE job_id = :job_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {
+                "job_id": job_id,
+                "is_enabled": is_enabled,
+                "now": now_utc()
+            })
+
+
+class SchedulerSettingsRepository:
+    """Repository for scheduler_settings table - manages per-org scheduler configuration."""
+
+    def get_settings(self, org_id: int) -> Optional[dict]:
+        """Get scheduler settings for an organization."""
+        query = text("""
+            SELECT *
+            FROM scheduler_settings
+            WHERE org_id = :org_id
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id})
+            row = result.mappings().first()
+            return dict(row) if row else None
+
+    def get_or_create_settings(self, org_id: int) -> dict:
+        """Get scheduler settings for an org, creating default settings if none exist."""
+        settings = self.get_settings(org_id)
+        if settings:
+            return settings
+
+        # Create default settings
+        query = text("""
+            INSERT INTO scheduler_settings (
+                org_id, enabled_global, enabled_init, enabled_tech, enabled_shift,
+                init_days_before, init_send_time,
+                tech_days_before, tech_send_time,
+                shift_days_before, shift_send_time,
+                created_at, updated_at
+            )
+            VALUES (
+                :org_id, TRUE, TRUE, FALSE, TRUE,
+                28, '10:00',
+                2, '12:00',
+                1, '12:00',
+                :now, :now
+            )
+            RETURNING *
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id, "now": now_utc()})
+            row = result.mappings().first()
+            return dict(row) if row else {}
+
+    def update_settings(
+        self,
+        org_id: int,
+        *,
+        enabled_global: Optional[bool] = _NO_UPDATE,
+        enabled_init: Optional[bool] = _NO_UPDATE,
+        enabled_tech: Optional[bool] = _NO_UPDATE,
+        enabled_shift: Optional[bool] = _NO_UPDATE,
+        init_days_before: Optional[int] = _NO_UPDATE,
+        init_send_time: Optional[str] = _NO_UPDATE,
+        tech_days_before: Optional[int] = _NO_UPDATE,
+        tech_send_time: Optional[str] = _NO_UPDATE,
+        shift_days_before: Optional[int] = _NO_UPDATE,
+        shift_send_time: Optional[str] = _NO_UPDATE,
+    ) -> None:
+        """Update scheduler settings for an organization."""
+        sets = ["updated_at = :now"]
+        params = {"org_id": org_id, "now": now_utc()}
+
+        if enabled_global is not _NO_UPDATE:
+            sets.append("enabled_global = :enabled_global")
+            params["enabled_global"] = enabled_global
+
+        if enabled_init is not _NO_UPDATE:
+            sets.append("enabled_init = :enabled_init")
+            params["enabled_init"] = enabled_init
+
+        if enabled_tech is not _NO_UPDATE:
+            sets.append("enabled_tech = :enabled_tech")
+            params["enabled_tech"] = enabled_tech
+
+        if enabled_shift is not _NO_UPDATE:
+            sets.append("enabled_shift = :enabled_shift")
+            params["enabled_shift"] = enabled_shift
+
+        if init_days_before is not _NO_UPDATE:
+            sets.append("init_days_before = :init_days_before")
+            params["init_days_before"] = init_days_before
+
+        if init_send_time is not _NO_UPDATE:
+            sets.append("init_send_time = :init_send_time")
+            params["init_send_time"] = init_send_time
+
+        if tech_days_before is not _NO_UPDATE:
+            sets.append("tech_days_before = :tech_days_before")
+            params["tech_days_before"] = tech_days_before
+
+        if tech_send_time is not _NO_UPDATE:
+            sets.append("tech_send_time = :tech_send_time")
+            params["tech_send_time"] = tech_send_time
+
+        if shift_days_before is not _NO_UPDATE:
+            sets.append("shift_days_before = :shift_days_before")
+            params["shift_days_before"] = shift_days_before
+
+        if shift_send_time is not _NO_UPDATE:
+            sets.append("shift_send_time = :shift_send_time")
+            params["shift_send_time"] = shift_send_time
+
+        if len(sets) == 1:  # Only updated_at
+            return
+
+        query = text(f"""
+            UPDATE scheduler_settings
+            SET {', '.join(sets)}
+            WHERE org_id = :org_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, params)
+
+    def delete_settings(self, org_id: int) -> None:
+        """Delete scheduler settings for an organization."""
+        query = text("""
+            DELETE FROM scheduler_settings
+            WHERE org_id = :org_id
+        """)
+
+        with get_session() as session:
+            session.execute(query, {"org_id": org_id})
+
+
+class SchedulerHeartbeatRepository:
+    """Repository for scheduler_heartbeat table - tracks scheduler cron health."""
+
+    def get_heartbeat(self, org_id: int) -> Optional[dict]:
+        """Get scheduler heartbeat for an organization."""
+        query = text("""
+            SELECT *
+            FROM scheduler_heartbeat
+            WHERE org_id = :org_id
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id})
+            row = result.mappings().first()
+            return dict(row) if row else None
+
+    def update_heartbeat(
+        self,
+        org_id: int,
+        status: str = "ok",
+        duration_ms: Optional[int] = None,
+        due_found: int = 0,
+        sent: int = 0,
+        failed: int = 0,
+        skipped: int = 0,
+        blocked: int = 0,
+        postponed: int = 0,
+        error: Optional[str] = None,
+        commit_sha: Optional[str] = None,
+    ) -> None:
+        """
+        Update or create scheduler heartbeat for an organization.
+        
+        Args:
+            org_id: Organization ID
+            status: Run status (ok, error, warning)
+            duration_ms: Run duration in milliseconds
+            due_found: Number of due jobs found
+            sent: Number of messages sent
+            failed: Number of messages failed
+            skipped: Number of messages skipped
+            blocked: Number of messages blocked
+            postponed: Number of messages postponed
+            error: Error message if status is error
+            commit_sha: Git commit SHA (optional)
+        """
+        now = now_utc()
+        
+        # Use UPSERT to create or update
+        query = text("""
+            INSERT INTO scheduler_heartbeat (
+                org_id, last_run_at, last_run_status, last_run_duration_ms,
+                last_run_due_found, last_run_sent, last_run_failed,
+                last_run_skipped, last_run_blocked, last_run_postponed,
+                last_error, last_error_at, last_commit_sha,
+                created_at, updated_at
+            )
+            VALUES (
+                :org_id, :now, :status, :duration_ms,
+                :due_found, :sent, :failed,
+                :skipped, :blocked, :postponed,
+                :error, :error_at, :commit_sha,
+                :now, :now
+            )
+            ON CONFLICT (org_id) DO UPDATE SET
+                last_run_at = :now,
+                last_run_status = :status,
+                last_run_duration_ms = :duration_ms,
+                last_run_due_found = :due_found,
+                last_run_sent = :sent,
+                last_run_failed = :failed,
+                last_run_skipped = :skipped,
+                last_run_blocked = :blocked,
+                last_run_postponed = :postponed,
+                last_error = :error,
+                last_error_at = :error_at,
+                last_commit_sha = :commit_sha,
+                updated_at = :now
+        """)
+
+        params = {
+            "org_id": org_id,
+            "now": now,
+            "status": status,
+            "duration_ms": duration_ms,
+            "due_found": due_found,
+            "sent": sent,
+            "failed": failed,
+            "skipped": skipped,
+            "blocked": blocked,
+            "postponed": postponed,
+            "error": error,
+            "error_at": now if error else None,
+            "commit_sha": commit_sha,
+        }
+
+        with get_session() as session:
+            session.execute(query, params)
+
+    def get_all_heartbeats(self) -> list[dict]:
+        """Get all scheduler heartbeats (for monitoring all orgs)."""
+        query = text("""
+            SELECT *
+            FROM scheduler_heartbeat
+            ORDER BY last_run_at DESC
+        """)
+
+        with get_session() as session:
+            result = session.execute(query)
+            return [dict(row) for row in result.mappings()]
