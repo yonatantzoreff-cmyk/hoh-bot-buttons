@@ -31,6 +31,9 @@ logger = logging.getLogger(__name__)
 # Phone validation constants
 MIN_PHONE_DIGITS = 10  # Minimum number of digits required for a valid phone number
 
+# Error message constants
+ERROR_MSG_MISSING_RECIPIENT_PHONE = "Missing recipient phone"
+
 # Skip reason constants
 SKIP_REASON_MISSING_EVENT_ID = "missing_event_id"
 SKIP_REASON_MISSING_EVENT_DATE = "missing_event_date"
@@ -204,7 +207,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                     scheduled_repo.update_status(
                         init_job["job_id"],
                         status="blocked",
-                        last_error="Missing recipient phone"
+                        last_error=ERROR_MSG_MISSING_RECIPIENT_PHONE
                     )
                     result["init_status"] = "blocked"
                 elif existing_status == "blocked":
@@ -237,7 +240,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
             # Set status based on phone validation
             if not phone_valid:
                 status = "blocked"
-                last_error = "Missing recipient phone"
+                last_error = ERROR_MSG_MISSING_RECIPIENT_PHONE
             else:
                 status = "scheduled"
                 last_error = None
@@ -299,7 +302,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                     scheduled_repo.update_status(
                         tech_job["job_id"],
                         status="blocked",
-                        last_error="Missing recipient phone"
+                        last_error=ERROR_MSG_MISSING_RECIPIENT_PHONE
                     )
                     result["tech_status"] = "blocked"
                 elif existing_status == "blocked":
@@ -332,7 +335,7 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
             # Set status based on phone validation
             if not phone_valid:
                 status = "blocked"
-                last_error = "Missing recipient phone"
+                last_error = ERROR_MSG_MISSING_RECIPIENT_PHONE
             else:
                 status = "scheduled"
                 last_error = None
@@ -465,7 +468,7 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
                     scheduled_repo.update_status(
                         existing_job["job_id"],
                         status="blocked",
-                        last_error="Missing recipient phone"
+                        last_error=ERROR_MSG_MISSING_RECIPIENT_PHONE
                     )
                     blocked += 1
                 else:
@@ -506,7 +509,7 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
             # Set status based on phone validation
             if not phone_valid:
                 status = "blocked"
-                last_error = "Missing recipient phone"
+                last_error = ERROR_MSG_MISSING_RECIPIENT_PHONE
             else:
                 status = "scheduled"
                 last_error = None

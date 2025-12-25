@@ -349,12 +349,12 @@ async def fetch_future_events(
                     
                     # Add to samples if under limit
                     if len(skipped_samples) < MAX_SKIP_SAMPLES:
-                        skipped_samples.append({
-                            "event_id": event_id,
-                            "event_name": event_name,
-                            "message_type": "INIT",
-                            "reason": skip_reason
-                        })
+                        skipped_samples.append(SkippedJobSample(
+                            event_id=event_id,
+                            event_name=event_name,
+                            message_type="INIT",
+                            reason=skip_reason
+                        ))
                 
                 if event_result.get("tech_status") == "created":
                     jobs_created += 1
@@ -373,12 +373,12 @@ async def fetch_future_events(
                     
                     # Add to samples if under limit
                     if len(skipped_samples) < MAX_SKIP_SAMPLES:
-                        skipped_samples.append({
-                            "event_id": event_id,
-                            "event_name": event_name,
-                            "message_type": "TECH_REMINDER",
-                            "reason": skip_reason
-                        })
+                        skipped_samples.append(SkippedJobSample(
+                            event_id=event_id,
+                            event_name=event_name,
+                            message_type="TECH_REMINDER",
+                            reason=skip_reason
+                        ))
                 
                 # Build/update shift-based jobs (SHIFT_REMINDER)
                 shifts_result = build_or_update_jobs_for_shifts(org_id, event_id)
@@ -407,13 +407,13 @@ async def fetch_future_events(
                         
                         # Add samples for shift skips (simplified - we don't have individual shift details here)
                         if len(skipped_samples) < MAX_SKIP_SAMPLES and count > 0:
-                            skipped_samples.append({
-                                "event_id": event_id,
-                                "event_name": event_name,
-                                "message_type": "SHIFT_REMINDER",
-                                "reason": reason,
-                                "count": count
-                            })
+                            skipped_samples.append(SkippedJobSample(
+                                event_id=event_id,
+                                event_name=event_name,
+                                message_type="SHIFT_REMINDER",
+                                reason=reason,
+                                count=count
+                            ))
                 
                 # Log detailed results for this event
                 logger.info(
