@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
