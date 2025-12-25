@@ -275,7 +275,7 @@ def check_schema_existence() -> Dict[str, Any]:
         "details": details,
         "why_it_matters": "Verifies that all required tables exist with correct structure",
         "likely_root_cause": likely_root_cause,
-        "next_actions": ["Run database migrations: db/migrations/009_scheduled_messages.sql"] if issues else ["Schema looks good"]
+        "next_actions": ["Run database migrations: db/migrations/011_scheduled_messages_job_key.sql"] if issues else ["Schema looks good"]
     }
 
 
@@ -794,8 +794,8 @@ def generate_recommendations(checks: List[Dict[str, Any]]) -> List[Dict[str, Any
         recommendations.append({
             "priority": "P0",
             "title": "Run database migrations",
-            "description": "Required tables are missing. Run migration: db/migrations/009_scheduled_messages.sql",
-            "commands": ["psql $DATABASE_URL < db/migrations/009_scheduled_messages.sql"]
+            "description": "Required tables are missing. Run migration: db/migrations/011_scheduled_messages_job_key.sql",
+            "commands": ["psql $DATABASE_URL < db/migrations/011_scheduled_messages_job_key.sql"]
         })
     
     db_check = next((c for c in checks if c["name"] == "DB_FINGERPRINT"), None)

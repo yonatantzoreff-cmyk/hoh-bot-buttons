@@ -2450,6 +2450,9 @@ class ScheduledMessageRepository:
         
         Uses job_key for idempotency - if a message with the same (org_id, job_key)
         exists, it will be updated instead of creating a duplicate.
+        
+        Note: ON CONFLICT only updates jobs in 'scheduled' status to avoid
+        accidentally resending jobs that are already 'sent' or 'failed'.
         """
         query = text("""
             INSERT INTO scheduled_messages (
@@ -2471,6 +2474,7 @@ class ScheduledMessageRepository:
                 is_enabled = EXCLUDED.is_enabled,
                 max_attempts = EXCLUDED.max_attempts,
                 updated_at = EXCLUDED.updated_at
+            WHERE scheduled_messages.status = 'scheduled'
             RETURNING job_id
         """)
 
@@ -2486,7 +2490,9 @@ class ScheduledMessageRepository:
                 "max_attempts": max_attempts,
                 "now": now_utc(),
             })
-            return result.scalar_one()
+            job_id = result.scalar_one()
+            session.commit()
+            return job_id
 
     def get_scheduled_message(self, job_id: int) -> Optional[dict]:
         """Get a scheduled message by job_id (numeric)."""

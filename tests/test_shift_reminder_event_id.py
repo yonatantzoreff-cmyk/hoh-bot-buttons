@@ -1,8 +1,7 @@
 """Tests for SHIFT_REMINDER event_id assignment."""
 
-import pytest
 from datetime import datetime, timedelta
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 from app.services.scheduler_job_builder import build_or_update_jobs_for_shifts
 
