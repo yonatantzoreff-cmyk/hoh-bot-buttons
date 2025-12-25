@@ -41,6 +41,7 @@ SKIP_REASON_MISSING_REQUIRED_TIME_FIELDS = "missing_required_time_fields"
 SKIP_REASON_ALREADY_UP_TO_DATE = "already_up_to_date"
 SKIP_REASON_ALREADY_SENT_OR_FAILED = "already_sent_or_failed"
 SKIP_REASON_DISABLED_BY_SETTINGS = "disabled_by_settings"
+SKIP_REASON_HAS_LOAD_IN_TIME = "has_load_in_time"  # Event has load-in time, INIT not needed
 
 
 def _has_send_at_changed(existing_send_at, new_send_at) -> bool:
@@ -170,8 +171,30 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
     now = now_utc()
     result = {}
     
+    # Check if event has load-in time - if so, skip INIT message entirely
+    # Events with load-in/setup times don't need initial contact messages
+    load_in_time = event.get("load_in_time")
+    should_skip_init_due_to_load_in = load_in_time is not None
+    
     # --- INIT Job ---
-    if settings.get("enabled_global") and settings.get("enabled_init"):
+    if should_skip_init_due_to_load_in:
+        # Event has load-in time - INIT message not needed
+        logger.info(f"Skipping INIT job for event {event_id}: has load_in_time")
+        
+        # Delete existing INIT job if it exists (cleanup)
+        init_job = scheduled_repo.find_job_for_event(org_id, event_id, "INIT")
+        if init_job and init_job.get("status") not in ("sent", "failed"):
+            # Mark as skipped rather than deleting (preserves audit trail)
+            scheduled_repo.update_status(
+                init_job["job_id"],
+                status="skipped",
+                last_error="Event has load_in_time, INIT not needed"
+            )
+            logger.info(f"Marked existing INIT job {init_job['job_id']} as skipped (has load_in_time)")
+        
+        result["init_status"] = "skipped"
+        result["init_skip_reason"] = SKIP_REASON_HAS_LOAD_IN_TIME
+    elif settings.get("enabled_global") and settings.get("enabled_init"):
         init_job = scheduled_repo.find_job_for_event(org_id, event_id, "INIT")
         
         # Compute send_at for INIT

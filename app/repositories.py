@@ -2835,3 +2835,115 @@ class SchedulerSettingsRepository:
 
         with get_session() as session:
             session.execute(query, {"org_id": org_id})
+
+
+class SchedulerHeartbeatRepository:
+    """Repository for scheduler_heartbeat table - tracks scheduler cron health."""
+
+    def get_heartbeat(self, org_id: int) -> Optional[dict]:
+        """Get scheduler heartbeat for an organization."""
+        query = text("""
+            SELECT *
+            FROM scheduler_heartbeat
+            WHERE org_id = :org_id
+        """)
+
+        with get_session() as session:
+            result = session.execute(query, {"org_id": org_id})
+            row = result.mappings().first()
+            return dict(row) if row else None
+
+    def update_heartbeat(
+        self,
+        org_id: int,
+        status: str = "ok",
+        duration_ms: Optional[int] = None,
+        due_found: int = 0,
+        sent: int = 0,
+        failed: int = 0,
+        skipped: int = 0,
+        blocked: int = 0,
+        postponed: int = 0,
+        error: Optional[str] = None,
+        commit_sha: Optional[str] = None,
+    ) -> None:
+        """
+        Update or create scheduler heartbeat for an organization.
+        
+        Args:
+            org_id: Organization ID
+            status: Run status (ok, error, warning)
+            duration_ms: Run duration in milliseconds
+            due_found: Number of due jobs found
+            sent: Number of messages sent
+            failed: Number of messages failed
+            skipped: Number of messages skipped
+            blocked: Number of messages blocked
+            postponed: Number of messages postponed
+            error: Error message if status is error
+            commit_sha: Git commit SHA (optional)
+        """
+        now = now_utc()
+        
+        # Use UPSERT to create or update
+        query = text("""
+            INSERT INTO scheduler_heartbeat (
+                org_id, last_run_at, last_run_status, last_run_duration_ms,
+                last_run_due_found, last_run_sent, last_run_failed,
+                last_run_skipped, last_run_blocked, last_run_postponed,
+                last_error, last_error_at, last_commit_sha,
+                created_at, updated_at
+            )
+            VALUES (
+                :org_id, :now, :status, :duration_ms,
+                :due_found, :sent, :failed,
+                :skipped, :blocked, :postponed,
+                :error, :error_at, :commit_sha,
+                :now, :now
+            )
+            ON CONFLICT (org_id) DO UPDATE SET
+                last_run_at = :now,
+                last_run_status = :status,
+                last_run_duration_ms = :duration_ms,
+                last_run_due_found = :due_found,
+                last_run_sent = :sent,
+                last_run_failed = :failed,
+                last_run_skipped = :skipped,
+                last_run_blocked = :blocked,
+                last_run_postponed = :postponed,
+                last_error = :error,
+                last_error_at = :error_at,
+                last_commit_sha = :commit_sha,
+                updated_at = :now
+        """)
+
+        params = {
+            "org_id": org_id,
+            "now": now,
+            "status": status,
+            "duration_ms": duration_ms,
+            "due_found": due_found,
+            "sent": sent,
+            "failed": failed,
+            "skipped": skipped,
+            "blocked": blocked,
+            "postponed": postponed,
+            "error": error,
+            "error_at": now if error else None,
+            "commit_sha": commit_sha,
+        }
+
+        with get_session() as session:
+            session.execute(query, params)
+
+    def get_all_heartbeats(self) -> list[dict]:
+        """Get all scheduler heartbeats (for monitoring all orgs)."""
+        query = text("""
+            SELECT *
+            FROM scheduler_heartbeat
+            ORDER BY last_run_at DESC
+        """)
+
+        with get_session() as session:
+            result = session.execute(query)
+            return [dict(row) for row in result.mappings()]

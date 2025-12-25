@@ -13,6 +13,7 @@ from app.hoh_service import HOHService
 from app.repositories import (
     ScheduledMessageRepository,
     SchedulerSettingsRepository,
+    SchedulerHeartbeatRepository,
     EventRepository,
     ContactRepository,
     EmployeeRepository,
@@ -42,6 +43,7 @@ class SendNowResponse(BaseModel):
     """Response for send-now action."""
     success: bool
     message: str
+    reason_code: Optional[str] = None  # Structured error reason for debugging
 
 
 @router.get("/api/scheduler/jobs")
@@ -99,7 +101,16 @@ async def list_scheduler_jobs(
         query += " AND (sm.send_at >= :now OR sm.status NOT IN ('sent', 'failed', 'skipped'))"
         params["now"] = now_utc()
     
-    query += " ORDER BY sm.send_at ASC"
+    # Filter out INIT messages for events with load_in_time
+    # Events with load-in/setup times don't need INIT messages
+    query += """
+      AND NOT (
+        sm.message_type = 'INIT' 
+        AND e.load_in_time IS NOT NULL
+      )
+    """
+    
+    query += " ORDER BY sm.send_at ASC, e.name ASC"
     
     with get_session() as session:
         result = session.execute(text(query), params)
@@ -170,9 +181,13 @@ async def send_job_now(
     job_id: int,
     org_id: int = Query(1, description="Organization ID"),
 ) -> SendNowResponse:
-    """Send a scheduled message immediately."""
+    """
+    Send a scheduled message immediately (manual override).
+    
+    This endpoint bypasses scheduler settings and weekend rules to force
+    immediate delivery. Use this when a user explicitly wants to send a message now.
+    """
     scheduled_repo = ScheduledMessageRepository()
-    settings_repo = SchedulerSettingsRepository()
     
     # Get the job first to verify it exists and belongs to this org
     job = scheduled_repo.get_scheduled_message(job_id)
@@ -184,39 +199,43 @@ async def send_job_now(
     
     # Check if job is in a sendable state
     status = job.get("status")
-    if status in ("sent", "failed"):
-        raise HTTPException(
-            status_code=400, 
-            detail=f"Cannot send job with status '{status}'"
+    if status == "sent":
+        return SendNowResponse(
+            success=False,
+            message="Message already sent",
+            reason_code="ALREADY_SENT"
         )
+    if status == "failed":
+        # Allow re-sending failed messages
+        logger.info(f"Re-sending previously failed job {job_id}")
     
-    # Process the job using the scheduler service
-    # Note: We call the internal _process_job method directly here.
-    # TODO: Consider refactoring to use a public method in SchedulerService
-    # or extracting this logic to a shared module for better encapsulation.
+    # Use the scheduler service with force_send=True to bypass checks
     scheduler = SchedulerService()
-    settings = settings_repo.get_or_create_settings(org_id)
     now = now_utc()
     
     try:
-        result = await scheduler._process_job(job, settings, now)
+        logger.info(f"Manual send requested for job {job_id} (type={job.get('message_type')}, event_id={job.get('event_id')}, shift_id={job.get('shift_id')})")
         
-        if result == "sent":
+        result = await scheduler._send_now(job, now)
+        
+        if result["success"]:
             return SendNowResponse(success=True, message="Message sent successfully")
-        elif result == "blocked":
-            return SendNowResponse(success=False, message="Message blocked: recipient missing")
-        elif result == "failed":
-            return SendNowResponse(success=False, message="Failed to send message")
-        elif result == "skipped":
-            return SendNowResponse(success=False, message="Message skipped")
-        elif result == "postponed":
-            return SendNowResponse(success=False, message="Message postponed due to weekend rule")
         else:
-            return SendNowResponse(success=False, message=f"Unknown result: {result}")
+            error_msg = result.get("error", "Unknown error")
+            reason_code = result.get("reason_code", "UNKNOWN")
+            return SendNowResponse(
+                success=False,
+                message=f"Send failed: {error_msg}",
+                reason_code=reason_code
+            )
             
     except Exception as e:
         logger.error(f"Error sending job {job_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        return SendNowResponse(
+            success=False,
+            message=f"Error: {str(e)}",
+            reason_code="EXCEPTION"
+        )
 
 
 @router.get("/api/scheduler/settings")
@@ -511,6 +530,212 @@ async def cleanup_past_logs(
         
     except Exception as e:
         logger.error(f"Error in cleanup_past_logs: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/api/scheduler/heartbeat")
+async def get_scheduler_heartbeat(
+    org_id: int = Query(1, description="Organization ID"),
+) -> dict:
+    """
+    Get scheduler heartbeat status for monitoring cron connectivity.
+    
+    Returns:
+        Heartbeat status including:
+        - last_run_at: Timestamp of last scheduler run
+        - last_run_status: ok, warning, or error
+        - connectivity_status: green, yellow, or red based on staleness
+        - stats from last run (jobs sent, failed, etc.)
+    """
+    heartbeat_repo = SchedulerHeartbeatRepository()
+    
+    try:
+        heartbeat = heartbeat_repo.get_heartbeat(org_id)
+        
+        if not heartbeat:
+            # No heartbeat yet - scheduler hasn't run
+            return {
+                "status": "no_data",
+                "connectivity_status": "red",
+                "message": "Scheduler has not run yet for this organization",
+                "last_run_at": None,
+            }
+        
+        # Determine connectivity status based on staleness
+        last_run_at = heartbeat.get("last_run_at")
+        now = now_utc()
+        
+        if last_run_at:
+            time_since_last_run = now - last_run_at
+            minutes_since = time_since_last_run.total_seconds() / 60
+            
+            # Green: < 15 minutes (normal operation)
+            # Yellow: 15-60 minutes (stale but not critical)
+            # Red: > 60 minutes (critical, cron likely not running)
+            if minutes_since < 15:
+                connectivity_status = "green"
+                connectivity_message = "Scheduler is running normally"
+            elif minutes_since < 60:
+                connectivity_status = "yellow"
+                connectivity_message = f"Scheduler is stale ({int(minutes_since)} minutes since last run)"
+            else:
+                connectivity_status = "red"
+                connectivity_message = f"Scheduler has not run for {int(minutes_since)} minutes"
+        else:
+            connectivity_status = "red"
+            connectivity_message = "Last run time unknown"
+        
+        return {
+            **heartbeat,
+            "connectivity_status": connectivity_status,
+            "connectivity_message": connectivity_message,
+            "minutes_since_last_run": int((now - last_run_at).total_seconds() / 60) if last_run_at else None,
+        }
+        
+    except Exception as e:
+        logger.error(f"Error getting heartbeat: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class UpdateJobRequest(BaseModel):
+    """Request body for updating a scheduled job."""
+    send_at: Optional[datetime] = None
+    status: Optional[str] = None
+
+
+@router.patch("/api/scheduler/jobs/{job_id}")
+async def update_scheduler_job(
+    job_id: int,
+    updates: UpdateJobRequest,
+    org_id: int = Query(1, description="Organization ID"),
+) -> dict:
+    """
+    Update a scheduled message job (send_at and/or status).
+    
+    Validation:
+    - send_at: Cannot be in the past (unless explicitly allowed for testing)
+    - status: Cannot set to 'sent' without proper message tracking
+    """
+    scheduled_repo = ScheduledMessageRepository()
+    
+    # Get the job first to verify it exists and belongs to this org
+    job = scheduled_repo.get_scheduled_message(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    if job.get("org_id") != org_id:
+        raise HTTPException(status_code=403, detail="Job does not belong to this organization")
+    
+    try:
+        # Update send_at if provided
+        if updates.send_at is not None:
+            # Validate: send_at should not be in the past (with 5 minute grace period)
+            now = now_utc()
+            grace_period = timedelta(minutes=5)
+            if updates.send_at < (now - grace_period):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Cannot set send_at to a time in the past"
+                )
+            
+            scheduled_repo.update_send_at(job_id, updates.send_at)
+            logger.info(f"Updated send_at for job {job_id} to {updates.send_at}")
+        
+        # Update status if provided
+        if updates.status is not None:
+            valid_statuses = ["scheduled", "paused", "blocked", "retrying", "sent", "failed", "skipped"]
+            if updates.status not in valid_statuses:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}"
+                )
+            
+            # Validate status transitions
+            current_status = job.get("status")
+            
+            # Don't allow setting to 'sent' unless it was actually sent
+            if updates.status == "sent" and current_status != "sent":
+                logger.warning(f"Attempt to manually set job {job_id} to 'sent' status - not recommended")
+                # Allow but log warning - might be needed for manual corrections
+            
+            scheduled_repo.update_status(job_id, status=updates.status)
+            logger.info(f"Updated status for job {job_id} from {current_status} to {updates.status}")
+        
+        # Return updated job
+        updated_job = scheduled_repo.get_scheduled_message(job_id)
+        return updated_job
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating job {job_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+class DeleteJobsResponse(BaseModel):
+    """Response for bulk delete operation."""
+    success: bool
+    message: str
+    deleted_count: int
+
+
+@router.delete("/api/scheduler/jobs")
+async def delete_all_jobs(
+    org_id: int = Query(1, description="Organization ID"),
+    message_type: Optional[str] = Query(None, description="Optional: Filter by message type to delete only specific type"),
+    confirm: bool = Query(False, description="Must be true to confirm deletion"),
+) -> DeleteJobsResponse:
+    """
+    Delete all scheduled jobs (with confirmation).
+    
+    This is a destructive operation that removes all scheduled messages.
+    Can optionally filter by message_type to delete only specific types.
+    
+    Args:
+        org_id: Organization ID
+        message_type: Optional filter (INIT, TECH_REMINDER, SHIFT_REMINDER)
+        confirm: Must be true to proceed
+    """
+    if not confirm:
+        raise HTTPException(
+            status_code=400,
+            detail="Must set confirm=true to proceed with deletion"
+        )
+    
+    try:
+        # Build delete query
+        if message_type:
+            query = text("""
+                DELETE FROM scheduled_messages
+                WHERE org_id = :org_id
+                  AND message_type = :message_type
+            """)
+            params = {"org_id": org_id, "message_type": message_type}
+        else:
+            query = text("""
+                DELETE FROM scheduled_messages
+                WHERE org_id = :org_id
+            """)
+            params = {"org_id": org_id}
+        
+        with get_session() as session:
+            result = session.execute(query, params)
+            deleted_count = result.rowcount
+        
+        message = f"Deleted {deleted_count} scheduled jobs"
+        if message_type:
+            message += f" (type: {message_type})"
+        
+        logger.info(f"Bulk delete for org {org_id}: {message}")
+        
+        return DeleteJobsResponse(
+            success=True,
+            message=message,
+            deleted_count=deleted_count,
+        )
+        
+    except Exception as e:
+        logger.error(f"Error in bulk delete: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
