@@ -402,17 +402,19 @@
 
         /* Month Selector */
         .month-selector {
-            padding: 2rem;
+            padding: 1rem 0;
             background: var(--bg-primary);
-            margin: 2rem 2rem 1rem;
-            border-radius: 12px;
+            margin: 0 auto 1rem;
+            border-radius: 10px;
             box-shadow: var(--shadow);
+            max-width: 960px;
+            text-align: center;
         }
 
         .month-selector-controls {
             display: flex;
             align-items: center;
-            justify-content: space-between;
+            justify-content: center;
             gap: 1rem;
             flex-wrap: wrap;
         }
@@ -448,7 +450,7 @@
 
         .month-scale {
             display: flex;
-            gap: 1.5rem;
+            gap: 1rem;
             overflow-x: auto;
             padding: 1rem 0;
             justify-content: center;
@@ -532,6 +534,7 @@
             border: 1px solid var(--border-color);
             padding: 0.5rem 0.75rem;
             border-radius: 10px;
+            box-shadow: var(--shadow);
         }
 
         .status-filter label {
@@ -909,9 +912,17 @@
 
         .table-toolbar {
             display: flex;
-            justify-content: flex-end;
-            gap: 0.5rem;
+            flex-direction: column;
+            align-items: flex-end;
+            gap: 0.35rem;
             margin-bottom: 0.5rem;
+        }
+
+        .table-toolbar-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
         }
 
         .btn-ghost {
@@ -1950,18 +1961,6 @@
                 </div>
                 <button class="month-nav-btn" onclick="shiftMonthScale(1)" aria-label="חודשים הבאים">→</button>
             </div>
-            <div class="status-filter">
-                <label for="statusFilter">סינון סטטוס</label>
-                <select id="statusFilter" onchange="onStatusFilterChange(this.value)">
-                    <option value="all">כל הסטטוסים</option>
-                    <option value="draft">Draft</option>
-                    <option value="pending">Pending</option>
-                    <option value="confirmed">Confirmed</option>
-                    <option value="follow_up">Follow Up</option>
-                    <option value="contact_required">Contact Required</option>
-                    <option value="cancelled">Cancelled</option>
-                </select>
-            </div>
         </div>
     </div>
 
@@ -2080,8 +2079,8 @@
         const HALL_STORAGE_KEY = 'events.activeHall';
         const COLUMN_VISIBILITY_KEY = 'events.columnVisibility';
         const STATUS_FILTER_KEY = 'events.statusFilter';
-        const MONTHS_TO_SHOW = 12;
-        const MONTH_NAV_STEP = 6;
+        const MONTHS_TO_SHOW = 5;
+        const MONTH_NAV_STEP = 2;
         const SCROLL_RETRY_LIMIT = 10;
         const SCROLL_RETRY_DELAY = 300;
         const TABLE_COLUMNS = [
@@ -2101,7 +2100,7 @@
         const STATUS_OPTIONS = ['draft', 'pending', 'confirmed', 'cancelled', 'follow_up', 'contact_required'];
         let activeStatusFilter = 'all';
         let activeStatusMenu = null;
-        let monthScaleStartOffset = -Math.floor(MONTHS_TO_SHOW / 2);
+        let monthScaleStartOffset = -2;
         let pendingNavigationTarget = null;
         
         // Constants
@@ -2285,20 +2284,51 @@
             loadEvents(month);
         }
 
+        function renderStatusFilterControl() {
+            return `
+                <div class="status-filter">
+                    <label>סינון סטטוס</label>
+                    <select class="status-filter-select" onchange="onStatusFilterChange(this.value)">
+                        ${getStatusFilterOptions()}
+                    </select>
+                </div>
+            `;
+        }
+
+        function getStatusFilterOptions() {
+            const options = ['all', ...STATUS_OPTIONS];
+            const labels = {
+                all: 'כל הסטטוסים',
+                draft: 'Draft',
+                pending: 'Pending',
+                confirmed: 'Confirmed',
+                follow_up: 'Follow Up',
+                contact_required: 'Contact Required',
+                cancelled: 'Cancelled'
+            };
+            return options.map(opt => `<option value="${opt}">${labels[opt] || opt}</option>`).join('');
+        }
+
+        function syncStatusFilterUI() {
+            document.querySelectorAll('.status-filter-select').forEach(select => {
+                if (select.value !== activeStatusFilter) {
+                    select.value = activeStatusFilter;
+                }
+            });
+        }
+
         function initStatusFilter() {
             const saved = localStorage.getItem(STATUS_FILTER_KEY);
             const allowed = ['all', ...STATUS_OPTIONS];
             activeStatusFilter = allowed.includes(saved) ? saved : 'all';
-            const selectEl = document.getElementById('statusFilter');
-            if (selectEl) {
-                selectEl.value = activeStatusFilter;
-            }
+            syncStatusFilterUI();
         }
 
         function onStatusFilterChange(value) {
             activeStatusFilter = value;
             localStorage.setItem(STATUS_FILTER_KEY, value);
             applyStatusFilter();
+            syncStatusFilterUI();
         }
 
         function applyStatusFilter() {
@@ -2311,6 +2341,7 @@
                     detailsRow.classList.toggle('filtered-out', !matches);
                 }
             });
+            syncStatusFilterUI();
         }
 
         // Load Events
@@ -2376,23 +2407,28 @@
                     </div>
                     <div class="hall-tab-panels">
                         ${hallEntries.map(([hallName, events]) => `
-                            <div class="hall-tab-panel ${hallName === activeHall ? 'active' : ''}" data-hall="${escapeHtml(hallName)}">
-                                <div class="hall-section">
-                                    <div class="hall-body">
-                                        <div class="table-toolbar">
-                                            <div style="position: relative;">
-                                                <button type="button" class="btn-ghost column-menu-toggle" data-hall="${escapeHtml(hallName)}" onclick="toggleColumnMenu('${escapeHtml(hallName)}')">Columns ▾</button>
-                                                <div class="column-menu" id="column-menu-${hallName.replace(/\s+/g, '-')}">
-                                                    ${TABLE_COLUMNS.map(col => `
-                                                        <label>
-                                                            <input type="checkbox" ${columnVisibility[col.key] !== false ? 'checked' : ''} onchange="setColumnVisibility('${col.key}', this.checked)">
-                                                            ${col.label}
-                                                        </label>
-                                                    `).join('')}
-                                                </div>
-                                            </div>
+                <div class="hall-tab-panel ${hallName === activeHall ? 'active' : ''}" data-hall="${escapeHtml(hallName)}">
+                    <div class="hall-section">
+                        <div class="hall-body">
+                            <div class="table-toolbar">
+                                <div class="table-toolbar-row">
+                                    ${renderStatusFilterControl()}
+                                </div>
+                                <div class="table-toolbar-row" style="justify-content: flex-end;">
+                                    <div style="position: relative;">
+                                        <button type="button" class="btn-ghost column-menu-toggle" data-hall="${escapeHtml(hallName)}" onclick="toggleColumnMenu('${escapeHtml(hallName)}')">Columns ▾</button>
+                                        <div class="column-menu" id="column-menu-${hallName.replace(/\s+/g, '-')}">
+                                            ${TABLE_COLUMNS.map(col => `
+                                                <label>
+                                                    <input type="checkbox" ${columnVisibility[col.key] !== false ? 'checked' : ''} onchange="setColumnVisibility('${col.key}', this.checked)">
+                                                    ${col.label}
+                                                </label>
+                                            `).join('')}
                                         </div>
-                                        <table class="events-table" data-hall="${escapeHtml(hallName)}">
+                                    </div>
+                                </div>
+                            </div>
+                            <table class="events-table" data-hall="${escapeHtml(hallName)}">
                                             <thead>
                                                 <tr id="header-row-${hallName.replace(/\s+/g, '-')}">
                                                     <th data-col="expander" style="width: 40px;"></th>
@@ -2432,6 +2468,7 @@
             // Enable row click for side panel
             attachRowClickHandlers();
             applyStatusFilter();
+            syncStatusFilterUI();
 
             if (pendingNavigationTarget && pendingNavigationTarget.eventId && eventsCache.has(pendingNavigationTarget.eventId)) {
                 setTimeout(() => scrollAndHighlightEvent(pendingNavigationTarget.eventId), NAVIGATION_SCROLL_DELAY);
