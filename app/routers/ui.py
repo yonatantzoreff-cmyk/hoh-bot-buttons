@@ -3025,7 +3025,7 @@ async def scheduler_page() -> HTMLResponse:
       const fetchBtn = document.getElementById('fetchBtn');
       if (!fetchBtn) {
         console.error('Fetch button not found!');
-        alert('❌ Error: Fetch button not found in DOM');
+        alert('Error: Fetch button not found in DOM');
         return;
       }
       
@@ -3051,7 +3051,7 @@ async def scheduler_page() -> HTMLResponse:
         
         // Show success message with counts
         alert(
-          `✅ Fetch completed!\n\n` +
+          `Fetch completed!\n\n` +
           `Events scanned: ${result.events_scanned}\n` +
           `Shifts scanned: ${result.shifts_scanned}\n` +
           `Jobs created: ${result.jobs_created}\n` +
@@ -3065,7 +3065,7 @@ async def scheduler_page() -> HTMLResponse:
         
       } catch (error) {
         console.error('Error fetching future events:', error);
-        alert(`❌ Error fetching future events:\n${error.message}\n\nCheck browser console for details.`);
+        alert(`Error fetching future events:\n${error.message}\n\nCheck browser console for details.`);
       } finally {
         fetchBtn.disabled = false;
         fetchBtn.innerHTML = '🔄 Fetch Future Events';
@@ -3094,14 +3094,14 @@ async def scheduler_page() -> HTMLResponse:
         const result = await response.json();
         
         // Show success message
-        alert(`✅ Cleanup completed!\n\nDeleted ${result.deleted_count} old log entries.`);
+        alert(`Cleanup completed!\n\nDeleted ${result.deleted_count} old log entries.`);
         
         // Reload all jobs to reflect the cleanup
         loadAllJobs();
         
       } catch (error) {
         console.error('Error cleaning up past logs:', error);
-        alert('❌ Error cleaning up past logs. See console for details.');
+        alert('Error cleaning up past logs. See console for details.');
       } finally {
         cleanupBtn.disabled = false;
         cleanupBtn.innerHTML = '🗑️ Cleanup Old Logs';
@@ -3462,7 +3462,7 @@ async def scheduler_page() -> HTMLResponse:
         console.log('Scheduler page initialization complete');
       } catch (error) {
         console.error('Error during page initialization:', error);
-        alert(`❌ Error initializing scheduler page:\n${error.message}\n\nCheck browser console for details.`);
+        alert(`Error initializing scheduler page:\n${error.message}\n\nCheck browser console for details.`);
       }
     });
     
