@@ -2394,18 +2394,8 @@
                         </button>
                     </td>
                     <td data-col="status">
-                        <div class="status-select-container" id="status-select-${event.event_id}" data-status="${statusClass}">
-                            <button type="button" class="status-select-trigger" onclick="toggleStatusMenu(${event.event_id})" aria-haspopup="listbox" aria-expanded="false">
-                                ${renderStatusChip(event)}
-                                <span class="status-select-caret">▼</span>
-                            </button>
-                            <div class="status-select-menu" id="status-menu-${event.event_id}" role="listbox" aria-label="Select status">
-                                ${STATUS_OPTIONS.map(statusOption => `
-                                    <button type="button" class="status-option ${statusOption === statusValue ? 'selected' : ''}" role="option" data-value="${statusOption}" onclick="selectStatus(${event.event_id}, '${statusOption}')">
-                                        ${renderStatusChip({ status: statusOption })}
-                                    </button>
-                                `).join('')}
-                            </div>
+                        <div class="status-select-container readonly" id="status-select-${event.event_id}" data-status="${statusClass}" onclick="openEventPanel(${event.event_id})" style="cursor: pointer;">
+                            ${renderStatusChip(event)}
                         </div>
                     </td>
                     <td data-col="info">
@@ -2414,15 +2404,13 @@
                                 <div style="display: grid; gap: 0.25rem;">
                                     <small>Date</small>
                                     <div style="display: flex; align-items: center; gap: 0.35rem;">
-                                        <input type="date" class="inline-edit" data-field="event_date" value="${eventDate}" 
-                                               onchange="markDirty(${event.event_id}, 'event_date', this.value)">
+                                        <span class="readonly-value" data-field="event_date">${eventDate || '—'}</span>
                                         <span style="color: var(--text-secondary); font-weight: 600;">${getDayOfWeek(event.event_date)}</span>
                                     </div>
                                 </div>
                                 <div>
                                     <small>Event</small>
-                                    <input type="text" class="inline-edit" data-field="name" value="${escapeHtml(event.name || '')}" 
-                                           onchange="markDirty(${event.event_id}, 'name', this.value)">
+                                    <span class="readonly-value" data-field="name">${escapeHtml(event.name || '')}</span>
                                 </div>
                             </div>
                         </div>
@@ -2432,13 +2420,11 @@
                             <div class="event-cell compact">
                                 <div>
                                     <small>Load In</small>
-                                    <input type="time" class="inline-edit" data-field="load_in_time" value="${loadInTime}" 
-                                           onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
+                                    <span class="readonly-value" data-field="load_in_time">${loadInTime || '—'}</span>
                                 </div>
                                 <div>
                                     <small>Show Time</small>
-                                    <input type="time" class="inline-edit" data-field="show_time" value="${showTime}" 
-                                           onchange="markDirty(${event.event_id}, 'show_time', this.value)">
+                                    <span class="readonly-value" data-field="show_time">${showTime || '—'}</span>
                                 </div>
                             </div>
                         </div>
@@ -2448,29 +2434,15 @@
                             <div class="contact-row">
                                 <div style="min-width: 0;">
                                     <div class="contact-label">Producer</div>
-                                    <div class="contact-dropdown-container" id="producer-${event.event_id}">
-                                        <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'producer', 'producer')">
-                                            <div style="flex: 1;">
-                                                <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.producer_name || 'Select producer')}</div>
-                                                ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.producer_phone)}</div>` : ''}
-                                            </div>
-                                            <span style="color: var(--text-muted);">▼</span>
-                                        </div>
-                                    </div>
+                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.producer_name || '—')}</div>
+                                    ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.producer_phone)}</div>` : ''}
                                 </div>
                             </div>
                             <div class="contact-row">
                                 <div style="min-width: 0;">
                                     <div class="contact-label">Technical</div>
-                                    <div class="contact-dropdown-container" id="technical-${event.event_id}">
-                                        <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'technical')">
-                                            <div style="flex: 1;">
-                                                <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || 'Select technical')}</div>
-                                                ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
-                                            </div>
-                                            <span style="color: var(--text-muted);">▼</span>
-                                        </div>
-                                    </div>
+                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || '—')}</div>
+                                    ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
                                 </div>
                                 <div class="row-meta" style="gap: 0.35rem;">
                                     <button class="btn btn-sm" 
