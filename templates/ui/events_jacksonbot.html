@@ -972,6 +972,17 @@
             gap: 0.5rem;
         }
 
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            border-radius: 8px;
+        }
+
         .panel-grid {
             display: grid;
             gap: 0.65rem;
@@ -2444,14 +2455,6 @@
                                     <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || '—')}</div>
                                     ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
                                 </div>
-                                <div class="row-meta" style="gap: 0.35rem;">
-                                    <button class="btn btn-sm" 
-                                            onclick="showSuggestions(${event.event_id}, this)" 
-                                            title="הצעות טכנאים"
-                                            style="padding: 0.3rem 0.6rem; font-size: 0.85rem; white-space: nowrap;">
-                                        💡
-                                    </button>
-                                </div>
                             </div>
                         </div>
                     </td>
@@ -2702,7 +2705,7 @@
             menu.className = 'contact-dropdown-menu visible';
             menu.innerHTML = `
                 <div class="contact-dropdown-search">
-                    <input type="text" placeholder="Search by name or phone..." oninput="filterContactDropdown(${eventId}, '${fieldType}', '${role}', this.value)">
+                    <input type="text" placeholder="Search by name or phone..." oninput="filterContactDropdown(${eventId}, '${fieldType}', '${role}', this.value, '${source}')">
                 </div>
                 <div class="contact-dropdown-list" id="${prefix}${fieldType}-list-${eventId}">
                     <div class="contact-dropdown-empty">Loading...</div>
@@ -2941,6 +2944,13 @@
                 </div>
                 <div class="panel-section">
                     <h4>Contacts</h4>
+                    <div class="panel-actions" style="justify-content: flex-start; gap: 0.35rem;">
+                        <button class="btn btn-secondary icon-btn" onclick="openAddContactModal(${event.event_id})" title="הוספת איש קשר">➕</button>
+                        <button class="btn btn-secondary icon-btn" onclick="showSuggestions(${event.event_id}, this)" title="הצעות טכנאים">💡</button>
+                        <button class="btn btn-secondary icon-btn" onclick="removeContactFromEvent(${event.event_id}, 'producer')" title="הסר מפיק">🧹 P</button>
+                        <button class="btn btn-secondary icon-btn" onclick="removeContactFromEvent(${event.event_id}, 'technical')" title="הסר טכנאי">🧹 T</button>
+                        <button class="btn btn-secondary icon-btn" onclick="openCallLog(${event.event_id})" title="לוג שיחות">📜</button>
+                    </div>
                     <div class="panel-grid two-col">
                         <label>Producer Contact
                             <div class="contact-dropdown-container" id="panel-producer-${event.event_id}">
