@@ -10,6 +10,7 @@ from app.repositories import (
     OrgRepository,
     ScheduledMessageRepository,
     SchedulerSettingsRepository,
+    SchedulerHeartbeatRepository,
     EventRepository,
     ContactRepository,
     EmployeeRepository,
@@ -32,6 +33,7 @@ class SchedulerService:
         self.orgs = OrgRepository()
         self.scheduled_repo = ScheduledMessageRepository()
         self.settings_repo = SchedulerSettingsRepository()
+        self.heartbeat_repo = SchedulerHeartbeatRepository()
         self.events_repo = EventRepository()
         self.contacts_repo = ContactRepository()
         self.employees_repo = EmployeeRepository()
@@ -128,6 +130,27 @@ class SchedulerService:
         
         # Calculate duration
         duration_ms = int((time.time() - start_time) * 1000)
+        
+        # Update heartbeat for each org processed
+        for current_org_id in org_ids:
+            try:
+                heartbeat_status = "ok" if failed == 0 else "warning" if sent > 0 else "error"
+                heartbeat_error = f"{failed} failed" if failed > 0 else None
+                
+                self.heartbeat_repo.update_heartbeat(
+                    org_id=current_org_id,
+                    status=heartbeat_status,
+                    duration_ms=duration_ms,
+                    due_found=due_found,
+                    sent=sent,
+                    failed=failed,
+                    skipped=skipped,
+                    blocked=blocked,
+                    postponed=postponed,
+                    error=heartbeat_error
+                )
+            except Exception as e:
+                logger.warning(f"Failed to update heartbeat for org {current_org_id}: {e}")
         
         # Log summary
         logger.info(
@@ -636,3 +659,100 @@ class SchedulerService:
             )
         except Exception as e:
             logger.error(f"Failed to mark job {job_id} as failed: {e}")
+    
+    async def _send_now(self, job: dict, now: datetime) -> dict:
+        """
+        Send a message immediately (manual send, bypasses scheduler rules).
+        
+        This method is used for manual "Send Now" operations and bypasses:
+        - Scheduler settings checks (enabled_global, enabled_init, etc.)
+        - Weekend postponement rules
+        - Duplicate detection (user explicitly wants to send)
+        
+        It STILL validates:
+        - Recipient phone number exists and is valid
+        
+        Args:
+            job: Job dictionary containing message details
+            now: Current timestamp
+        
+        Returns:
+            Dict with: success (bool), error (str, optional), reason_code (str, optional)
+        """
+        job_id = job.get("job_id")
+        org_id = job.get("org_id")
+        message_type = job.get("message_type")
+        event_id = job.get("event_id")
+        shift_id = job.get("shift_id")
+        
+        logger.info(
+            f"Manual send for job {job_id}: type={message_type}, event_id={event_id}, shift_id={shift_id}"
+        )
+        
+        # Step 1: Resolve recipient in real-time (still required for sending)
+        recipient_result = self._resolve_recipient(job)
+        
+        if not recipient_result["success"]:
+            # Missing phone - cannot send
+            error_msg = recipient_result.get("error", "Missing phone number")
+            logger.warning(f"Manual send for job {job_id} blocked: {error_msg}")
+            self.scheduled_repo.update_status(job_id, status="blocked", last_error=error_msg)
+            return {
+                "success": False,
+                "error": error_msg,
+                "reason_code": "MISSING_RECIPIENT"
+            }
+        
+        recipient_phone = recipient_result["phone"]
+        recipient_name = recipient_result.get("name", "")
+        recipient_contact_id = recipient_result.get("contact_id")
+        
+        # Step 2: Send the message (no dedupe check, no weekend rule for manual sends)
+        try:
+            send_result = await self._send_message(
+                job, 
+                recipient_phone, 
+                recipient_name,
+                recipient_contact_id,
+                now
+            )
+            
+            if send_result["success"]:
+                # Mark as sent
+                self.scheduled_repo.update_status(
+                    job_id,
+                    status="sent",
+                    sent_at=now,
+                    last_error=None,
+                    last_resolved_to_name=recipient_name,
+                    last_resolved_to_phone=recipient_phone
+                )
+                logger.info(f"Manual send for job {job_id} successful")
+                return {"success": True}
+            else:
+                # Send failed
+                error_msg = send_result.get("error", "Unknown error")
+                logger.error(f"Manual send for job {job_id} failed: {error_msg}")
+                self.scheduled_repo.update_status(
+                    job_id,
+                    status="failed",
+                    last_error=f"Manual send failed: {error_msg}"
+                )
+                return {
+                    "success": False,
+                    "error": error_msg,
+                    "reason_code": "SEND_FAILED"
+                }
+                
+        except Exception as e:
+            logger.error(f"Error in manual send for job {job_id}: {e}", exc_info=True)
+            self.scheduled_repo.update_status(
+                job_id,
+                status="failed",
+                last_error=f"Exception during send: {str(e)}"
+            )
+            return {
+                "success": False,
+                "error": str(e),
+                "reason_code": "EXCEPTION"
+            }

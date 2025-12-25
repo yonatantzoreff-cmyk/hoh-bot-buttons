@@ -2727,16 +2727,30 @@ async def scheduler_page() -> HTMLResponse:
       </div>
     </div>
     
+    <!-- Heartbeat Status Row -->
+    <div class="row mb-3">
+      <div class="col">
+        <span id="heartbeatBadge" class="badge bg-secondary">
+          <span class="spinner-border spinner-border-sm me-1" role="status"></span>
+          Loading cron status...
+        </span>
+        <small class="text-muted ms-2" id="heartbeatDetails"></small>
+      </div>
+    </div>
+    
     <!-- Action Buttons Row -->
     <div class="row mb-3">
       <div class="col">
         <button id="fetchBtn" class="btn btn-success me-2">
           🔄 Fetch Future Events
         </button>
-        <button id="cleanupBtn" class="btn btn-outline-danger">
+        <button id="cleanupBtn" class="btn btn-outline-danger me-2">
           🗑️ Cleanup Old Logs
         </button>
-        <button class="btn btn-outline-secondary btn-sm ms-3" id="testJsBtn">
+        <button id="deleteAllBtn" class="btn btn-danger me-2">
+          🗑️ Delete All Jobs
+        </button>
+        <button class="btn btn-outline-secondary btn-sm" id="testJsBtn">
           🔍 Test JavaScript
         </button>
       </div>
@@ -3262,22 +3276,39 @@ async def scheduler_page() -> HTMLResponse:
     }
     
     // Format send time with countdown
+    // Format send time with edit button
     function formatSendTime(job) {
       const sendAt = new Date(job.send_at);
       const sendAtStr = sendAt.toLocaleString('en-GB', {
         dateStyle: 'short',
-        timeStyle: 'short'
+        timeStyle: 'medium'  // Changed from 'short' to 'medium' to include seconds
       });
+      
+      // Format for datetime-local input (YYYY-MM-DDTHH:MM)
+      const year = sendAt.getFullYear();
+      const month = String(sendAt.getMonth() + 1).padStart(2, '0');
+      const day = String(sendAt.getDate()).padStart(2, '0');
+      const hours = String(sendAt.getHours()).padStart(2, '0');
+      const minutes = String(sendAt.getMinutes()).padStart(2, '0');
+      const sendAtLocal = `${year}-${month}-${day}T${hours}:${minutes}`;
       
       return `
         <div>
-          <div>${sendAtStr}</div>
+          <div id="send-at-display-${job.job_id}">${sendAtStr}</div>
           <small class="countdown text-muted" data-send-at="${job.send_at}"></small>
+          <div id="send-at-edit-${job.job_id}" class="d-none mt-1">
+            <input type="datetime-local" class="form-control form-control-sm" id="send-at-input-${job.job_id}" value="${sendAtLocal}">
+            <div class="mt-1">
+              <button class="btn btn-sm btn-success" onclick="saveSendAt('${job.job_id}')">💾</button>
+              <button class="btn btn-sm btn-secondary" onclick="cancelEditSendAt('${job.job_id}')">✖️</button>
+            </div>
+          </div>
+          <button class="btn btn-sm btn-outline-secondary mt-1" onclick="editSendAt('${job.job_id}')">📅 Edit</button>
         </div>
       `;
     }
     
-    // Format status badge
+    // Format status badge with edit button
     function formatStatusBadge(job) {
       const status = job.status || 'unknown';
       const statusMap = {
@@ -3291,17 +3322,40 @@ async def scheduler_page() -> HTMLResponse:
       };
       const badgeClass = statusMap[status] || 'secondary';
       
-      let badge = `<span class="badge bg-${badgeClass}">${status}</span>`;
+      let badge = `
+        <div id="status-display-${job.job_id}">
+          <span class="badge bg-${badgeClass}">${status}</span>
+        </div>
+      `;
       
       // Show error if present
       if (job.last_error) {
-        badge += `<br><small class="text-danger" title="${job.last_error}">⚠️ ${job.last_error.substring(0, 30)}...</small>`;
+        badge += `<small class="text-danger" title="${job.last_error}">⚠️ ${job.last_error.substring(0, 30)}...</small><br>`;
       }
       
       // Show attempt count if retrying
       if (job.attempt_count > 0) {
-        badge += `<br><small class="text-muted">Attempt ${job.attempt_count}/${job.max_attempts}</small>`;
+        badge += `<small class="text-muted">Attempt ${job.attempt_count}/${job.max_attempts}</small><br>`;
       }
+      
+      // Edit status UI (hidden by default)
+      badge += `
+        <div id="status-edit-${job.job_id}" class="d-none mt-1">
+          <select class="form-select form-select-sm" id="status-input-${job.job_id}">
+            <option value="scheduled" ${status === 'scheduled' ? 'selected' : ''}>Scheduled</option>
+            <option value="paused" ${status === 'paused' ? 'selected' : ''}>Paused</option>
+            <option value="blocked" ${status === 'blocked' ? 'selected' : ''}>Blocked</option>
+            <option value="sent" ${status === 'sent' ? 'selected' : ''}>Sent</option>
+            <option value="failed" ${status === 'failed' ? 'selected' : ''}>Failed</option>
+            <option value="skipped" ${status === 'skipped' ? 'selected' : ''}>Skipped</option>
+          </select>
+          <div class="mt-1">
+            <button class="btn btn-sm btn-success" onclick="saveStatus('${job.job_id}')">💾</button>
+            <button class="btn btn-sm btn-secondary" onclick="cancelEditStatus('${job.job_id}')">✖️</button>
+          </div>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary mt-1" onclick="editStatus('${job.job_id}')">✏️ Edit</button>
+      `;
       
       return badge;
     }
@@ -3373,11 +3427,166 @@ async def scheduler_page() -> HTMLResponse:
           alert('Message sent successfully!');
           loadAllJobs();
         } else {
-          alert('Send failed: ' + result.message);
+          // Show detailed error based on reason_code
+          const errorMessages = {
+            'MISSING_RECIPIENT': '❌ Cannot send: Recipient phone number missing',
+            'SEND_FAILED': '❌ Send failed: Twilio error',
+            'ALREADY_SENT': '❌ Message was already sent',
+            'EXCEPTION': '❌ An error occurred'
+          };
+          const errorMsg = errorMessages[result.reason_code] || result.message;
+          alert(errorMsg);
+          console.error('Send now failed:', result);
         }
       } catch (error) {
         console.error('Error sending job:', error);
         alert('Error: ' + error.message);
+      }
+    }
+    
+    // Edit send date/time functions
+    function editSendAt(jobId) {
+      document.getElementById(`send-at-display-${jobId}`).classList.add('d-none');
+      document.getElementById(`send-at-edit-${jobId}`).classList.remove('d-none');
+    }
+    
+    function cancelEditSendAt(jobId) {
+      document.getElementById(`send-at-display-${jobId}`).classList.remove('d-none');
+      document.getElementById(`send-at-edit-${jobId}`).classList.add('d-none');
+    }
+    
+    async function saveSendAt(jobId) {
+      const input = document.getElementById(`send-at-input-${jobId}`);
+      const newSendAt = new Date(input.value).toISOString();
+      
+      try {
+        const response = await fetch(
+          `/api/scheduler/jobs/${jobId}?org_id=${ORG_ID}`,
+          {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ send_at: newSendAt })
+          }
+        );
+        
+        if (response.ok) {
+          alert('✅ Send time updated successfully!');
+          loadAllJobs();
+        } else {
+          const error = await response.json();
+          alert('❌ Failed to update: ' + error.detail);
+        }
+      } catch (error) {
+        console.error('Error updating send time:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+    
+    // Edit status functions
+    function editStatus(jobId) {
+      document.getElementById(`status-display-${jobId}`).classList.add('d-none');
+      document.getElementById(`status-edit-${jobId}`).classList.remove('d-none');
+    }
+    
+    function cancelEditStatus(jobId) {
+      document.getElementById(`status-display-${jobId}`).classList.remove('d-none');
+      document.getElementById(`status-edit-${jobId}`).classList.add('d-none');
+    }
+    
+    async function saveStatus(jobId) {
+      const select = document.getElementById(`status-input-${jobId}`);
+      const newStatus = select.value;
+      
+      try {
+        const response = await fetch(
+          `/api/scheduler/jobs/${jobId}?org_id=${ORG_ID}`,
+          {
+            method: 'PATCH',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ status: newStatus })
+          }
+        );
+        
+        if (response.ok) {
+          alert('✅ Status updated successfully!');
+          loadAllJobs();
+        } else {
+          const error = await response.json();
+          alert('❌ Failed to update: ' + error.detail);
+        }
+      } catch (error) {
+        console.error('Error updating status:', error);
+        alert('Error: ' + error.message);
+      }
+    }
+    
+    // Load heartbeat status
+    async function loadHeartbeat() {
+      try {
+        const response = await fetch(`/api/scheduler/heartbeat?org_id=${ORG_ID}`);
+        const heartbeat = await response.json();
+        
+        const badge = document.getElementById('heartbeatBadge');
+        const details = document.getElementById('heartbeatDetails');
+        
+        const statusClass = heartbeat.connectivity_status === 'green' ? 'bg-success' : 
+                            heartbeat.connectivity_status === 'yellow' ? 'bg-warning' : 'bg-danger';
+        
+        badge.className = `badge ${statusClass}`;
+        
+        if (heartbeat.status === 'no_data') {
+          badge.textContent = '⚠️ Scheduler has not run yet';
+          details.textContent = '';
+        } else {
+          const icon = heartbeat.connectivity_status === 'green' ? '✅' : 
+                       heartbeat.connectivity_status === 'yellow' ? '⚠️' : '❌';
+          badge.textContent = `${icon} Cron: ${heartbeat.connectivity_message}`;
+          
+          const lastRun = heartbeat.minutes_since_last_run;
+          const stats = `Last run: ${lastRun} min ago | Sent: ${heartbeat.last_run_sent} | Failed: ${heartbeat.last_run_failed}`;
+          details.textContent = stats;
+        }
+      } catch (error) {
+        console.error('Error loading heartbeat:', error);
+        const badge = document.getElementById('heartbeatBadge');
+        badge.className = 'badge bg-danger';
+        badge.textContent = '❌ Error loading heartbeat';
+      }
+    }
+    
+    // Delete all jobs
+    async function deleteAllJobs() {
+      if (!confirm('⚠️ WARNING: Delete ALL scheduled jobs?\n\nThis cannot be undone!')) {
+        return;
+      }
+      
+      if (!confirm('Are you REALLY sure? This will delete everything!')) {
+        return;
+      }
+      
+      const deleteBtn = document.getElementById('deleteAllBtn');
+      deleteBtn.disabled = true;
+      deleteBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Deleting...';
+      
+      try {
+        const response = await fetch(
+          `/api/scheduler/jobs?org_id=${ORG_ID}&confirm=true`,
+          { method: 'DELETE' }
+        );
+        
+        if (!response.ok) {
+          throw new Error('Delete failed');
+        }
+        
+        const result = await response.json();
+        alert(`✅ Deleted ${result.deleted_count} jobs successfully!`);
+        loadAllJobs();
+      } catch (error) {
+        console.error('Error deleting jobs:', error);
+        alert('❌ Error deleting jobs: ' + error.message);
+      } finally {
+        deleteBtn.disabled = false;
+        deleteBtn.innerHTML = '🗑️ Delete All Jobs';
       }
     }
     
@@ -3428,6 +3637,7 @@ async def scheduler_page() -> HTMLResponse:
         // Attach event listeners to buttons
         const fetchBtn = document.getElementById('fetchBtn');
         const cleanupBtn = document.getElementById('cleanupBtn');
+        const deleteAllBtn = document.getElementById('deleteAllBtn');
         const testJsBtn = document.getElementById('testJsBtn');
         
         if (fetchBtn) {
@@ -3444,6 +3654,13 @@ async def scheduler_page() -> HTMLResponse:
           console.error('Cleanup button not found in DOM!');
         }
         
+        if (deleteAllBtn) {
+          console.log('Delete all button found, attaching click listener');
+          deleteAllBtn.addEventListener('click', deleteAllJobs);
+        } else {
+          console.error('Delete all button not found in DOM!');
+        }
+        
         if (testJsBtn) {
           console.log('Test button found, attaching click listener');
           testJsBtn.addEventListener('click', () => {
@@ -3454,6 +3671,11 @@ async def scheduler_page() -> HTMLResponse:
         
         console.log('Loading scheduler settings...');
         loadSettings();
+        
+        console.log('Loading heartbeat status...');
+        loadHeartbeat();
+        // Refresh heartbeat every 30 seconds
+        setInterval(loadHeartbeat, 30000);
         
         console.log('Loading all jobs...');
         loadAllJobs();
