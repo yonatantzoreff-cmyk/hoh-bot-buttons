@@ -185,21 +185,21 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                         last_error="Missing recipient phone"
                     )
                     result["init_status"] = "blocked"
+                elif existing_status == "blocked":
+                    # Previously blocked and now phone is valid, unblock
+                    scheduled_repo.update_status(
+                        init_job["job_id"],
+                        status="scheduled",
+                        last_error=None
+                    )
+                    result["init_status"] = "updated"
+                elif send_at_changed:
+                    # Send time changed
+                    result["init_status"] = "updated"
                 else:
-                    # If previously blocked and now phone is valid, unblock
-                    if existing_status == "blocked":
-                        scheduled_repo.update_status(
-                            init_job["job_id"],
-                            status="scheduled",
-                            last_error=None
-                        )
-                        result["init_status"] = "updated"
-                    elif send_at_changed:
-                        result["init_status"] = "updated"
-                    else:
-                        # No changes - already up to date
-                        result["init_status"] = "skipped"
-                        result["init_skip_reason"] = "already_up_to_date"
+                    # No changes - already up to date
+                    result["init_status"] = "skipped"
+                    result["init_skip_reason"] = "already_up_to_date"
                 
                 result["init_job_id"] = init_job["job_id"]
                 if result.get("init_status") == "updated":
@@ -280,21 +280,21 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                         last_error="Missing recipient phone"
                     )
                     result["tech_status"] = "blocked"
+                elif existing_status == "blocked":
+                    # Previously blocked and now phone is valid, unblock
+                    scheduled_repo.update_status(
+                        tech_job["job_id"],
+                        status="scheduled",
+                        last_error=None
+                    )
+                    result["tech_status"] = "updated"
+                elif send_at_changed:
+                    # Send time changed
+                    result["tech_status"] = "updated"
                 else:
-                    # If previously blocked and now phone is valid, unblock
-                    if existing_status == "blocked":
-                        scheduled_repo.update_status(
-                            tech_job["job_id"],
-                            status="scheduled",
-                            last_error=None
-                        )
-                        result["tech_status"] = "updated"
-                    elif send_at_changed:
-                        result["tech_status"] = "updated"
-                    else:
-                        # No changes - already up to date
-                        result["tech_status"] = "skipped"
-                        result["tech_skip_reason"] = "already_up_to_date"
+                    # No changes - already up to date
+                    result["tech_status"] = "skipped"
+                    result["tech_skip_reason"] = "already_up_to_date"
                 
                 result["tech_job_id"] = tech_job["job_id"]
                 if result.get("tech_status") == "updated":
@@ -438,6 +438,7 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
                     scheduled_repo.update_send_at(existing_job["job_id"], send_at)
                 
                 # Update status based on phone validation
+                job_was_updated = False
                 if not phone_valid:
                     scheduled_repo.update_status(
                         existing_job["job_id"],
@@ -454,14 +455,16 @@ def build_or_update_jobs_for_shifts(org_id: int, event_id: int) -> dict:
                             last_error=None
                         )
                         updated += 1
+                        job_was_updated = True
                     elif send_at_changed:
                         updated += 1
+                        job_was_updated = True
                     else:
                         # No changes - already up to date
                         skipped += 1
                         skip_reasons["already_up_to_date"] = skip_reasons.get("already_up_to_date", 0) + 1
                 
-                if updated > 0 or blocked > 0:
+                if job_was_updated or not phone_valid:
                     logger.info(f"Updated SHIFT_REMINDER job {existing_job['job_id']} for shift {shift_id}")
             else:
                 # Already sent or failed
