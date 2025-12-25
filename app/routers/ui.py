@@ -1996,6 +1996,7 @@ async def edit_employee_form(
     phone = escape(employee.get("phone") or "")
     role = escape(employee.get("role") or "")
     notes = escape(employee.get("notes") or "")
+    is_active = employee.get("is_active", True)
     
     form = f"""
     <div class="row justify-content-center">
@@ -2020,6 +2021,13 @@ async def edit_employee_form(
                 <label class="form-label" for="notes">Notes</label>
                 <textarea class="form-control" id="notes" name="notes" rows="3">{notes}</textarea>
               </div>
+              <div class="mb-3">
+                <label class="form-label" for="is_active">סטטוס / Status</label>
+                <select class="form-select" id="is_active" name="is_active">
+                  <option value="true" {"selected" if is_active else ""}>פעיל / Active</option>
+                  <option value="false" {"selected" if not is_active else ""}>לא פעיל / Inactive</option>
+                </select>
+              </div>
               <div class="d-flex justify-content-end">
                 <a class="btn btn-outline-secondary me-2" href="/ui/employees">ביטול / Cancel</a>
                 <button class="btn btn-primary" type="submit">שמור / Save</button>
@@ -2042,6 +2050,7 @@ async def update_employee(
     phone: str = Form(...),
     role: str | None = Form(None),
     notes: str | None = Form(None),
+    is_active: bool = Form(True),
     hoh: HOHService = Depends(get_hoh_service),
 ):
     """Update an employee."""
@@ -2052,6 +2061,7 @@ async def update_employee(
         phone=phone.strip(),
         role=role.strip() if role else None,
         notes=notes.strip() if notes else None,
+        is_active=is_active,
     )
     return RedirectResponse(url="/ui/employees", status_code=303)
 

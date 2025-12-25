@@ -216,6 +216,7 @@ class HOHService:
         phone: Optional[str] = None,
         role: Optional[str] = None,
         notes: Optional[str] = None,
+        is_active: Optional[bool] = None,
     ):
         """
         עדכון עובד.
@@ -228,6 +229,7 @@ class HOHService:
             phone=normalized_phone,
             role=role,
             notes=notes,
+            is_active=is_active,
         )
 
     def soft_delete_employee(self, org_id: int, employee_id: int):

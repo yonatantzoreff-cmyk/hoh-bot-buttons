@@ -1638,6 +1638,7 @@ class EmployeeRepository:
         phone: Optional[str] = None,
         role: Optional[str] = None,
         notes: Optional[str] = None,
+        is_active: Optional[bool] = None,
     ):
         """עדכון פרטי עובד"""
         sets = []
@@ -1659,6 +1660,10 @@ class EmployeeRepository:
         if notes is not None:
             sets.append("notes = :notes")
             params["notes"] = notes
+
+        if is_active is not None:
+            sets.append("is_active = :is_active")
+            params["is_active"] = is_active
 
         if not sets:
             return
