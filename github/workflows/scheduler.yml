@@ -12,7 +12,7 @@ jobs:
       - name: Call scheduler endpoint
         env:
           SCHEDULER_URL: ${{ secrets.SCHEDULER_URL }}
-          SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_TOKEN }}
+          SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_RUN_TOKEN }}
         run: |
           set -euo pipefail
           echo "Calling scheduler..."
