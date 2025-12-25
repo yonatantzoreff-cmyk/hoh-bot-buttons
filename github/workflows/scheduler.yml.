@@ -12,12 +12,12 @@ jobs:
       - name: Call scheduler endpoint
         env:
           SCHEDULER_URL: ${{ secrets.SCHEDULER_URL }}
-          SCHEDULER_TOKEN: ${{ secrets.SCHEDULER_RUN_TOKEN }}
+          SCHEDULER_RUN_TOKEN: ${{ secrets.SCHEDULER_RUN_TOKEN }}
         run: |
           set -euo pipefail
           echo "Calling scheduler..."
           curl -sS -X POST "$SCHEDULER_URL" \
-            -H "Authorization: Bearer $SCHEDULER_TOKEN" \
+            -H "Authorization: Bearer $SCHEDULER_RUN_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{}' \
             --fail
