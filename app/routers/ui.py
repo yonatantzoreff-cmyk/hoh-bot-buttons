@@ -3074,10 +3074,13 @@ async def scheduler_page() -> HTMLResponse:
     
     // Cleanup past logs
     async function cleanupPastLogs() {
-      if (!confirm('Delete old completed logs (older than 30 days)?\nThis will remove sent/failed/skipped jobs that are no longer needed.')) {
-        return;
-      }
-      
+      if (!confirm(
+      "Delete old completed logs (older than 30 days)?\n\n" +
+      "This will remove sent/failed/skipped jobs that are no longer needed."
+        )) {
+      return;
+        }
+
       const cleanupBtn = document.getElementById('cleanupBtn');
       cleanupBtn.disabled = true;
       cleanupBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Cleaning...';
