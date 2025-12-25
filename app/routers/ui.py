@@ -2950,7 +2950,7 @@ async def scheduler_page() -> HTMLResponse:
     let currentSettings = {};
     
     // Constants for localization
-    const MISSING_RECIPIENT_TEXT = 'חסר'; // Hebrew: "Missing"
+    const MISSING_RECIPIENT_TEXT = 'חסר'; // Hebrew for Missing
     
     // Load settings on page load
     async function loadSettings() {
