@@ -782,10 +782,10 @@ class HOHService:
         load_in_time_str: Optional[str] = _NO_UPDATE,
         producer_name: Optional[str] = None,
         producer_phone: Optional[str] = None,
-        producer_contact_id: Optional[int] = None,
+        producer_contact_id: Optional[int] = _NO_UPDATE,
         technical_name: Optional[str] = None,
         technical_phone: Optional[str] = None,
-        technical_contact_id: Optional[int] = None,
+        technical_contact_id: Optional[int] = _NO_UPDATE,
         notes: Optional[str] = None,
         status: Optional[str] = None,
     ) -> None:
@@ -814,11 +814,9 @@ class HOHService:
             update_params["load_in_time"] = self._combine_time(event_date, load_in_time_str)
         
         # Handle producer contact
-        if producer_contact_id is not None:
-            # Explicit contact ID provided (from dropdown)
+        if producer_contact_id is not _NO_UPDATE:
             update_params["producer_contact_id"] = producer_contact_id
         elif producer_name is not None or producer_phone is not None:
-            # Name/phone provided (legacy inline edit)
             update_params["producer_contact_id"] = self._ensure_event_contact(
                 org_id=org_id,
                 existing_contact_id=event.get("producer_contact_id"),
@@ -828,11 +826,9 @@ class HOHService:
             )
         
         # Handle technical contact
-        if technical_contact_id is not None:
-            # Explicit contact ID provided (from dropdown)
+        if technical_contact_id is not _NO_UPDATE:
             update_params["technical_contact_id"] = technical_contact_id
         elif technical_name is not None or technical_phone is not None:
-            # Name/phone provided (legacy inline edit)
             update_params["technical_contact_id"] = self._ensure_event_contact(
                 org_id=org_id,
                 existing_contact_id=event.get("technical_contact_id"),

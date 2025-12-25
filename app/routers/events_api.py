@@ -156,6 +156,7 @@ async def list_events(
 async def update_event(
     event_id: int,
     updates: EventPatchRequest,
+    request: Request,
     org_id: int = Query(1),
     hoh: HOHService = Depends(get_hoh_service),
 ):
@@ -169,31 +170,32 @@ async def update_event(
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         
-        # Build update parameters - only include non-None values
+        # Build update parameters - respect presence of keys (to allow clearing)
+        payload_dict = await request.json()
         update_params = {}
-        if updates.name is not None:
+        if "name" in payload_dict:
             update_params["event_name"] = updates.name
-        if updates.event_date is not None:
+        if "event_date" in payload_dict:
             update_params["event_date_str"] = updates.event_date
-        if updates.show_time is not None:
+        if "show_time" in payload_dict:
             update_params["show_time_str"] = updates.show_time
-        if updates.load_in_time is not None:
+        if "load_in_time" in payload_dict:
             update_params["load_in_time_str"] = updates.load_in_time
-        if updates.producer_name is not None:
+        if "producer_name" in payload_dict:
             update_params["producer_name"] = updates.producer_name
-        if updates.producer_phone is not None:
+        if "producer_phone" in payload_dict:
             update_params["producer_phone"] = updates.producer_phone
-        if updates.producer_contact_id is not None:
+        if "producer_contact_id" in payload_dict:
             update_params["producer_contact_id"] = updates.producer_contact_id
-        if updates.technical_name is not None:
+        if "technical_name" in payload_dict:
             update_params["technical_name"] = updates.technical_name
-        if updates.technical_phone is not None:
+        if "technical_phone" in payload_dict:
             update_params["technical_phone"] = updates.technical_phone
-        if updates.technical_contact_id is not None:
+        if "technical_contact_id" in payload_dict:
             update_params["technical_contact_id"] = updates.technical_contact_id
-        if updates.notes is not None:
+        if "notes" in payload_dict:
             update_params["notes"] = updates.notes
-        if updates.status is not None:
+        if "status" in payload_dict:
             update_params["status"] = updates.status
         
         # Use existing service method which has all the validation

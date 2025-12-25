@@ -2934,8 +2934,8 @@
             setContactTriggerDefault(eventId, role, 'table');
             setContactTriggerDefault(eventId, role, 'panel');
             markDirty(eventId, `${role}_contact_id`, null);
-            markDirty(eventId, `${role}_name`, '');
-            markDirty(eventId, `${role}_phone`, '');
+            markDirty(eventId, `${role}_name`, null);
+            markDirty(eventId, `${role}_phone`, null);
             showToast('איש הקשר הוסר מהאירוע (לא נמחק ממערכת הקשר)', 'info');
         }
 
