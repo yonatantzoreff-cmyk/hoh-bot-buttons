@@ -1988,6 +1988,7 @@
         let isMuted = false;
         const STATUS_OPTIONS = ['draft', 'pending', 'confirmed', 'cancelled', 'follow_up', 'contact_required'];
         let activeStatusMenu = null;
+        const RESEND_CONFIRM_MESSAGE = 'הודעה נשלחה כבר, האם ברצונך לשלוח שוב?';
         
         // Constants
         const EVENT_LOAD_TIMEOUT = 1000; // ms to wait for events to load before scrolling
@@ -2916,6 +2917,8 @@
 
         function renderSidePanelContent(event) {
             const statusOptions = STATUS_OPTIONS.map(opt => `<option value="${opt}" ${opt === (event.status || 'draft') ? 'selected' : ''}>${opt}</option>`).join('');
+            const initTooltip = event.init_sent_at ? `נשלח לאחרונה: ${escapeHtml(event.init_sent_at_display || '')}` : 'שליחת איניט';
+            const techReminderTooltip = event.tech_reminder_sent_at ? `נשלח לאחרונה: ${escapeHtml(event.tech_reminder_sent_at_display || '')}` : 'תזכורת טכנאי';
             return `
                 <div class="panel-section">
                     <h4>General Info</h4>
@@ -2984,8 +2987,8 @@
                 <div class="panel-section">
                     <h4>Actions</h4>
                     <div class="panel-actions">
-                        <button class="btn btn-primary" onclick="sendWhatsApp(${event.event_id})">שליחת איניט</button>
-                        <button class="btn btn-secondary" onclick="sendTechReminder(${event.event_id})">תזכורת טכנאי</button>
+                        <button class="btn btn-primary" onclick="sendWhatsApp(${event.event_id})" title="${initTooltip}">שליחת איניט</button>
+                        <button class="btn btn-secondary" onclick="sendTechReminder(${event.event_id})" title="${techReminderTooltip}">תזכורת טכנאי</button>
                         <button class="btn btn-secondary" onclick="toggleRowDetails(${event.event_id})">ניהול עובדים</button>
                         <button class="btn btn-primary" onclick="saveChanges()">שמור</button>
                         <button class="btn btn-danger" onclick="deleteEvent(${event.event_id})">מחיקה</button>
@@ -3551,14 +3554,33 @@
         }
 
         async function sendShiftReminder(eventId, shiftId) {
+            const shifts = loadedShifts.get(eventId) || [];
+            const shift = shifts.find(s => s.shift_id === shiftId);
+            if (shift?.reminder_24h_sent_at) {
+                showConfirmModal('אישור שליחה', RESEND_CONFIRM_MESSAGE, () => sendShiftReminderRequest(eventId, shiftId));
+                return;
+            }
+            await sendShiftReminderRequest(eventId, shiftId);
+        }
+
+        async function sendShiftReminderRequest(eventId, shiftId) {
             try {
                 const response = await fetch(`/api/shifts/${shiftId}/send-reminder?org_id=${ORG_ID}`, {
                     method: 'POST',
                 });
 
                 if (response.ok) {
+                    const timestamps = getCurrentIsraelTimestampDisplay();
+                    const shifts = loadedShifts.get(eventId) || [];
+                    const updatedShifts = shifts.map(s => s.shift_id === shiftId ? {
+                        ...s,
+                        reminder_24h_sent_at: timestamps.iso,
+                        reminder_sent_display: timestamps.display
+                    } : s);
+                    loadedShifts.set(eventId, updatedShifts);
+
                     // Optimistic update - change icon to blue (sent)
-                    const btn = document.querySelector(`tr[data-shift-id="${shiftId}"] .action-icon.whatsapp`);
+                    const btn = document.querySelector(`tr[data-shift-id="${shiftId}"] .action-icon.reminder`);
                     if (btn) {
                         btn.classList.add('sent');
                         btn.title = 'נשלח בעבר – שלח שוב';
@@ -3617,7 +3639,24 @@
 
         // Send technical reminder with opening employee details
         async function sendTechReminder(eventId) {
+            const eventData = eventsCache.get(eventId);
+            if (eventData?.tech_reminder_sent_at) {
+                showConfirmModal('אישור שליחה', RESEND_CONFIRM_MESSAGE, () => sendTechReminderRequest(eventId));
+                return;
+            }
+            await sendTechReminderRequest(eventId);
+        }
+
+        async function sendTechReminderRequest(eventId) {
             try {
+                const timestamps = getCurrentIsraelTimestampDisplay();
+                const currentEventData = eventsCache.get(eventId) || {};
+                eventsCache.set(eventId, {
+                    ...currentEventData,
+                    tech_reminder_sent_at: timestamps.iso,
+                    tech_reminder_sent_at_display: timestamps.display
+                });
+
                 // Send directly without confirmation dialog
                 const form = document.createElement('form');
                 form.method = 'POST';
@@ -3632,12 +3671,29 @@
 
         // Send WhatsApp (PHASE 3 - Task 5B)
         async function sendWhatsApp(eventId) {
+            const eventData = eventsCache.get(eventId);
+            if (eventData?.init_sent_at) {
+                showConfirmModal('אישור שליחה', RESEND_CONFIRM_MESSAGE, () => sendWhatsAppRequest(eventId));
+                return;
+            }
+            await sendWhatsAppRequest(eventId);
+        }
+
+        async function sendWhatsAppRequest(eventId) {
             try {
                 const response = await fetch(`/api/events/${eventId}/send-whatsapp?org_id=${ORG_ID}`, {
                     method: 'POST',
                 });
 
                 if (response.ok) {
+                    const timestamps = getCurrentIsraelTimestampDisplay();
+                    const currentEventData = eventsCache.get(eventId) || {};
+                    eventsCache.set(eventId, {
+                        ...currentEventData,
+                        init_sent_at: timestamps.iso,
+                        init_sent_at_display: timestamps.display
+                    });
+
                     // Optimistic update - change icon to blue (sent)
                     const btn = document.querySelector(`tr[data-event-id="${eventId}"] .action-icon.whatsapp`);
                     if (btn) {
@@ -4257,6 +4313,14 @@
             const div = document.createElement('div');
             div.textContent = text || '';
             return div.innerHTML;
+        }
+
+        function getCurrentIsraelTimestampDisplay() {
+            const now = new Date();
+            return {
+                iso: now.toISOString(),
+                display: now.toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', hour12: false })
+            };
         }
 
         // ===================================
