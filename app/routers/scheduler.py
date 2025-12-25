@@ -255,6 +255,15 @@ async def update_scheduler_settings(
     return settings_repo.get_or_create_settings(org_id)
 
 
+class SkippedJobSample(BaseModel):
+    """Sample of a skipped job for debugging."""
+    event_id: int
+    event_name: str
+    message_type: str
+    reason: str
+    count: Optional[int] = None  # For shift aggregations
+
+
 class FetchResponse(BaseModel):
     """Response for fetch action."""
     success: bool
@@ -264,6 +273,9 @@ class FetchResponse(BaseModel):
     jobs_created: int
     jobs_updated: int
     jobs_blocked: int
+    jobs_skipped: int = 0
+    skipped_reasons: dict[str, int] = {}
+    skipped_samples: list[SkippedJobSample] = []
     errors_count: int = 0
     errors: list[str] = []
 
@@ -280,6 +292,7 @@ async def fetch_future_events(
     2. For each event, creates/updates INIT and TECH_REMINDER jobs
     3. For each event, creates/updates SHIFT_REMINDER jobs for all shifts
     4. Returns counts of operations performed and any errors encountered
+    5. Tracks skip reasons and samples for debugging
     
     This operation is idempotent - running it multiple times won't create duplicates.
     """
@@ -293,8 +306,14 @@ async def fetch_future_events(
         jobs_created = 0
         jobs_updated = 0
         jobs_blocked = 0
+        jobs_skipped = 0
         shifts_scanned = 0
         errors = []
+        
+        # Track skip reasons
+        skipped_reasons = {}
+        skipped_samples = []
+        MAX_SKIP_SAMPLES = 10
         
         logger.info(f"Fetching scheduler jobs for {events_scanned} future events (org_id={org_id})")
         
@@ -306,12 +325,13 @@ async def fetch_future_events(
             event_created = 0
             event_updated = 0
             event_blocked = 0
+            event_skipped = 0
             
             try:
                 # Build/update event-based jobs (INIT + TECH_REMINDER)
                 event_result = build_or_update_jobs_for_event(org_id, event_id)
                 
-                # Count jobs created/updated/blocked for this event
+                # Count jobs created/updated/blocked/skipped for this event
                 if event_result.get("init_status") == "created":
                     jobs_created += 1
                     event_created += 1
@@ -321,6 +341,20 @@ async def fetch_future_events(
                 elif event_result.get("init_status") == "blocked":
                     jobs_blocked += 1
                     event_blocked += 1
+                elif event_result.get("init_status") == "skipped":
+                    jobs_skipped += 1
+                    event_skipped += 1
+                    skip_reason = event_result.get("init_skip_reason", "unknown")
+                    skipped_reasons[skip_reason] = skipped_reasons.get(skip_reason, 0) + 1
+                    
+                    # Add to samples if under limit
+                    if len(skipped_samples) < MAX_SKIP_SAMPLES:
+                        skipped_samples.append(SkippedJobSample(
+                            event_id=event_id,
+                            event_name=event_name,
+                            message_type="INIT",
+                            reason=skip_reason
+                        ))
                 
                 if event_result.get("tech_status") == "created":
                     jobs_created += 1
@@ -331,6 +365,20 @@ async def fetch_future_events(
                 elif event_result.get("tech_status") == "blocked":
                     jobs_blocked += 1
                     event_blocked += 1
+                elif event_result.get("tech_status") == "skipped":
+                    jobs_skipped += 1
+                    event_skipped += 1
+                    skip_reason = event_result.get("tech_skip_reason", "unknown")
+                    skipped_reasons[skip_reason] = skipped_reasons.get(skip_reason, 0) + 1
+                    
+                    # Add to samples if under limit
+                    if len(skipped_samples) < MAX_SKIP_SAMPLES:
+                        skipped_samples.append(SkippedJobSample(
+                            event_id=event_id,
+                            event_name=event_name,
+                            message_type="TECH_REMINDER",
+                            reason=skip_reason
+                        ))
                 
                 # Build/update shift-based jobs (SHIFT_REMINDER)
                 shifts_result = build_or_update_jobs_for_shifts(org_id, event_id)
@@ -340,19 +388,37 @@ async def fetch_future_events(
                     shift_created = shifts_result.get("created", 0)
                     shift_updated = shifts_result.get("updated", 0)
                     shift_blocked = shifts_result.get("blocked", 0)
+                    shift_skipped = shifts_result.get("skipped", 0)
                     
                     jobs_created += shift_created
                     jobs_updated += shift_updated
                     jobs_blocked += shift_blocked
+                    jobs_skipped += shift_skipped
                     
                     event_created += shift_created
                     event_updated += shift_updated
                     event_blocked += shift_blocked
+                    event_skipped += shift_skipped
+                    
+                    # Add shift skip reasons
+                    shift_skip_reasons = shifts_result.get("skip_reasons", {})
+                    for reason, count in shift_skip_reasons.items():
+                        skipped_reasons[reason] = skipped_reasons.get(reason, 0) + count
+                        
+                        # Add samples for shift skips (simplified - we don't have individual shift details here)
+                        if len(skipped_samples) < MAX_SKIP_SAMPLES and count > 0:
+                            skipped_samples.append(SkippedJobSample(
+                                event_id=event_id,
+                                event_name=event_name,
+                                message_type="SHIFT_REMINDER",
+                                reason=reason,
+                                count=count
+                            ))
                 
                 # Log detailed results for this event
                 logger.info(
                     f"scheduler fetch: event_id={event_id}, name='{event_name}', "
-                    f"created={event_created}, updated={event_updated}, blocked={event_blocked}"
+                    f"created={event_created}, updated={event_updated}, blocked={event_blocked}, skipped={event_skipped}"
                 )
                     
             except Exception as e:
@@ -371,7 +437,7 @@ async def fetch_future_events(
         logger.info(
             f"Fetch complete: events_scanned={events_scanned}, shifts_scanned={shifts_scanned}, "
             f"jobs_created={jobs_created}, jobs_updated={jobs_updated}, jobs_blocked={jobs_blocked}, "
-            f"errors_count={errors_count}"
+            f"jobs_skipped={jobs_skipped}, errors_count={errors_count}"
         )
         
         return FetchResponse(
@@ -382,6 +448,9 @@ async def fetch_future_events(
             jobs_created=jobs_created,
             jobs_updated=jobs_updated,
             jobs_blocked=jobs_blocked,
+            jobs_skipped=jobs_skipped,
+            skipped_reasons=skipped_reasons,
+            skipped_samples=skipped_samples,
             errors_count=errors_count,
             errors=errors_to_return,
         )

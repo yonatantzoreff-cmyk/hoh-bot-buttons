@@ -325,5 +325,199 @@ def test_cleanup_endpoint_validates_days_parameter(mock_get_session):
     assert result["success"] is True
 
 
+@patch("app.routers.scheduler.EventRepository")
+@patch("app.services.scheduler_job_builder.EventRepository")
+@patch("app.services.scheduler_job_builder.ScheduledMessageRepository")
+@patch("app.services.scheduler_job_builder.SchedulerSettingsRepository")
+@patch("app.services.scheduler_job_builder.ContactRepository")
+def test_fetch_endpoint_tracks_skip_reasons(
+    mock_contact_repo,
+    mock_settings_repo,
+    mock_scheduled_repo,
+    mock_event_repo_builder,
+    mock_event_repo_api,
+):
+    """Test that fetch endpoint tracks skip reasons correctly."""
+    # Setup mocks - events with various skip scenarios
+    future_date = date.today() + timedelta(days=30)
+    mock_events = [
+        {"event_id": 1, "event_date": future_date, "name": "Event with no producer"},
+        {"event_id": 2, "event_date": future_date, "name": "Event disabled"},
+    ]
+    
+    # Event 1: has event but missing producer phone (should create blocked job)
+    mock_event_1 = {
+        "event_id": 1,
+        "event_date": future_date,
+        "producer_contact_id": 100,
+        "technical_contact_id": None,
+    }
+    
+    # Event 2: normal event (for comparison)
+    mock_event_2 = {
+        "event_id": 2,
+        "event_date": future_date,
+        "producer_contact_id": 200,
+        "technical_contact_id": None,
+    }
+    
+    # Producer with no phone
+    mock_producer_no_phone = {"contact_id": 100, "phone": None}
+    # Producer with phone
+    mock_producer_with_phone = {"contact_id": 200, "phone": "+972501234567"}
+    
+    # Settings with TECH disabled
+    mock_settings = {
+        "enabled_global": True,
+        "enabled_init": True,
+        "enabled_tech": False,  # TECH disabled
+        "enabled_shift": False,
+        "init_days_before": 28,
+        "init_send_time": "10:00",
+    }
+    
+    # Configure mocks
+    mock_event_repo_api_instance = Mock()
+    mock_event_repo_api_instance.list_future_events_for_org.return_value = mock_events
+    mock_event_repo_api.return_value = mock_event_repo_api_instance
+    
+    mock_event_repo_builder_instance = Mock()
+    def get_event_side_effect(org_id, event_id):
+        if event_id == 1:
+            return mock_event_1
+        elif event_id == 2:
+            return mock_event_2
+        return None
+    mock_event_repo_builder_instance.get_event_by_id.side_effect = get_event_side_effect
+    mock_event_repo_builder.return_value = mock_event_repo_builder_instance
+    
+    mock_contact_repo_instance = Mock()
+    def get_contact_side_effect(org_id, contact_id):
+        if contact_id == 100:
+            return mock_producer_no_phone
+        elif contact_id == 200:
+            return mock_producer_with_phone
+        return None
+    mock_contact_repo_instance.get_contact_by_id.side_effect = get_contact_side_effect
+    mock_contact_repo.return_value = mock_contact_repo_instance
+    
+    mock_settings_repo_instance = Mock()
+    mock_settings_repo_instance.get_or_create_settings.return_value = mock_settings
+    mock_settings_repo.return_value = mock_settings_repo_instance
+    
+    mock_scheduled_repo_instance = Mock()
+    mock_scheduled_repo_instance.find_job_for_event.return_value = None  # No existing jobs
+    mock_scheduled_repo_instance.create_scheduled_message.return_value = "job_123"
+    mock_scheduled_repo_instance.update_status.return_value = None
+    mock_scheduled_repo.return_value = mock_scheduled_repo_instance
+    
+    # Call fetch endpoint
+    response = client.post("/api/scheduler/fetch?org_id=1")
+    
+    # Assertions
+    assert response.status_code == 200
+    result = response.json()
+    assert result["success"] is True
+    assert result["events_scanned"] == 2
+    
+    # Should have:
+    # - Event 1: INIT blocked (missing phone), TECH skipped (disabled)
+    # - Event 2: INIT created, TECH skipped (disabled)
+    assert result["jobs_created"] == 1  # Event 2 INIT
+    assert result["jobs_blocked"] == 1  # Event 1 INIT (created as blocked)
+    assert result["jobs_skipped"] >= 2  # Both TECH jobs skipped
+    
+    # Check skip reasons are tracked
+    assert "skipped_reasons" in result
+    assert "disabled_by_settings" in result["skipped_reasons"]
+    assert result["skipped_reasons"]["disabled_by_settings"] >= 2  # Both TECH jobs
+    
+    # Check skip samples are provided
+    assert "skipped_samples" in result
+    assert len(result["skipped_samples"]) > 0
+
+
+@patch("app.routers.scheduler.EventRepository")
+@patch("app.services.scheduler_job_builder.EventRepository")
+@patch("app.services.scheduler_job_builder.ScheduledMessageRepository")
+@patch("app.services.scheduler_job_builder.SchedulerSettingsRepository")
+@patch("app.services.scheduler_job_builder.ContactRepository")
+def test_fetch_endpoint_creates_blocked_jobs_for_missing_phone(
+    mock_contact_repo,
+    mock_settings_repo,
+    mock_scheduled_repo,
+    mock_event_repo_builder,
+    mock_event_repo_api,
+):
+    """Test that fetch creates blocked jobs when phone is missing (not skip)."""
+    # Setup mocks - event with missing producer phone
+    future_date = date.today() + timedelta(days=30)
+    mock_events = [
+        {"event_id": 1, "event_date": future_date, "name": "Event missing phone"},
+    ]
+    
+    mock_event_details = {
+        "event_id": 1,
+        "event_date": future_date,
+        "producer_contact_id": 100,
+        "technical_contact_id": None,
+    }
+    
+    # Producer with no phone
+    mock_producer = {"contact_id": 100, "phone": None}
+    
+    mock_settings = {
+        "enabled_global": True,
+        "enabled_init": True,
+        "enabled_tech": False,
+        "enabled_shift": False,
+        "init_days_before": 28,
+        "init_send_time": "10:00",
+    }
+    
+    # Configure mocks
+    mock_event_repo_api_instance = Mock()
+    mock_event_repo_api_instance.list_future_events_for_org.return_value = mock_events
+    mock_event_repo_api.return_value = mock_event_repo_api_instance
+    
+    mock_event_repo_builder_instance = Mock()
+    mock_event_repo_builder_instance.get_event_by_id.return_value = mock_event_details
+    mock_event_repo_builder.return_value = mock_event_repo_builder_instance
+    
+    mock_contact_repo_instance = Mock()
+    mock_contact_repo_instance.get_contact_by_id.return_value = mock_producer
+    mock_contact_repo.return_value = mock_contact_repo_instance
+    
+    mock_settings_repo_instance = Mock()
+    mock_settings_repo_instance.get_or_create_settings.return_value = mock_settings
+    mock_settings_repo.return_value = mock_settings_repo_instance
+    
+    mock_scheduled_repo_instance = Mock()
+    mock_scheduled_repo_instance.find_job_for_event.return_value = None
+    mock_scheduled_repo_instance.create_scheduled_message.return_value = "job_123"
+    mock_scheduled_repo.return_value = mock_scheduled_repo_instance
+    
+    # Call fetch endpoint
+    response = client.post("/api/scheduler/fetch?org_id=1")
+    
+    # Assertions
+    assert response.status_code == 200
+    result = response.json()
+    assert result["success"] is True
+    
+    # IMPORTANT: Missing phone should create a BLOCKED job, not skip
+    assert result["jobs_blocked"] == 1
+    assert result["jobs_created"] == 0  # Not counted as created since it's blocked
+    
+    # Verify create_scheduled_message was called (job row created)
+    mock_scheduled_repo_instance.create_scheduled_message.assert_called()
+    
+    # Verify update_status was called with blocked status
+    mock_scheduled_repo_instance.update_status.assert_called()
+    call_args = mock_scheduled_repo_instance.update_status.call_args
+    assert call_args[1]["status"] == "blocked"
+    assert "Missing recipient phone" in call_args[1]["last_error"]
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

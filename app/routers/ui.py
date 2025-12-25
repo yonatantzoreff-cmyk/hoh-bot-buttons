@@ -86,7 +86,7 @@ def _render_page(title: str, body: str) -> str:
         <main class="container py-4">
           $body
         </main>
-        <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-3gJwYpJPgH+U5Q5J5r3bJfFqvF8S2RkG8h6fWK3knlc=" crossorigin="anonymous"></script>
+        <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
         <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
         <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
         <script src="https://cdn.datatables.net/colreorder/1.6.3/js/dataTables.colReorder.min.js"></script>
@@ -2950,7 +2950,7 @@ async def scheduler_page() -> HTMLResponse:
     let currentSettings = {};
     
     // Constants for localization
-    const MISSING_RECIPIENT_TEXT = 'חסר'; // Hebrew: "Missing"
+    const MISSING_RECIPIENT_TEXT = 'חסר'; // Hebrew for Missing
     
     // Load settings on page load
     async function loadSettings() {
@@ -2975,7 +2975,7 @@ async def scheduler_page() -> HTMLResponse:
       } catch (error) {
         console.error('Error loading settings:', error);
         // Show user-friendly error
-        alert(`⚠️ Warning: Could not load scheduler settings.\n${error.message}\n\nSome features may not work correctly.`);
+        alert(`Warning: Could not load scheduler settings.\n${error.message}\n\nSome features may not work correctly.`);
       }
     }
     
@@ -3025,7 +3025,7 @@ async def scheduler_page() -> HTMLResponse:
       const fetchBtn = document.getElementById('fetchBtn');
       if (!fetchBtn) {
         console.error('Fetch button not found!');
-        alert('❌ Error: Fetch button not found in DOM');
+        alert('Error: Fetch button not found in DOM');
         return;
       }
       
@@ -3051,7 +3051,7 @@ async def scheduler_page() -> HTMLResponse:
         
         // Show success message with counts
         alert(
-          `✅ Fetch completed!\n\n` +
+          `Fetch completed!\n\n` +
           `Events scanned: ${result.events_scanned}\n` +
           `Shifts scanned: ${result.shifts_scanned}\n` +
           `Jobs created: ${result.jobs_created}\n` +
@@ -3065,7 +3065,7 @@ async def scheduler_page() -> HTMLResponse:
         
       } catch (error) {
         console.error('Error fetching future events:', error);
-        alert(`❌ Error fetching future events:\n${error.message}\n\nCheck browser console for details.`);
+        alert(`Error fetching future events:\n${error.message}\n\nCheck browser console for details.`);
       } finally {
         fetchBtn.disabled = false;
         fetchBtn.innerHTML = '🔄 Fetch Future Events';
@@ -3094,14 +3094,14 @@ async def scheduler_page() -> HTMLResponse:
         const result = await response.json();
         
         // Show success message
-        alert(`✅ Cleanup completed!\n\nDeleted ${result.deleted_count} old log entries.`);
+        alert(`Cleanup completed!\n\nDeleted ${result.deleted_count} old log entries.`);
         
         // Reload all jobs to reflect the cleanup
         loadAllJobs();
         
       } catch (error) {
         console.error('Error cleaning up past logs:', error);
-        alert('❌ Error cleaning up past logs. See console for details.');
+        alert('Error cleaning up past logs. See console for details.');
       } finally {
         cleanupBtn.disabled = false;
         cleanupBtn.innerHTML = '🗑️ Cleanup Old Logs';
@@ -3163,7 +3163,7 @@ async def scheduler_page() -> HTMLResponse:
         
         if (jobs.length === 0) {
           // Show empty state
-          emptyEl.innerHTML = '<p class="text-muted">אין אירועים עתידיים. לחץ "Fetch Future Events" כדי לסנכרן.</p>';
+          emptyEl.innerHTML = '<p class="text-muted">אין אירועים עתידיים. לחץ &quot;Fetch Future Events&quot; כדי לסנכרן.</p>';
           emptyEl.classList.remove('d-none');
         } else {
           tableEl.classList.remove('d-none');
@@ -3462,7 +3462,7 @@ async def scheduler_page() -> HTMLResponse:
         console.log('Scheduler page initialization complete');
       } catch (error) {
         console.error('Error during page initialization:', error);
-        alert(`❌ Error initializing scheduler page:\n${error.message}\n\nCheck browser console for details.`);
+        alert(`Error initializing scheduler page:\n${error.message}\n\nCheck browser console for details.`);
       }
     });
     
