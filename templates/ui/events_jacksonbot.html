@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>JacksonBot - Events Management</title>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     
     <style>
         /* CSS Variables for Light/Dark Mode */
@@ -1924,6 +1925,9 @@
         <div class="header-left">
             <h1>JacksonBot 🤖</h1>
         </div>
+        <div style="flex: 1; display: flex; justify-content: center; align-items: center;">
+            <small id="lastUpdated" style="color: var(--text-muted); font-size: 0.75rem;">Loading...</small>
+        </div>
         <div class="header-actions">
             <div style="position: relative;">
                 <div class="notification-bell" id="notificationBell" onclick="toggleNotificationPanel()">
@@ -1978,7 +1982,7 @@
         <a href="/ui/availability" class="hamburger-menu-item" onclick="closeHamburgerMenu()">✅ Availability</a>
         <a href="/ui/scheduler" class="hamburger-menu-item" onclick="closeHamburgerMenu()">⏰ Scheduler</a>
     </nav>
-
+    
     <div class="month-selector">
         <div class="month-selector-controls">
             <div class="month-nav">
@@ -2111,6 +2115,9 @@
         const MONTH_NAV_STEP = 2;
         const SCROLL_RETRY_LIMIT = 10;
         const SCROLL_RETRY_DELAY = 300;
+        const AUTO_REFRESH_INTERVAL = 5000; // 5 seconds
+        let autoRefreshTimer = null;
+        let lastUpdatedTime = null;
         const TABLE_COLUMNS = [
             { key: 'status', label: 'Status' },
             { key: 'info', label: 'Date / Day / Event' },
@@ -2167,6 +2174,9 @@
             selectMonth(defaultMonth);
             connectSSE();
             initNotifications();
+            
+            // Start auto-refresh
+            startAutoRefresh();
             
             // Check for success message after sending tech reminder
             if (urlParams.get('reminder_sent') === 'true') {
@@ -2439,15 +2449,74 @@
                 const response = await fetch(`/api/events?month=${month}&org_id=${ORG_ID}`);
                 const data = await response.json();
                 renderEvents(data);
+                updateLastUpdatedTimestamp();
             } catch (error) {
                 console.error('Failed to load events:', error);
                 showToast('Failed to load events', 'error');
+            }
+        }
+        
+        // Update last updated timestamp
+        function updateLastUpdatedTimestamp() {
+            lastUpdatedTime = new Date();
+            const timeString = lastUpdatedTime.toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            const dateString = lastUpdatedTime.toLocaleDateString('en-US', {
+                month: 'short',
+                day: 'numeric'
+            });
+            document.getElementById('lastUpdated').textContent = `Last updated: ${dateString} ${timeString}`;
+        }
+        
+        // Start auto-refresh
+        function startAutoRefresh() {
+            // Clear any existing timer
+            if (autoRefreshTimer) {
+                clearInterval(autoRefreshTimer);
+            }
+            
+            // Set up new timer to refresh every 5 seconds
+            autoRefreshTimer = setInterval(() => {
+                // Only refresh if there are no unsaved changes
+                if (dirtyRows.size === 0 && currentMonth) {
+                    console.log('Auto-refreshing events...');
+                    loadEvents(currentMonth);
+                }
+            }, AUTO_REFRESH_INTERVAL);
+        }
+        
+        // Stop auto-refresh
+        function stopAutoRefresh() {
+            if (autoRefreshTimer) {
+                clearInterval(autoRefreshTimer);
+                autoRefreshTimer = null;
             }
         }
 
         // Render Events
         function renderEvents(data) {
             const container = document.getElementById('eventsContainer');
+            
+            // Close any open dropdown menus before re-rendering
+            if (activeColumnMenu) {
+                activeColumnMenu.classList.remove('open');
+                activeColumnMenu = null;
+            }
+            if (activeStatusMenu) {
+                closeStatusMenu();
+            }
+            
+            // Save state of expanded row details before re-rendering
+            const expandedRows = new Set();
+            document.querySelectorAll('.row-details.visible').forEach(row => {
+                const eventId = row.getAttribute('data-event-id');
+                if (eventId) {
+                    expandedRows.add(parseInt(eventId));
+                }
+            });
             
             if (!data.halls || Object.keys(data.halls).length === 0) {
                 container.innerHTML = `
@@ -2560,6 +2629,22 @@
             if (pendingNavigationTarget && pendingNavigationTarget.eventId && eventsCache.has(pendingNavigationTarget.eventId)) {
                 setTimeout(() => scrollAndHighlightEvent(pendingNavigationTarget.eventId), NAVIGATION_SCROLL_DELAY);
             }
+
+            // Restore expanded row details state
+            expandedRows.forEach(eventId => {
+                const detailsRow = document.getElementById(`details-${eventId}`);
+                const expanderBtn = document.getElementById(`expander-${eventId}`);
+                if (detailsRow && expanderBtn) {
+                    detailsRow.classList.add('visible');
+                    expanderBtn.classList.add('expanded');
+                    // Reload shifts for this expanded row
+                    if (loadedShifts.has(eventId)) {
+                        renderShiftsTable(eventId, loadedShifts.get(eventId));
+                    } else {
+                        loadShiftsForEvent(eventId);
+                    }
+                }
+            });
 
             // Note: Shifts are loaded on-demand when user expands the section
         }
@@ -4946,6 +5031,7 @@
 
         // Cleanup on page unload
         window.addEventListener('beforeunload', () => {
+            stopAutoRefresh();
             if (eventSource) {
                 eventSource.close();
             }
