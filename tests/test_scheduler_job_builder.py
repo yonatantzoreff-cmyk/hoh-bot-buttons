@@ -347,9 +347,11 @@ def test_build_jobs_for_event_skips_already_sent(
     # Run the function
     result = build_or_update_jobs_for_event(org_id=1, event_id=1)
     
-    # Verify
+    # Verify jobs are skipped because they were already sent
     assert result["init_status"] == "skipped"
+    assert result["init_skip_reason"] == "already_sent_or_failed"
     assert result["tech_status"] == "skipped"
+    assert result["tech_skip_reason"] == "already_sent_or_failed"
     
     # Verify no updates were made
     assert mock_scheduled_repo_instance.update_send_at.call_count == 0
