@@ -3147,6 +3147,7 @@ async def scheduler_page() -> HTMLResponse:
     const ORG_ID = 1;
     let countdownInterval = null;
     let currentSettings = {};
+    let isInitializing = true; // Flag to prevent saving during initialization
     const jobsCache = {
       INIT: [],
       TECH_REMINDER: [],
@@ -3359,6 +3360,12 @@ async def scheduler_page() -> HTMLResponse:
     
     // Save UI state to localStorage
     function saveUIState() {
+      // Don't save during initial page load
+      if (isInitializing) {
+        console.log('Skipping saveUIState during initialization');
+        return;
+      }
+      
       console.log('=== Saving UI State to localStorage ===');
       
       // Save active tab
@@ -4297,6 +4304,10 @@ async def scheduler_page() -> HTMLResponse:
           await loadAllJobs();
           console.log('All jobs loaded, setting up sort handlers...');
           setupSortHandlers();
+          
+          // Initialization complete - now allow saving state
+          isInitializing = false;
+          console.log('Initialization complete - state persistence enabled');
         }, 100);
         
         // Start countdown updates
