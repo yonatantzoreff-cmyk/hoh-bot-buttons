@@ -2501,6 +2501,15 @@
         function renderEvents(data) {
             const container = document.getElementById('eventsContainer');
             
+            // Close any open dropdown menus before re-rendering
+            if (activeColumnMenu) {
+                activeColumnMenu.classList.remove('open');
+                activeColumnMenu = null;
+            }
+            if (activeStatusMenu) {
+                closeStatusMenu();
+            }
+            
             // Save state of expanded row details before re-rendering
             const expandedRows = new Set();
             document.querySelectorAll('.row-details.visible').forEach(row => {
