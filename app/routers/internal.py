@@ -16,45 +16,29 @@ router = APIRouter(prefix="/internal", tags=["internal"])
 
 
 def verify_scheduler_token(authorization: Annotated[str, Header()] = None):
-    """
-    Verify the scheduler token from Authorization header.
-    
-    Raises:
-        HTTPException: 500 if token not configured, 401 if invalid/missing.
-    """
-    # Check if token is configured
     if not is_scheduler_token_configured():
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Scheduler token not configured"
-        )
-    
-    # Check if Authorization header is provided
+        raise HTTPException(status_code=500, detail="Scheduler token not configured")
+
+    logger.info("Scheduler auth header present=%s", bool(authorization))
+    if authorization:
+        logger.info("Scheduler auth header raw=%r", authorization[:80])  # לא להדפיס הכל
+
     if not authorization:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing authorization header"
-        )
-    
-    # Extract token from Bearer scheme
+        raise HTTPException(status_code=401, detail="Missing authorization header")
+
     parts = authorization.split()
     if len(parts) != 2 or parts[0].lower() != "bearer":
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid authorization header format. Expected 'Bearer <token>'"
-        )
-    
+        raise HTTPException(status_code=401, detail="Invalid authorization header format. Expected 'Bearer <token>'")
+
     provided_token = parts[1]
     expected_token = get_scheduler_token()
-    
-    # Verify token
+    logger.info("Scheduler token len provided=%s expected=%s", len(provided_token), len(expected_token))
+
     if provided_token != expected_token:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid token"
-        )
-    
+        raise HTTPException(status_code=401, detail="Invalid token")
+
     return True
+
 
 
 @router.post("/run-scheduler")
