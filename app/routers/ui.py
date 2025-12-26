@@ -4191,10 +4191,12 @@ async def scheduler_page() -> HTMLResponse:
     }
     
     // Load all job tabs
-    function loadAllJobs() {
-      loadJobs('INIT');
-      loadJobs('TECH_REMINDER');
-      loadJobs('SHIFT_REMINDER');
+    async function loadAllJobs() {
+      await Promise.all([
+        loadJobs('INIT'),
+        loadJobs('TECH_REMINDER'),
+        loadJobs('SHIFT_REMINDER')
+      ]);
     }
     
     // Initial load
@@ -4291,8 +4293,9 @@ async def scheduler_page() -> HTMLResponse:
         
         // Load all jobs after UI state is restored (small delay to ensure checkboxes are set)
         console.log('Loading all jobs...');
-        setTimeout(() => {
-          loadAllJobs();
+        setTimeout(async () => {
+          await loadAllJobs();
+          console.log('All jobs loaded, setting up sort handlers...');
           setupSortHandlers();
         }, 100);
         
