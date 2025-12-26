@@ -124,6 +124,8 @@ async def list_scheduler_jobs(
     
     # Enrich each job with additional details
     enriched_jobs = []
+    shifts_repo = EmployeeShiftRepository()
+    
     for job in rows:
         enriched_job = dict(job)
         
@@ -143,6 +145,19 @@ async def list_scheduler_jobs(
         else:
             enriched_job["technical_name"] = None
             enriched_job["technical_phone"] = None
+        
+        # For TECH_REMINDER: Get the first employee from the event's shifts
+        if job.get("message_type") == "TECH_REMINDER" and job.get("event_id"):
+            event_shifts = shifts_repo.list_shifts_for_event(org_id=org_id, event_id=job["event_id"])
+            if event_shifts:
+                # Get the first shift (sorted by call_time in the repository)
+                first_shift = event_shifts[0]
+                employee_id = first_shift.get("employee_id")
+                if employee_id:
+                    employee = employees_repo.get_employee_by_id(org_id=org_id, employee_id=employee_id)
+                    if employee:
+                        enriched_job["first_employee_name"] = employee.get("name")
+                        enriched_job["first_employee_phone"] = employee.get("phone")
         
         # Resolve recipient preview (same logic as scheduler service)
         recipient_info = _preview_recipient(job, org_id, events_repo, contacts_repo, employees_repo)

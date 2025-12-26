@@ -3747,8 +3747,8 @@ async def scheduler_page() -> HTMLResponse:
     
     // Format employee name only (for TECH tab)
     function formatEmployeeName(job) {
-      // For TECH_REMINDER, show the opening employee name only (no phone)
-      const name = job.recipient_name || '';
+      // For TECH_REMINDER, show the first employee's name from employee_shifts (no phone)
+      const name = job.first_employee_name || '';
       return name ? `<span>${name}</span>` : '<span class="text-muted">—</span>';
     }
     
@@ -4203,9 +4203,12 @@ async def scheduler_page() -> HTMLResponse:
         console.log('Loading saved UI state...');
         loadUIState();
         
+        // Load all jobs after UI state is restored (small delay to ensure checkboxes are set)
         console.log('Loading all jobs...');
-        loadAllJobs();
-        setupSortHandlers();
+        setTimeout(() => {
+          loadAllJobs();
+          setupSortHandlers();
+        }, 100);
         
         // Start countdown updates
         console.log('Starting countdown interval...');
