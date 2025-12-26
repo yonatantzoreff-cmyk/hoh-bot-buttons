@@ -86,6 +86,7 @@ def _render_page(title: str, body: str) -> str:
         <main class="container py-4">
           $body
         </main>
+        <script src="https://unpkg.com/htmx.org@1.9.10"></script>
         <script src="https://code.jquery.com/jquery-3.7.1.min.js" integrity="sha256-/JqT3SQfawRcv/BIHPThkBvs0OEvtFFmqPF/lYI/Cxo=" crossorigin="anonymous"></script>
         <script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
         <script src="https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js"></script>
