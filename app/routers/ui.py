@@ -2860,8 +2860,11 @@ async def scheduler_page() -> HTMLResponse:
     
     <!-- Global Settings Card -->
     <div class="card mb-4 shadow-sm">
-      <div class="card-header bg-primary text-white">
+      <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
         <h5 class="mb-0">⚙️ Scheduler Settings</h5>
+        <button class="btn btn-sm btn-light" id="advancedSettingsBtn">
+          <i>⚙️</i> Advanced Settings
+        </button>
       </div>
       <div class="card-body">
         <div class="row align-items-center">
@@ -2889,6 +2892,88 @@ async def scheduler_page() -> HTMLResponse:
                 <label class="form-check-label" for="shiftToggle">SHIFT Reminders</label>
               </div>
             </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Advanced Settings Modal -->
+    <div class="modal fade" id="advancedSettingsModal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">⚙️ Advanced Scheduler Settings</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <div class="row g-4">
+              <!-- INIT Settings -->
+              <div class="col-md-4">
+                <div class="card h-100">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0">INIT Messages</h6>
+                  </div>
+                  <div class="card-body">
+                    <div class="mb-3">
+                      <label class="form-label">Days Before Event</label>
+                      <input type="number" class="form-control" id="initDaysBefore" min="0" max="90">
+                      <small class="text-muted">Send initial contact N days before event</small>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Send Time</label>
+                      <input type="time" class="form-control" id="initSendTime">
+                      <small class="text-muted">Time of day to send (Israel time)</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- TECH Settings -->
+              <div class="col-md-4">
+                <div class="card h-100">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0">TECH Reminders</h6>
+                  </div>
+                  <div class="card-body">
+                    <div class="mb-3">
+                      <label class="form-label">Days Before Event</label>
+                      <input type="number" class="form-control" id="techDaysBefore" min="0" max="30">
+                      <small class="text-muted">Send tech reminder N days before event</small>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Send Time</label>
+                      <input type="time" class="form-control" id="techSendTime">
+                      <small class="text-muted">Time of day to send (Israel time)</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              
+              <!-- SHIFT Settings -->
+              <div class="col-md-4">
+                <div class="card h-100">
+                  <div class="card-header bg-light">
+                    <h6 class="mb-0">SHIFT Reminders</h6>
+                  </div>
+                  <div class="card-body">
+                    <div class="mb-3">
+                      <label class="form-label">Days Before Shift</label>
+                      <input type="number" class="form-control" id="shiftDaysBefore" min="0" max="30">
+                      <small class="text-muted">Send shift reminder N days before shift</small>
+                    </div>
+                    <div class="mb-3">
+                      <label class="form-label">Send Time</label>
+                      <input type="time" class="form-control" id="shiftSendTime">
+                      <small class="text-muted">Time of day to send (Israel time)</small>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-primary" id="saveAdvancedSettingsBtn">Save Settings</button>
           </div>
         </div>
       </div>
@@ -2942,9 +3027,8 @@ async def scheduler_page() -> HTMLResponse:
                 <table class="table table-hover align-middle mb-0" id="init-table">
                   <thead class="table-light">
                     <tr>
-                      <th class="sortable" data-sort-key="event">Event <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort-key="producer">Producer <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort-key="technician">Technician <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="event_date">Event Date <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="event">Event Details <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="recipient">Recipient <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="send_at">Send Time <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="status">Status <span class="sort-indicator"></span></th>
@@ -2990,9 +3074,9 @@ async def scheduler_page() -> HTMLResponse:
                 <table class="table table-hover align-middle mb-0" id="tech-table">
                   <thead class="table-light">
                     <tr>
-                      <th class="sortable" data-sort-key="event">Event <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort-key="producer">Producer <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort-key="technician">Technician <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="event_date">Event Date <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="event">Event Details <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="employee">Employee <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="recipient">Recipient <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="send_at">Send Time <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="status">Status <span class="sort-indicator"></span></th>
@@ -3038,9 +3122,9 @@ async def scheduler_page() -> HTMLResponse:
                 <table class="table table-hover align-middle mb-0" id="shift-table">
                   <thead class="table-light">
                     <tr>
-                      <th class="sortable" data-sort-key="event">Event <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="event_date">Event Date <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="event">Event Details <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="employee">Employee <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort-key="shift_time">Shift Time <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="recipient">Recipient <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="send_at">Send Time <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="status">Status <span class="sort-indicator"></span></th>
@@ -3143,6 +3227,128 @@ async def scheduler_page() -> HTMLResponse:
     document.getElementById('shiftToggle').addEventListener('change', (e) => {
       updateSettings('enabled_shift', e.target.checked);
     });
+    
+    // Advanced Settings Modal
+    function openAdvancedSettings() {
+      // Populate modal with current settings
+      document.getElementById('initDaysBefore').value = currentSettings.init_days_before || 28;
+      document.getElementById('initSendTime').value = currentSettings.init_send_time || '10:00';
+      document.getElementById('techDaysBefore').value = currentSettings.tech_days_before || 2;
+      document.getElementById('techSendTime').value = currentSettings.tech_send_time || '12:00';
+      document.getElementById('shiftDaysBefore').value = currentSettings.shift_days_before || 1;
+      document.getElementById('shiftSendTime').value = currentSettings.shift_send_time || '12:00';
+      
+      // Open modal
+      const modal = new bootstrap.Modal(document.getElementById('advancedSettingsModal'));
+      modal.show();
+    }
+    
+    async function saveAdvancedSettings() {
+      try {
+        const updates = {
+          init_days_before: parseInt(document.getElementById('initDaysBefore').value),
+          init_send_time: document.getElementById('initSendTime').value,
+          tech_days_before: parseInt(document.getElementById('techDaysBefore').value),
+          tech_send_time: document.getElementById('techSendTime').value,
+          shift_days_before: parseInt(document.getElementById('shiftDaysBefore').value),
+          shift_send_time: document.getElementById('shiftSendTime').value,
+        };
+        
+        const response = await fetch(`/api/scheduler/settings?org_id=${ORG_ID}`, {
+          method: 'PUT',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(updates)
+        });
+        
+        if (response.ok) {
+          currentSettings = await response.json();
+          alert('✅ Settings saved successfully!');
+          // Close modal
+          const modal = bootstrap.Modal.getInstance(document.getElementById('advancedSettingsModal'));
+          modal.hide();
+        } else {
+          alert('❌ Failed to save settings');
+        }
+      } catch (error) {
+        console.error('Error saving advanced settings:', error);
+        alert('❌ Error saving settings: ' + error.message);
+      }
+    }
+    
+    // LocalStorage keys for persistence (Fix #4)
+    const STORAGE_KEY_PREFIX = 'scheduler_ui_';
+    const STORAGE_KEY_ACTIVE_TAB = STORAGE_KEY_PREFIX + 'active_tab';
+    const STORAGE_KEY_HIDE_SENT_INIT = STORAGE_KEY_PREFIX + 'hide_sent_init';
+    const STORAGE_KEY_HIDE_SENT_TECH = STORAGE_KEY_PREFIX + 'hide_sent_tech';
+    const STORAGE_KEY_HIDE_SENT_SHIFT = STORAGE_KEY_PREFIX + 'hide_sent_shift';
+    const STORAGE_KEY_SHOW_PAST_INIT = STORAGE_KEY_PREFIX + 'show_past_init';
+    const STORAGE_KEY_SHOW_PAST_TECH = STORAGE_KEY_PREFIX + 'show_past_tech';
+    const STORAGE_KEY_SHOW_PAST_SHIFT = STORAGE_KEY_PREFIX + 'show_past_shift';
+    
+    // Load saved UI state from localStorage
+    function loadUIState() {
+      // Load active tab
+      const savedTab = localStorage.getItem(STORAGE_KEY_ACTIVE_TAB) || 'init';
+      activateTab(savedTab);
+      
+      // Load checkbox states
+      const hideSentInit = localStorage.getItem(STORAGE_KEY_HIDE_SENT_INIT) === 'true';
+      const hideSentTech = localStorage.getItem(STORAGE_KEY_HIDE_SENT_TECH) === 'true';
+      const hideSentShift = localStorage.getItem(STORAGE_KEY_HIDE_SENT_SHIFT) === 'true';
+      const showPastInit = localStorage.getItem(STORAGE_KEY_SHOW_PAST_INIT) === 'true';
+      const showPastTech = localStorage.getItem(STORAGE_KEY_SHOW_PAST_TECH) === 'true';
+      const showPastShift = localStorage.getItem(STORAGE_KEY_SHOW_PAST_SHIFT) === 'true';
+      
+      document.getElementById('hideSentInit').checked = hideSentInit;
+      document.getElementById('hideSentTech').checked = hideSentTech;
+      document.getElementById('hideSentShift').checked = hideSentShift;
+      document.getElementById('showPastInit').checked = showPastInit;
+      document.getElementById('showPastTech').checked = showPastTech;
+      document.getElementById('showPastShift').checked = showPastShift;
+    }
+    
+    // Save UI state to localStorage
+    function saveUIState() {
+      // Save active tab
+      const activeTabButton = document.querySelector('.nav-link.active');
+      if (activeTabButton) {
+        const tabId = activeTabButton.id.replace('-tab', '');
+        localStorage.setItem(STORAGE_KEY_ACTIVE_TAB, tabId);
+      }
+      
+      // Save checkbox states
+      localStorage.setItem(STORAGE_KEY_HIDE_SENT_INIT, document.getElementById('hideSentInit').checked);
+      localStorage.setItem(STORAGE_KEY_HIDE_SENT_TECH, document.getElementById('hideSentTech').checked);
+      localStorage.setItem(STORAGE_KEY_HIDE_SENT_SHIFT, document.getElementById('hideSentShift').checked);
+      localStorage.setItem(STORAGE_KEY_SHOW_PAST_INIT, document.getElementById('showPastInit').checked);
+      localStorage.setItem(STORAGE_KEY_SHOW_PAST_TECH, document.getElementById('showPastTech').checked);
+      localStorage.setItem(STORAGE_KEY_SHOW_PAST_SHIFT, document.getElementById('showPastShift').checked);
+    }
+    
+    // Activate a specific tab
+    function activateTab(tabName) {
+      // Hide all panels
+      document.querySelectorAll('.tab-pane').forEach(panel => {
+        panel.classList.remove('show', 'active');
+      });
+      
+      // Deactivate all tab buttons
+      document.querySelectorAll('.nav-link').forEach(btn => {
+        btn.classList.remove('active');
+      });
+      
+      // Activate selected tab
+      const tabButton = document.getElementById(`${tabName}-tab`);
+      const tabPanel = document.getElementById(`${tabName}-panel`);
+      
+      if (tabButton && tabPanel) {
+        tabButton.classList.add('active');
+        tabPanel.classList.add('show', 'active');
+      }
+      
+      // Save state
+      saveUIState();
+    }
     
     // Sync future events to scheduler
     async function syncScheduler() {
@@ -3300,6 +3506,9 @@ async def scheduler_page() -> HTMLResponse:
           renderSortedTable(messageType);
           updateSortIndicators(messageType);
         }
+        
+        // Save UI state after loading
+        saveUIState();
       } catch (error) {
         console.error(`Error loading ${messageType} jobs:`, error);
         loadingEl.classList.add('d-none');
@@ -3310,6 +3519,8 @@ async def scheduler_page() -> HTMLResponse:
 
     function getSortValue(job, column, messageType) {
       switch (column) {
+        case 'event_date':
+          return job.event_date ? new Date(job.event_date).getTime() : 0;
         case 'event':
           return `${job.event_name || ''} ${job.event_date || ''}`.toLowerCase();
         case 'producer':
@@ -3353,28 +3564,37 @@ async def scheduler_page() -> HTMLResponse:
     // Render jobs into a table
     function renderJobsTable(jobs, tbody, messageType) {
       tbody.innerHTML = jobs.map(job => {
-        const eventSummary = formatEventSummary(job);
-        const producerInfo = formatContactInfo(job.producer_name, job.producer_phone);
-        const technicianInfo = formatContactInfo(job.technical_name, job.technical_phone);
+        const eventDate = formatEventDate(job);
+        const eventDetails = formatEventDetails(job);
         const recipientInfo = formatRecipientInfo(job);
         const sendTimeInfo = formatSendTime(job);
         const statusBadge = formatStatusBadge(job);
         const actions = formatActions(job);
         
-        // Different columns for SHIFT_REMINDER
+        // Different columns for each message type
         if (messageType === 'SHIFT_REMINDER') {
           const employeeInfo = formatContactInfo(job.recipient_name, job.recipient_phone);
-          const shiftTime = job.shift_call_time ? 
-            new Date(job.shift_call_time).toLocaleString('en-GB', {
-              dateStyle: 'short',
-              timeStyle: 'short'
-            }) : '—';
           
           return `
             <tr data-job-id="${job.job_id}" class="${job.recipient_missing ? 'table-warning' : ''}">
-              <td>${eventSummary}</td>
+              <td>${eventDate}</td>
+              <td>${eventDetails}</td>
               <td>${employeeInfo}</td>
-              <td>${shiftTime}</td>
+              <td>${recipientInfo}</td>
+              <td>${sendTimeInfo}</td>
+              <td>${statusBadge}</td>
+              <td class="text-nowrap">${actions}</td>
+            </tr>
+          `;
+        } else if (messageType === 'TECH_REMINDER') {
+          // TECH tab: Show event date, event details, employee name (opening employee), recipient phone
+          const employeeInfo = formatEmployeeName(job);
+          
+          return `
+            <tr data-job-id="${job.job_id}" class="${job.recipient_missing ? 'table-warning' : ''}">
+              <td>${eventDate}</td>
+              <td>${eventDetails}</td>
+              <td>${employeeInfo}</td>
               <td>${recipientInfo}</td>
               <td>${sendTimeInfo}</td>
               <td>${statusBadge}</td>
@@ -3382,11 +3602,11 @@ async def scheduler_page() -> HTMLResponse:
             </tr>
           `;
         } else {
+          // INIT tab: Show event date, event details, recipient phone
           return `
             <tr data-job-id="${job.job_id}" class="${job.recipient_missing ? 'table-warning' : ''}">
-              <td>${eventSummary}</td>
-              <td>${producerInfo}</td>
-              <td>${technicianInfo}</td>
+              <td>${eventDate}</td>
+              <td>${eventDetails}</td>
               <td>${recipientInfo}</td>
               <td>${sendTimeInfo}</td>
               <td>${statusBadge}</td>
@@ -3470,12 +3690,51 @@ async def scheduler_page() -> HTMLResponse:
       return name || phone || '<span class="text-muted">—</span>';
     }
     
-    // Format recipient info with missing indicator
+    // Format event date (separate column)
+    function formatEventDate(job) {
+      const date = job.event_date ? new Date(job.event_date).toLocaleDateString('en-GB', {
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric'
+      }) : '';
+      return date || '<span class="text-muted">—</span>';
+    }
+    
+    // Format event details (name, show time, load-in time)
+    function formatEventDetails(job) {
+      const name = job.event_name || 'Unknown Event';
+      const showTime = job.show_time ? new Date(job.show_time).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}) : '';
+      const loadIn = job.load_in_time ? new Date(job.load_in_time).toLocaleTimeString('en-GB', {hour: '2-digit', minute: '2-digit'}) : '';
+      
+      let details = `<strong>${name}</strong>`;
+      if (showTime || loadIn) {
+        details += '<br><small class="text-muted">';
+        if (showTime) details += `Show: ${showTime}`;
+        if (showTime && loadIn) details += ' | ';
+        if (loadIn) details += `Load-in: ${loadIn}`;
+        details += '</small>';
+      }
+      
+      return details;
+    }
+    
+    // Format employee name (for TECH tab - shows opening employee from shifts)
+    function formatEmployeeName(job) {
+      // For TECH_REMINDER, we need to fetch the opening employee name
+      // This would be available in the job data if the backend provides it
+      // For now, show technical contact name as fallback
+      const name = job.technical_name || job.recipient_name || '';
+      return name ? `<span>${name}</span>` : '<span class="text-muted">—</span>';
+    }
+    
+    // Format recipient info with missing indicator (phone only)
     function formatRecipientInfo(job) {
       if (job.recipient_missing) {
         return `<span class="badge bg-danger">${MISSING_RECIPIENT_TEXT}</span>`;
       }
-      return formatContactInfo(job.recipient_name, job.recipient_phone);
+      // Show phone only
+      const phone = job.recipient_phone || '';
+      return phone ? `<span>${phone}</span>` : '<span class="text-muted">—</span>';
     }
     
     // Format send time with countdown
@@ -3900,6 +4159,29 @@ async def scheduler_page() -> HTMLResponse:
         loadHeartbeat();
         // Refresh heartbeat every 30 seconds
         setInterval(loadHeartbeat, 30000);
+        
+        // Attach advanced settings button listener
+        const advancedSettingsBtn = document.getElementById('advancedSettingsBtn');
+        if (advancedSettingsBtn) {
+          advancedSettingsBtn.addEventListener('click', openAdvancedSettings);
+        }
+        
+        // Attach save advanced settings button listener
+        const saveAdvancedSettingsBtn = document.getElementById('saveAdvancedSettingsBtn');
+        if (saveAdvancedSettingsBtn) {
+          saveAdvancedSettingsBtn.addEventListener('click', saveAdvancedSettings);
+        }
+        
+        // Attach tab click listeners to save UI state
+        document.querySelectorAll('.nav-link').forEach(tab => {
+          tab.addEventListener('click', () => {
+            setTimeout(saveUIState, 100); // Save after tab activation
+          });
+        });
+        
+        // Load saved UI state
+        console.log('Loading saved UI state...');
+        loadUIState();
         
         console.log('Loading all jobs...');
         loadAllJobs();
