@@ -3007,11 +3007,11 @@ async def scheduler_page() -> HTMLResponse:
             <h6 class="mb-0">INIT Messages</h6>
             <div class="d-flex gap-3">
               <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="hideSentInit" onchange="loadJobs('INIT')">
+                <input class="form-check-input" type="checkbox" id="hideSentInit" onchange="loadJobs('INIT'); saveUIState();">
                 <label class="form-check-label" for="hideSentInit">Hide sent</label>
               </div>
               <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="showPastInit" onchange="loadJobs('INIT')">
+                <input class="form-check-input" type="checkbox" id="showPastInit" onchange="loadJobs('INIT'); saveUIState();">
                 <label class="form-check-label" for="showPastInit">Show past</label>
               </div>
             </div>
@@ -3054,11 +3054,11 @@ async def scheduler_page() -> HTMLResponse:
             <h6 class="mb-0">TECH Reminders</h6>
             <div class="d-flex gap-3">
               <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="hideSentTech" onchange="loadJobs('TECH_REMINDER')">
+                <input class="form-check-input" type="checkbox" id="hideSentTech" onchange="loadJobs('TECH_REMINDER'); saveUIState();">
                 <label class="form-check-label" for="hideSentTech">Hide sent</label>
               </div>
               <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="showPastTech" onchange="loadJobs('TECH_REMINDER')">
+                <input class="form-check-input" type="checkbox" id="showPastTech" onchange="loadJobs('TECH_REMINDER'); saveUIState();">
                 <label class="form-check-label" for="showPastTech">Show past</label>
               </div>
             </div>
@@ -3076,8 +3076,8 @@ async def scheduler_page() -> HTMLResponse:
                     <tr>
                       <th class="sortable" data-sort-key="event_date">Event Date <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="event">Event Details <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort-key="employee">Employee <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="recipient">Recipient <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="employee">Employee <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="send_at">Send Time <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="status">Status <span class="sort-indicator"></span></th>
                       <th>Actions</th>
@@ -3102,11 +3102,11 @@ async def scheduler_page() -> HTMLResponse:
             <h6 class="mb-0">SHIFT Reminders</h6>
             <div class="d-flex gap-3">
               <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="hideSentShift" onchange="loadJobs('SHIFT_REMINDER')">
+                <input class="form-check-input" type="checkbox" id="hideSentShift" onchange="loadJobs('SHIFT_REMINDER'); saveUIState();">
                 <label class="form-check-label" for="hideSentShift">Hide sent</label>
               </div>
               <div class="form-check">
-                <input class="form-check-input" type="checkbox" id="showPastShift" onchange="loadJobs('SHIFT_REMINDER')">
+                <input class="form-check-input" type="checkbox" id="showPastShift" onchange="loadJobs('SHIFT_REMINDER'); saveUIState();">
                 <label class="form-check-label" for="showPastShift">Show past</label>
               </div>
             </div>
@@ -3125,7 +3125,6 @@ async def scheduler_page() -> HTMLResponse:
                       <th class="sortable" data-sort-key="event_date">Event Date <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="event">Event Details <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="employee">Employee <span class="sort-indicator"></span></th>
-                      <th class="sortable" data-sort-key="recipient">Recipient <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="send_at">Send Time <span class="sort-indicator"></span></th>
                       <th class="sortable" data-sort-key="status">Status <span class="sort-indicator"></span></th>
                       <th>Actions</th>
@@ -3566,43 +3565,45 @@ async def scheduler_page() -> HTMLResponse:
       tbody.innerHTML = jobs.map(job => {
         const eventDate = formatEventDate(job);
         const eventDetails = formatEventDetails(job);
-        const recipientInfo = formatRecipientInfo(job);
         const sendTimeInfo = formatSendTime(job);
         const statusBadge = formatStatusBadge(job);
         const actions = formatActions(job);
         
         // Different columns for each message type
         if (messageType === 'SHIFT_REMINDER') {
-          const employeeInfo = formatContactInfo(job.recipient_name, job.recipient_phone);
+          // SHIFT: Event Date | Event Details | Employee (name + phone) | Send Time | Status | Actions
+          const employeeInfo = formatEmployeeInfo(job);
           
           return `
             <tr data-job-id="${job.job_id}" class="${job.recipient_missing ? 'table-warning' : ''}">
               <td>${eventDate}</td>
               <td>${eventDetails}</td>
               <td>${employeeInfo}</td>
-              <td>${recipientInfo}</td>
               <td>${sendTimeInfo}</td>
               <td>${statusBadge}</td>
               <td class="text-nowrap">${actions}</td>
             </tr>
           `;
         } else if (messageType === 'TECH_REMINDER') {
-          // TECH tab: Show event date, event details, employee name (opening employee), recipient phone
+          // TECH: Event Date | Event Details | Recipient (tech/producer name + phone) | Employee (name only) | Send Time | Status | Actions
+          const recipientInfo = formatRecipientInfo(job, messageType);
           const employeeInfo = formatEmployeeName(job);
           
           return `
             <tr data-job-id="${job.job_id}" class="${job.recipient_missing ? 'table-warning' : ''}">
               <td>${eventDate}</td>
               <td>${eventDetails}</td>
-              <td>${employeeInfo}</td>
               <td>${recipientInfo}</td>
+              <td>${employeeInfo}</td>
               <td>${sendTimeInfo}</td>
               <td>${statusBadge}</td>
               <td class="text-nowrap">${actions}</td>
             </tr>
           `;
         } else {
-          // INIT tab: Show event date, event details, recipient phone
+          // INIT: Event Date | Event Details | Recipient (name + phone) | Send Time | Status | Actions
+          const recipientInfo = formatRecipientInfo(job, messageType);
+          
           return `
             <tr data-job-id="${job.job_id}" class="${job.recipient_missing ? 'table-warning' : ''}">
               <td>${eventDate}</td>
@@ -3718,23 +3719,42 @@ async def scheduler_page() -> HTMLResponse:
       return details;
     }
     
-    // Format employee name (for TECH tab - shows opening employee from shifts)
-    function formatEmployeeName(job) {
-      // For TECH_REMINDER, we need to fetch the opening employee name
-      // This would be available in the job data if the backend provides it
-      // For now, show technical contact name as fallback
-      const name = job.technical_name || job.recipient_name || '';
-      return name ? `<span>${name}</span>` : '<span class="text-muted">—</span>';
-    }
-    
-    // Format recipient info with missing indicator (phone only)
-    function formatRecipientInfo(job) {
+    // Format recipient info with name and phone (for INIT and TECH tabs)
+    function formatRecipientInfo(job, messageType) {
       if (job.recipient_missing) {
         return `<span class="badge bg-danger">${MISSING_RECIPIENT_TEXT}</span>`;
       }
-      // Show phone only
-      const phone = job.recipient_phone || '';
-      return phone ? `<span>${phone}</span>` : '<span class="text-muted">—</span>';
+      
+      // For TECH_REMINDER: Show technical contact (name + phone), fallback to producer
+      if (messageType === 'TECH_REMINDER') {
+        const techName = job.technical_name;
+        const techPhone = job.technical_phone;
+        const producerName = job.producer_name;
+        const producerPhone = job.producer_phone;
+        
+        // Use technical contact if available, otherwise fallback to producer
+        if (techName || techPhone) {
+          return formatContactInfo(techName, techPhone);
+        } else if (producerName || producerPhone) {
+          return formatContactInfo(producerName, producerPhone);
+        }
+        return '<span class="text-muted">—</span>';
+      }
+      
+      // For INIT: Show recipient name + phone
+      return formatContactInfo(job.recipient_name, job.recipient_phone);
+    }
+    
+    // Format employee name only (for TECH tab)
+    function formatEmployeeName(job) {
+      // For TECH_REMINDER, show the opening employee name only (no phone)
+      const name = job.recipient_name || '';
+      return name ? `<span>${name}</span>` : '<span class="text-muted">—</span>';
+    }
+    
+    // Format employee info with name and phone (for SHIFT tab)
+    function formatEmployeeInfo(job) {
+      return formatContactInfo(job.recipient_name, job.recipient_phone);
     }
     
     // Format send time with countdown
