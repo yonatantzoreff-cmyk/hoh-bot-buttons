@@ -3289,8 +3289,11 @@ async def scheduler_page() -> HTMLResponse:
     
     // Load saved UI state from localStorage
     function loadUIState() {
+      console.log('=== Loading UI State from localStorage ===');
+      
       // Load active tab
       const savedTab = localStorage.getItem(STORAGE_KEY_ACTIVE_TAB) || 'init';
+      console.log('Restoring active tab:', savedTab);
       activateTab(savedTab);
       
       // Load checkbox states
@@ -3300,6 +3303,11 @@ async def scheduler_page() -> HTMLResponse:
       const showPastInit = localStorage.getItem(STORAGE_KEY_SHOW_PAST_INIT) === 'true';
       const showPastTech = localStorage.getItem(STORAGE_KEY_SHOW_PAST_TECH) === 'true';
       const showPastShift = localStorage.getItem(STORAGE_KEY_SHOW_PAST_SHIFT) === 'true';
+      
+      console.log('Restoring checkbox states:', {
+        hideSentInit, hideSentTech, hideSentShift,
+        showPastInit, showPastTech, showPastShift
+      });
       
       document.getElementById('hideSentInit').checked = hideSentInit;
       document.getElementById('hideSentTech').checked = hideSentTech;
@@ -3313,9 +3321,16 @@ async def scheduler_page() -> HTMLResponse:
       const savedSortTech = localStorage.getItem(STORAGE_KEY_SORT_TECH);
       const savedSortShift = localStorage.getItem(STORAGE_KEY_SORT_SHIFT);
       
+      console.log('Saved sort states from localStorage:', {
+        init: savedSortInit,
+        tech: savedSortTech,
+        shift: savedSortShift
+      });
+      
       if (savedSortInit) {
         try {
           sortState.INIT = JSON.parse(savedSortInit);
+          console.log('Restored INIT sort state:', sortState.INIT);
         } catch (e) {
           console.error('Error parsing saved sort state for INIT:', e);
         }
@@ -3324,6 +3339,7 @@ async def scheduler_page() -> HTMLResponse:
       if (savedSortTech) {
         try {
           sortState.TECH_REMINDER = JSON.parse(savedSortTech);
+          console.log('Restored TECH sort state:', sortState.TECH_REMINDER);
         } catch (e) {
           console.error('Error parsing saved sort state for TECH:', e);
         }
@@ -3332,33 +3348,59 @@ async def scheduler_page() -> HTMLResponse:
       if (savedSortShift) {
         try {
           sortState.SHIFT_REMINDER = JSON.parse(savedSortShift);
+          console.log('Restored SHIFT sort state:', sortState.SHIFT_REMINDER);
         } catch (e) {
           console.error('Error parsing saved sort state for SHIFT:', e);
         }
       }
+      
+      console.log('=== UI State loaded successfully ===');
     }
     
     // Save UI state to localStorage
     function saveUIState() {
+      console.log('=== Saving UI State to localStorage ===');
+      
       // Save active tab
       const activeTabButton = document.querySelector('.nav-link.active');
       if (activeTabButton) {
         const tabId = activeTabButton.id.replace('-tab', '');
         localStorage.setItem(STORAGE_KEY_ACTIVE_TAB, tabId);
+        console.log('Saved active tab:', tabId);
       }
       
       // Save checkbox states
-      localStorage.setItem(STORAGE_KEY_HIDE_SENT_INIT, document.getElementById('hideSentInit').checked);
-      localStorage.setItem(STORAGE_KEY_HIDE_SENT_TECH, document.getElementById('hideSentTech').checked);
-      localStorage.setItem(STORAGE_KEY_HIDE_SENT_SHIFT, document.getElementById('hideSentShift').checked);
-      localStorage.setItem(STORAGE_KEY_SHOW_PAST_INIT, document.getElementById('showPastInit').checked);
-      localStorage.setItem(STORAGE_KEY_SHOW_PAST_TECH, document.getElementById('showPastTech').checked);
-      localStorage.setItem(STORAGE_KEY_SHOW_PAST_SHIFT, document.getElementById('showPastShift').checked);
+      const checkboxStates = {
+        hideSentInit: document.getElementById('hideSentInit').checked,
+        hideSentTech: document.getElementById('hideSentTech').checked,
+        hideSentShift: document.getElementById('hideSentShift').checked,
+        showPastInit: document.getElementById('showPastInit').checked,
+        showPastTech: document.getElementById('showPastTech').checked,
+        showPastShift: document.getElementById('showPastShift').checked
+      };
+      
+      localStorage.setItem(STORAGE_KEY_HIDE_SENT_INIT, checkboxStates.hideSentInit);
+      localStorage.setItem(STORAGE_KEY_HIDE_SENT_TECH, checkboxStates.hideSentTech);
+      localStorage.setItem(STORAGE_KEY_HIDE_SENT_SHIFT, checkboxStates.hideSentShift);
+      localStorage.setItem(STORAGE_KEY_SHOW_PAST_INIT, checkboxStates.showPastInit);
+      localStorage.setItem(STORAGE_KEY_SHOW_PAST_TECH, checkboxStates.showPastTech);
+      localStorage.setItem(STORAGE_KEY_SHOW_PAST_SHIFT, checkboxStates.showPastShift);
+      
+      console.log('Saved checkbox states:', checkboxStates);
       
       // Save sort states
-      localStorage.setItem(STORAGE_KEY_SORT_INIT, JSON.stringify(sortState.INIT));
-      localStorage.setItem(STORAGE_KEY_SORT_TECH, JSON.stringify(sortState.TECH_REMINDER));
-      localStorage.setItem(STORAGE_KEY_SORT_SHIFT, JSON.stringify(sortState.SHIFT_REMINDER));
+      const sortStates = {
+        init: sortState.INIT,
+        tech: sortState.TECH_REMINDER,
+        shift: sortState.SHIFT_REMINDER
+      };
+      
+      localStorage.setItem(STORAGE_KEY_SORT_INIT, JSON.stringify(sortStates.init));
+      localStorage.setItem(STORAGE_KEY_SORT_TECH, JSON.stringify(sortStates.tech));
+      localStorage.setItem(STORAGE_KEY_SORT_SHIFT, JSON.stringify(sortStates.shift));
+      
+      console.log('Saved sort states:', sortStates);
+      console.log('=== UI State saved successfully ===');
     }
     
     // Activate a specific tab
@@ -3689,12 +3731,16 @@ async def scheduler_page() -> HTMLResponse:
             const column = th.dataset.sortKey;
             const current = sortState[messageType];
             
+            console.log(`Sort clicked: ${messageType}, column: ${column}, current:`, current);
+            
             if (current.column === column) {
               current.direction = current.direction === 'asc' ? 'desc' : 'asc';
             } else {
               current.column = column;
               current.direction = 'asc';
             }
+            
+            console.log(`New sort state for ${messageType}:`, current);
             
             renderSortedTable(messageType);
             updateSortIndicators(messageType);
