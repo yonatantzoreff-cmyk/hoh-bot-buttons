@@ -2834,9 +2834,9 @@ async def scheduler_page() -> HTMLResponse:
     
     <!-- Action Buttons Row -->
     <div class="row mb-3">
-      <div class="col">
-        <button id="fetchBtn" class="btn btn-success me-2">
-          🔄 Fetch Future Events
+      <div class="col-md-6">
+        <button id="syncBtn" class="btn btn-success me-2">
+          🔄 Sync Now
         </button>
         <button id="cleanupBtn" class="btn btn-outline-danger me-2">
           🗑️ Cleanup Old Logs
@@ -2847,6 +2847,14 @@ async def scheduler_page() -> HTMLResponse:
         <button class="btn btn-outline-secondary btn-sm" id="testJsBtn">
           🔍 Test JavaScript
         </button>
+      </div>
+      <div class="col-md-6 text-end">
+        <div class="form-check form-switch d-inline-block">
+          <input class="form-check-input" type="checkbox" id="autoSyncToggle" checked>
+          <label class="form-check-label" for="autoSyncToggle">
+            <strong>Auto-Sync</strong> <small class="text-muted">(sync on event changes)</small>
+          </label>
+        </div>
       </div>
     </div>
     
@@ -3136,40 +3144,40 @@ async def scheduler_page() -> HTMLResponse:
       updateSettings('enabled_shift', e.target.checked);
     });
     
-    // Fetch future events and sync to scheduler
-    async function fetchFutureEvents() {
-      console.log('fetchFutureEvents called');
+    // Sync future events to scheduler
+    async function syncScheduler() {
+      console.log('syncScheduler called');
       
-      const fetchBtn = document.getElementById('fetchBtn');
-      if (!fetchBtn) {
-        console.error('Fetch button not found!');
-        alert('Error: Fetch button not found in DOM');
+      const syncBtn = document.getElementById('syncBtn');
+      if (!syncBtn) {
+        console.error('Sync button not found!');
+        alert('Error: Sync button not found in DOM');
         return;
       }
       
-      fetchBtn.disabled = true;
-      fetchBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Fetching...';
+      syncBtn.disabled = true;
+      syncBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Syncing...';
       
       try {
-        console.log('Starting fetch request to /api/scheduler/fetch');
+        console.log('Starting sync request to /api/scheduler/fetch');
         const response = await fetch(`/api/scheduler/fetch?org_id=${ORG_ID}`, {
           method: 'POST'
         });
         
-        console.log('Fetch response status:', response.status);
+        console.log('Sync response status:', response.status);
         
         if (!response.ok) {
           const errorText = await response.text();
-          console.error('Fetch failed with status:', response.status, 'Error:', errorText);
-          throw new Error(`Fetch failed with status ${response.status}: ${errorText}`);
+          console.error('Sync failed with status:', response.status, 'Error:', errorText);
+          throw new Error(`Sync failed with status ${response.status}: ${errorText}`);
         }
         
         const result = await response.json();
-        console.log('Fetch result:', result);
+        console.log('Sync result:', result);
         
         // Show success message with counts
         alert(
-          `Fetch completed!\n\n` +
+          `Sync completed!\n\n` +
           `Events scanned: ${result.events_scanned}\n` +
           `Shifts scanned: ${result.shifts_scanned}\n` +
           `Jobs created: ${result.jobs_created}\n` +
@@ -3182,11 +3190,11 @@ async def scheduler_page() -> HTMLResponse:
         loadAllJobs();
         
       } catch (error) {
-        console.error('Error fetching future events:', error);
-        alert(`Error fetching future events:\n${error.message}\n\nCheck browser console for details.`);
+        console.error('Error syncing scheduler:', error);
+        alert(`Error syncing scheduler:\n${error.message}\n\nCheck browser console for details.`);
       } finally {
-        fetchBtn.disabled = false;
-        fetchBtn.innerHTML = '🔄 Fetch Future Events';
+        syncBtn.disabled = false;
+        syncBtn.innerHTML = '🔄 Sync Now';
       }
     }
     
@@ -3285,7 +3293,7 @@ async def scheduler_page() -> HTMLResponse:
         
         if (jobs.length === 0) {
           // Show empty state
-          emptyEl.innerHTML = '<p class="text-muted">אין אירועים עתידיים. לחץ &quot;Fetch Future Events&quot; כדי לסנכרן.</p>';
+          emptyEl.innerHTML = '<p class="text-muted">אין אירועים עתידיים. לחץ &quot;Sync Now&quot; כדי לסנכרן.</p>';
           emptyEl.classList.remove('d-none');
         } else {
           tableEl.classList.remove('d-none');
@@ -3830,16 +3838,17 @@ async def scheduler_page() -> HTMLResponse:
       
       try {
         // Attach event listeners to buttons
-        const fetchBtn = document.getElementById('fetchBtn');
+        const syncBtn = document.getElementById('syncBtn');
         const cleanupBtn = document.getElementById('cleanupBtn');
         const deleteAllBtn = document.getElementById('deleteAllBtn');
         const testJsBtn = document.getElementById('testJsBtn');
+        const autoSyncToggle = document.getElementById('autoSyncToggle');
         
-        if (fetchBtn) {
-          console.log('Fetch button found, attaching click listener');
-          fetchBtn.addEventListener('click', fetchFutureEvents);
+        if (syncBtn) {
+          console.log('Sync button found, attaching click listener');
+          syncBtn.addEventListener('click', syncScheduler);
         } else {
-          console.error('Fetch button not found in DOM!');
+          console.error('Sync button not found in DOM!');
         }
         
         if (cleanupBtn) {
@@ -3861,6 +3870,26 @@ async def scheduler_page() -> HTMLResponse:
           testJsBtn.addEventListener('click', () => {
             alert('JavaScript is working! Check console for logs.');
             console.log('Test button clicked');
+          });
+        }
+        
+        // Load auto-sync preference from localStorage
+        if (autoSyncToggle) {
+          const autoSyncEnabled = localStorage.getItem('scheduler_auto_sync');
+          if (autoSyncEnabled !== null) {
+            autoSyncToggle.checked = autoSyncEnabled === 'true';
+          }
+          
+          // Save preference when toggled
+          autoSyncToggle.addEventListener('change', () => {
+            localStorage.setItem('scheduler_auto_sync', autoSyncToggle.checked);
+            console.log('Auto-sync preference saved:', autoSyncToggle.checked);
+            
+            // Show notification
+            const message = autoSyncToggle.checked 
+              ? 'Auto-sync enabled: Scheduler will stay in sync with event changes'
+              : 'Auto-sync disabled: Use "Sync Now" button to manually update';
+            alert(message);
           });
         }
         

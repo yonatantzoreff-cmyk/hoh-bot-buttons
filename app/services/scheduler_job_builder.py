@@ -42,6 +42,7 @@ SKIP_REASON_ALREADY_UP_TO_DATE = "already_up_to_date"
 SKIP_REASON_ALREADY_SENT_OR_FAILED = "already_sent_or_failed"
 SKIP_REASON_DISABLED_BY_SETTINGS = "disabled_by_settings"
 SKIP_REASON_HAS_LOAD_IN_TIME = "has_load_in_time"  # Event has load-in time, INIT not needed
+SKIP_REASON_NO_SHIFTS = "no_shifts"  # Event has no shifts, TECH_REMINDER not needed
 
 
 def _has_send_at_changed(existing_send_at, new_send_at) -> bool:
@@ -289,7 +290,29 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
         result["init_skip_reason"] = SKIP_REASON_DISABLED_BY_SETTINGS
     
     # --- TECH_REMINDER Job ---
-    if settings.get("enabled_global") and settings.get("enabled_tech"):
+    # Check if event has shifts - TECH_REMINDER only for events with shifts
+    shifts_repo = EmployeeShiftRepository()
+    event_shifts = shifts_repo.list_shifts_for_event(org_id=org_id, event_id=event_id)
+    has_shifts = len(event_shifts) > 0
+    
+    if not has_shifts:
+        # Event has no shifts - skip TECH_REMINDER
+        logger.info(f"Skipping TECH_REMINDER job for event {event_id}: no shifts assigned")
+        
+        # Delete or mark as skipped any existing TECH_REMINDER job
+        tech_job = scheduled_repo.find_job_for_event(org_id, event_id, "TECH_REMINDER")
+        if tech_job and tech_job.get("status") not in ("sent", "failed"):
+            # Mark as skipped rather than deleting (preserves audit trail)
+            scheduled_repo.update_status(
+                tech_job["job_id"],
+                status="skipped",
+                last_error="Event has no shifts, TECH_REMINDER not needed"
+            )
+            logger.info(f"Marked existing TECH_REMINDER job {tech_job['job_id']} as skipped (no shifts)")
+        
+        result["tech_status"] = "skipped"
+        result["tech_skip_reason"] = SKIP_REASON_NO_SHIFTS
+    elif settings.get("enabled_global") and settings.get("enabled_tech"):
         tech_job = scheduled_repo.find_job_for_event(org_id, event_id, "TECH_REMINDER")
         
         # Compute send_at for TECH_REMINDER

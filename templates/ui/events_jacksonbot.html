@@ -3985,6 +3985,10 @@
                 h.classList.remove('sorted-asc', 'sorted-desc');
             });
 
+            // Get column index from the header
+            const headers = Array.from(table.querySelectorAll('thead th'));
+            const colIndex = headers.indexOf(th);
+
             // Sort rows
             rows.sort((a, b) => {
                 let aVal = getRowFieldValue(a, field);
