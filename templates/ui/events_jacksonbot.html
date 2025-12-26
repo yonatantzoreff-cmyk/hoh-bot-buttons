@@ -530,17 +530,6 @@
             display: inline-flex;
             align-items: center;
             gap: 0.5rem;
-            background: var(--bg-tertiary);
-            border: 1px solid var(--border-color);
-            padding: 0.5rem 0.75rem;
-            border-radius: 10px;
-            box-shadow: var(--shadow);
-        }
-
-        .status-filter label {
-            font-weight: 700;
-            color: var(--text-secondary);
-            font-size: 0.95rem;
         }
 
         .status-filter select {
@@ -548,9 +537,47 @@
             background: var(--bg-primary);
             color: var(--text-primary);
             padding: 0.45rem 0.6rem;
-            border-radius: 8px;
+            border-radius: 12px;
             min-width: 180px;
             cursor: pointer;
+            box-shadow: var(--shadow);
+        }
+
+        .past-filter-btn {
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 0.45rem 0.85rem;
+            border-radius: 12px;
+            cursor: pointer;
+            box-shadow: var(--shadow);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            font-weight: 600;
+        }
+
+        .past-filter-btn .indicator {
+            width: 16px;
+            height: 16px;
+            border-radius: 6px;
+            border: 1px solid var(--border-color);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+        }
+
+        .past-filter-btn.active {
+            background: var(--accent-color);
+            color: white;
+            border-color: var(--accent-color);
+        }
+
+        .past-filter-btn.active .indicator {
+            background: rgba(255, 255, 255, 0.15);
+            color: white;
+            border-color: rgba(255, 255, 255, 0.5);
         }
 
         /* Main Container */
@@ -2079,6 +2106,7 @@
         const HALL_STORAGE_KEY = 'events.activeHall';
         const COLUMN_VISIBILITY_KEY = 'events.columnVisibility';
         const STATUS_FILTER_KEY = 'events.statusFilter';
+        const PAST_EVENTS_FILTER_KEY = 'events.hidePastEvents';
         const MONTHS_TO_SHOW = 5;
         const MONTH_NAV_STEP = 2;
         const SCROLL_RETRY_LIMIT = 10;
@@ -2099,6 +2127,7 @@
         let isMuted = false;
         const STATUS_OPTIONS = ['draft', 'pending', 'confirmed', 'cancelled', 'follow_up', 'contact_required'];
         let activeStatusFilter = 'all';
+        let hidePastEvents = false;
         let activeStatusMenu = null;
         let monthScaleStartOffset = -2;
         let pendingNavigationTarget = null;
@@ -2116,12 +2145,13 @@
             loadTheme();
             loadColumnVisibility();
             initStatusFilter();
+            initPastEventsFilter();
             
             const urlParams = new URLSearchParams(window.location.search);
             // Load saved month or default to current
             const saved = localStorage.getItem('events.selectedMonth');
             const today = new Date();
-            const currentMonthValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+            const currentMonthValue = getTodayMonthValue();
             const deepLinkMonth = urlParams.get('month');
             const deepLinkEventId = urlParams.get('eventId');
             const defaultMonth = deepLinkMonth || saved || currentMonthValue;
@@ -2286,9 +2316,15 @@
         }
 
         function renderStatusFilterControl() {
+            const showPastToggle = isViewingCurrentMonth();
             return `
                 <div class="status-filter">
-                    <label>סינון סטטוס</label>
+                    ${showPastToggle ? `
+                        <button type="button" class="past-filter-btn ${hidePastEvents ? 'active' : ''}" onclick="togglePastEventsFilter()">
+                            <span>אירועי עבר</span>
+                            <span class="indicator">${hidePastEvents ? '✔' : ''}</span>
+                        </button>
+                    ` : ''}
                     <select class="status-filter-select" onchange="onStatusFilterChange(this.value)">
                         ${getStatusFilterOptions()}
                     </select>
@@ -2316,6 +2352,7 @@
                     select.value = activeStatusFilter;
                 }
             });
+            updatePastEventsToggleUI();
         }
 
         function initStatusFilter() {
@@ -2323,6 +2360,11 @@
             const allowed = ['all', ...STATUS_OPTIONS];
             activeStatusFilter = allowed.includes(saved) ? saved : 'all';
             syncStatusFilterUI();
+        }
+
+        function initPastEventsFilter() {
+            const saved = localStorage.getItem(PAST_EVENTS_FILTER_KEY);
+            hidePastEvents = saved === 'true';
         }
 
         function onStatusFilterChange(value) {
@@ -2333,16 +2375,62 @@
         }
 
         function applyStatusFilter() {
+            const isCurrentMonthView = isViewingCurrentMonth();
             document.querySelectorAll('.events-table tbody tr.event-row').forEach(row => {
                 const rowStatus = (row.dataset.status || 'draft').toLowerCase();
-                const matches = activeStatusFilter === 'all' || rowStatus === activeStatusFilter;
-                row.classList.toggle('filtered-out', !matches);
+                const statusMatches = activeStatusFilter === 'all' || rowStatus === activeStatusFilter;
+                const shouldHidePast = hidePastEvents && isCurrentMonthView && isPastEvent(row);
+                const hideRow = !statusMatches || shouldHidePast;
+                row.classList.toggle('filtered-out', hideRow);
                 const detailsRow = document.getElementById(`details-${row.dataset.eventId}`);
                 if (detailsRow) {
-                    detailsRow.classList.toggle('filtered-out', !matches);
+                    detailsRow.classList.toggle('filtered-out', hideRow);
                 }
             });
             syncStatusFilterUI();
+        }
+
+        function togglePastEventsFilter() {
+            hidePastEvents = !hidePastEvents;
+            localStorage.setItem(PAST_EVENTS_FILTER_KEY, hidePastEvents);
+            applyStatusFilter();
+            updatePastEventsToggleUI();
+        }
+
+        function updatePastEventsToggleUI() {
+            const isCurrentMonthView = isViewingCurrentMonth();
+            document.querySelectorAll('.past-filter-btn').forEach(btn => {
+                btn.classList.toggle('active', hidePastEvents);
+                btn.disabled = !isCurrentMonthView;
+                const indicator = btn.querySelector('.indicator');
+                if (indicator) {
+                    indicator.textContent = hidePastEvents ? '✔' : '';
+                }
+            });
+        }
+
+        function isViewingCurrentMonth() {
+            return currentMonth === getTodayMonthValue();
+        }
+
+        function getTodayMonthValue() {
+            const today = new Date();
+            return `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+        }
+
+        function isPastEvent(row) {
+            const eventDate = row.getAttribute('data-event_date');
+            if (!eventDate) return false;
+            const showTime = row.getAttribute('data-show_time');
+            const loadInTime = row.getAttribute('data-load_in_time');
+            const timePart = showTime || loadInTime || '00:00';
+            const eventDateTime = new Date(`${eventDate}T${timePart}`);
+            const fallbackDate = new Date(`${eventDate}T00:00`);
+            const referenceDate = isNaN(eventDateTime.getTime()) ? fallbackDate : eventDateTime;
+            if (isNaN(referenceDate.getTime())) {
+                return false;
+            }
+            return referenceDate < new Date();
         }
 
         // Load Events
