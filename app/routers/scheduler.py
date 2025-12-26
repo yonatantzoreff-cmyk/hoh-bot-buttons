@@ -37,6 +37,12 @@ class SchedulerSettingsUpdate(BaseModel):
     enabled_init: Optional[bool] = None
     enabled_tech: Optional[bool] = None
     enabled_shift: Optional[bool] = None
+    init_days_before: Optional[int] = None
+    init_send_time: Optional[str] = None  # TIME format HH:MM
+    tech_days_before: Optional[int] = None
+    tech_send_time: Optional[str] = None  # TIME format HH:MM
+    shift_days_before: Optional[int] = None
+    shift_send_time: Optional[str] = None  # TIME format HH:MM
 
 
 class SendNowResponse(BaseModel):
@@ -118,6 +124,8 @@ async def list_scheduler_jobs(
     
     # Enrich each job with additional details
     enriched_jobs = []
+    shifts_repo = EmployeeShiftRepository()
+    
     for job in rows:
         enriched_job = dict(job)
         
@@ -137,6 +145,19 @@ async def list_scheduler_jobs(
         else:
             enriched_job["technical_name"] = None
             enriched_job["technical_phone"] = None
+        
+        # For TECH_REMINDER: Get the first employee from the event's shifts
+        if job.get("message_type") == "TECH_REMINDER" and job.get("event_id"):
+            event_shifts = shifts_repo.list_shifts_for_event(org_id=org_id, event_id=job["event_id"])
+            if event_shifts:
+                # Get the first shift (sorted by call_time in the repository)
+                first_shift = event_shifts[0]
+                employee_id = first_shift.get("employee_id")
+                if employee_id:
+                    employee = employees_repo.get_employee_by_id(org_id=org_id, employee_id=employee_id)
+                    if employee:
+                        enriched_job["first_employee_name"] = employee.get("name")
+                        enriched_job["first_employee_phone"] = employee.get("phone")
         
         # Resolve recipient preview (same logic as scheduler service)
         recipient_info = _preview_recipient(job, org_id, events_repo, contacts_repo, employees_repo)
@@ -266,6 +287,18 @@ async def update_scheduler_settings(
         update_kwargs["enabled_tech"] = settings.enabled_tech
     if settings.enabled_shift is not None:
         update_kwargs["enabled_shift"] = settings.enabled_shift
+    if settings.init_days_before is not None:
+        update_kwargs["init_days_before"] = settings.init_days_before
+    if settings.init_send_time is not None:
+        update_kwargs["init_send_time"] = settings.init_send_time
+    if settings.tech_days_before is not None:
+        update_kwargs["tech_days_before"] = settings.tech_days_before
+    if settings.tech_send_time is not None:
+        update_kwargs["tech_send_time"] = settings.tech_send_time
+    if settings.shift_days_before is not None:
+        update_kwargs["shift_days_before"] = settings.shift_days_before
+    if settings.shift_send_time is not None:
+        update_kwargs["shift_send_time"] = settings.shift_send_time
     
     if update_kwargs:
         settings_repo.update_settings(org_id, **update_kwargs)
@@ -445,18 +478,52 @@ async def fetch_future_events(
                 logger.error(f"Error building jobs for event {event_id}: {e}", exc_info=True)
                 errors.append(error_msg)
         
+        # Cleanup orphaned jobs (jobs for deleted events/shifts)
+        # This handles edge cases where CASCADE DELETE didn't work or jobs with invalid references
+        # Note: This query uses NOT EXISTS subqueries. Performance is acceptable for typical
+        # workloads since event_id and shift_id columns already have indexes from foreign keys.
+        jobs_deleted = 0
+        try:
+            cleanup_query = text("""
+                DELETE FROM scheduled_messages sm
+                WHERE sm.org_id = :org_id
+                  AND (
+                    -- Orphaned event-based jobs (INIT/TECH_REMINDER with non-existent event)
+                    (sm.message_type IN ('INIT', 'TECH_REMINDER') 
+                     AND sm.event_id IS NOT NULL 
+                     AND NOT EXISTS (SELECT 1 FROM events e WHERE e.event_id = sm.event_id))
+                    OR
+                    -- Orphaned shift-based jobs (SHIFT_REMINDER with non-existent shift)
+                    (sm.message_type = 'SHIFT_REMINDER' 
+                     AND sm.shift_id IS NOT NULL 
+                     AND NOT EXISTS (SELECT 1 FROM employee_shifts es WHERE es.shift_id = sm.shift_id))
+                  )
+            """)
+            
+            with get_session() as session:
+                cleanup_result = session.execute(cleanup_query, {"org_id": org_id})
+                jobs_deleted = cleanup_result.rowcount
+            
+            if jobs_deleted > 0:
+                logger.info(f"Cleaned up {jobs_deleted} orphaned scheduler jobs for org {org_id}")
+        except Exception as e:
+            logger.error(f"Error cleaning up orphaned jobs: {e}", exc_info=True)
+            errors.append(f"Cleanup error: {str(e)}")
+        
         # Limit errors to first 10 in response
         errors_to_return = errors[:10]
         errors_count = len(errors)
         
         message = f"Synced {events_scanned} events and {shifts_scanned} shifts"
+        if jobs_deleted > 0:
+            message += f", cleaned up {jobs_deleted} orphaned jobs"
         if errors_count > 0:
             message += f" ({errors_count} error(s))"
         
         logger.info(
             f"Fetch complete: events_scanned={events_scanned}, shifts_scanned={shifts_scanned}, "
             f"jobs_created={jobs_created}, jobs_updated={jobs_updated}, jobs_blocked={jobs_blocked}, "
-            f"jobs_skipped={jobs_skipped}, errors_count={errors_count}"
+            f"jobs_skipped={jobs_skipped}, jobs_deleted={jobs_deleted}, errors_count={errors_count}"
         )
         
         return FetchResponse(
