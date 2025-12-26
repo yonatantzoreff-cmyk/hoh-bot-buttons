@@ -3283,6 +3283,9 @@ async def scheduler_page() -> HTMLResponse:
     const STORAGE_KEY_SHOW_PAST_INIT = STORAGE_KEY_PREFIX + 'show_past_init';
     const STORAGE_KEY_SHOW_PAST_TECH = STORAGE_KEY_PREFIX + 'show_past_tech';
     const STORAGE_KEY_SHOW_PAST_SHIFT = STORAGE_KEY_PREFIX + 'show_past_shift';
+    const STORAGE_KEY_SORT_INIT = STORAGE_KEY_PREFIX + 'sort_init';
+    const STORAGE_KEY_SORT_TECH = STORAGE_KEY_PREFIX + 'sort_tech';
+    const STORAGE_KEY_SORT_SHIFT = STORAGE_KEY_PREFIX + 'sort_shift';
     
     // Load saved UI state from localStorage
     function loadUIState() {
@@ -3304,6 +3307,35 @@ async def scheduler_page() -> HTMLResponse:
       document.getElementById('showPastInit').checked = showPastInit;
       document.getElementById('showPastTech').checked = showPastTech;
       document.getElementById('showPastShift').checked = showPastShift;
+      
+      // Load sort states
+      const savedSortInit = localStorage.getItem(STORAGE_KEY_SORT_INIT);
+      const savedSortTech = localStorage.getItem(STORAGE_KEY_SORT_TECH);
+      const savedSortShift = localStorage.getItem(STORAGE_KEY_SORT_SHIFT);
+      
+      if (savedSortInit) {
+        try {
+          sortState.INIT = JSON.parse(savedSortInit);
+        } catch (e) {
+          console.error('Error parsing saved sort state for INIT:', e);
+        }
+      }
+      
+      if (savedSortTech) {
+        try {
+          sortState.TECH_REMINDER = JSON.parse(savedSortTech);
+        } catch (e) {
+          console.error('Error parsing saved sort state for TECH:', e);
+        }
+      }
+      
+      if (savedSortShift) {
+        try {
+          sortState.SHIFT_REMINDER = JSON.parse(savedSortShift);
+        } catch (e) {
+          console.error('Error parsing saved sort state for SHIFT:', e);
+        }
+      }
     }
     
     // Save UI state to localStorage
@@ -3322,6 +3354,11 @@ async def scheduler_page() -> HTMLResponse:
       localStorage.setItem(STORAGE_KEY_SHOW_PAST_INIT, document.getElementById('showPastInit').checked);
       localStorage.setItem(STORAGE_KEY_SHOW_PAST_TECH, document.getElementById('showPastTech').checked);
       localStorage.setItem(STORAGE_KEY_SHOW_PAST_SHIFT, document.getElementById('showPastShift').checked);
+      
+      // Save sort states
+      localStorage.setItem(STORAGE_KEY_SORT_INIT, JSON.stringify(sortState.INIT));
+      localStorage.setItem(STORAGE_KEY_SORT_TECH, JSON.stringify(sortState.TECH_REMINDER));
+      localStorage.setItem(STORAGE_KEY_SORT_SHIFT, JSON.stringify(sortState.SHIFT_REMINDER));
     }
     
     // Activate a specific tab
@@ -3661,6 +3698,9 @@ async def scheduler_page() -> HTMLResponse:
             
             renderSortedTable(messageType);
             updateSortIndicators(messageType);
+            
+            // Save sort state to localStorage
+            saveUIState();
           });
         });
         
