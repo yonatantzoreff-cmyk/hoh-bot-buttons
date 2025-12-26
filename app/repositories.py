@@ -1153,6 +1153,41 @@ class MessageRepository:
 
         return {row["event_id"]: row.get("status") for row in result}
 
+    def list_messages_for_event(self, org_id: int, event_id: int) -> list[dict]:
+        query = text(
+            """
+            SELECT
+                m.message_id,
+                m.event_id,
+                m.direction,
+                m.body,
+                m.sent_at,
+                m.received_at,
+                m.created_at,
+                c.name AS contact_name,
+                c.phone AS contact_phone,
+                latest_delivery.status AS delivery_status
+            FROM messages m
+            LEFT JOIN contacts c ON m.contact_id = c.contact_id
+            LEFT JOIN LATERAL (
+                SELECT status
+                FROM message_delivery_log
+                WHERE org_id = :org_id AND message_id = m.message_id
+                ORDER BY created_at DESC, delivery_id DESC
+                LIMIT 1
+            ) latest_delivery ON true
+            WHERE m.org_id = :org_id
+              AND m.event_id = :event_id
+            ORDER BY COALESCE(m.sent_at, m.received_at, m.created_at) DESC, m.message_id DESC
+            """
+        )
+
+        with get_session() as session:
+            result = session.execute(
+                query, {"org_id": org_id, "event_id": event_id}
+            ).mappings().all()
+            return result
+
     def get_message_by_whatsapp_sid(self, whatsapp_msg_sid: str):
         """
         Find a message by its Twilio WhatsApp Message SID.
@@ -1650,6 +1685,7 @@ class EmployeeRepository:
         phone: Optional[str] = None,
         role: Optional[str] = None,
         notes: Optional[str] = None,
+        is_active: Optional[bool] = None,
     ):
         """עדכון פרטי עובד"""
         sets = []
@@ -1671,6 +1707,10 @@ class EmployeeRepository:
         if notes is not None:
             sets.append("notes = :notes")
             params["notes"] = notes
+
+        if is_active is not None:
+            sets.append("is_active = :is_active")
+            params["is_active"] = is_active
 
         if not sets:
             return

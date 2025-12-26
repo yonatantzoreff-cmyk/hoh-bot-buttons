@@ -25,6 +25,9 @@
             --chip-text: #0073e6;
             --shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
             --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.12);
+            --row-base-height: 64px;
+            --today-outline: #1faa59;
+            --panel-width: 440px;
         }
 
         [data-theme="dark"] {
@@ -45,6 +48,7 @@
             --chip-text: #66b3ff;
             --shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
             --shadow-hover: 0 4px 12px rgba(0, 0, 0, 0.4);
+            --today-outline: #20c977;
         }
 
         * {
@@ -380,31 +384,73 @@
         /* Event Highlight Animation */
         .event-highlight {
             animation: highlightFade 2s ease-out;
+            box-shadow: 0 0 0 3px rgba(0, 133, 255, 0.25);
         }
 
         @keyframes highlightFade {
             0% {
                 background: rgba(0, 133, 255, 0.2);
                 transform: scale(1.01);
+                box-shadow: 0 0 0 6px rgba(0, 133, 255, 0.3);
             }
             100% {
                 background: transparent;
                 transform: scale(1);
+                box-shadow: none;
             }
         }
 
         /* Month Selector */
         .month-selector {
-            padding: 2rem;
+            padding: 1rem 0;
             background: var(--bg-primary);
-            margin: 2rem 2rem 1rem;
-            border-radius: 12px;
+            margin: 0 auto 1rem;
+            border-radius: 10px;
             box-shadow: var(--shadow);
+            max-width: 960px;
+            text-align: center;
+        }
+
+        .month-selector-controls {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .month-nav {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .month-nav-btn {
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            border: 1px solid var(--border-color);
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.1rem;
+            transition: all 0.2s;
+            box-shadow: var(--shadow);
+        }
+
+        .month-nav-btn:hover {
+            background: var(--accent-color);
+            color: white;
+            box-shadow: var(--shadow-hover);
+            transform: translateY(-1px);
         }
 
         .month-scale {
             display: flex;
-            gap: 1.5rem;
+            gap: 1rem;
             overflow-x: auto;
             padding: 1rem 0;
             justify-content: center;
@@ -478,6 +524,33 @@
             margin-top: 0.5rem;
             font-size: 0.85rem;
             color: var(--text-muted);
+        }
+
+        .status-filter {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            padding: 0.5rem 0.75rem;
+            border-radius: 10px;
+            box-shadow: var(--shadow);
+        }
+
+        .status-filter label {
+            font-weight: 700;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+        }
+
+        .status-filter select {
+            border: 1px solid var(--border-color);
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            padding: 0.45rem 0.6rem;
+            border-radius: 8px;
+            min-width: 180px;
+            cursor: pointer;
         }
 
         /* Main Container */
@@ -645,6 +718,7 @@
             user-select: none;
             position: relative;
             border-bottom: 2px solid var(--border-color);
+            min-height: calc(var(--row-base-height) * 1.5);
         }
 
         .events-table th:hover {
@@ -696,6 +770,12 @@
             background: var(--bg-secondary);
         }
 
+        .events-table th[data-col="status"],
+        .events-table td[data-col="status"] {
+            width: 190px;
+            max-width: 220px;
+        }
+
         .events-table th::before {
             content: '⋮⋮';
             color: var(--text-muted);
@@ -730,9 +810,10 @@
         }
 
         .events-table td {
-            padding: 1rem;
+            padding: 0.75rem 0.9rem;
             border-bottom: 1px solid var(--border-color);
             vertical-align: middle;
+            min-height: calc(var(--row-base-height) * 1.5);
         }
 
         .events-table tr {
@@ -750,6 +831,251 @@
 
         [data-theme="dark"] .events-table tbody tr.dirty {
             background: #3d3420;
+        }
+
+        .events-table tbody tr.today-event {
+            outline: 3px solid var(--today-outline);
+            outline-offset: -3px;
+        }
+
+        .event-cell {
+            display: grid;
+            gap: 0.5rem;
+        }
+
+        .event-info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .event-cell.compact {
+            grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+            align-items: center;
+        }
+
+        .info-pill {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 0.5rem 0.75rem;
+            display: grid;
+            gap: 0.2rem;
+            min-height: calc(var(--row-base-height) * 1.5);
+        }
+
+        .info-pill small {
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+
+        .info-pill strong {
+            font-size: 1rem;
+            color: var(--text-primary);
+        }
+
+        .contact-block {
+            display: grid;
+            gap: 0.5rem;
+        }
+
+        .contact-row {
+            display: grid;
+            grid-template-columns: 1fr auto;
+            gap: 0.5rem;
+            align-items: center;
+        }
+
+        .contact-label {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .row-meta {
+            display: flex;
+            gap: 0.5rem;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+
+        .row-meta .meta-chip {
+            background: var(--bg-tertiary);
+            padding: 0.25rem 0.6rem;
+            border-radius: 12px;
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
+        }
+
+        .table-toolbar {
+            display: flex;
+            justify-content: flex-end;
+            margin-bottom: 0.5rem;
+        }
+
+        .table-toolbar-row {
+            display: flex;
+            gap: 0.5rem;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .btn-ghost {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+            padding: 0.5rem 0.75rem;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .btn-ghost:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .column-menu {
+            position: absolute;
+            right: 0;
+            margin-top: 0.25rem;
+            background: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            box-shadow: var(--shadow-hover);
+            padding: 0.75rem;
+            display: none;
+            z-index: 20;
+            min-width: 220px;
+        }
+
+        .column-menu.open {
+            display: block;
+        }
+
+        .column-menu label {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.35rem 0.25rem;
+            cursor: pointer;
+        }
+
+        .column-menu label:hover {
+            background: var(--bg-tertiary);
+            border-radius: 6px;
+        }
+
+        .hidden-col {
+            display: none !important;
+        }
+
+        .filtered-out {
+            display: none !important;
+        }
+
+        /* Side Panel */
+        .side-panel-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.35);
+            backdrop-filter: blur(2px);
+            opacity: 0;
+            visibility: hidden;
+            transition: opacity 0.2s ease, visibility 0.2s ease;
+            z-index: 110;
+        }
+
+        .side-panel-overlay.visible {
+            opacity: 1;
+            visibility: visible;
+        }
+
+        .side-panel {
+            position: fixed;
+            top: 0;
+            right: calc(-1 * var(--panel-width));
+            width: var(--panel-width);
+            height: 100%;
+            background: var(--bg-primary);
+            box-shadow: -4px 0 14px rgba(0, 0, 0, 0.15);
+            transition: right 0.25s ease;
+            z-index: 120;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .side-panel.visible {
+            right: 0;
+        }
+
+        .side-panel-header {
+            padding: 1rem 1.25rem;
+            border-bottom: 1px solid var(--border-color);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .side-panel-body {
+            padding: 1rem 1.25rem 2rem;
+            overflow-y: auto;
+            flex: 1;
+            display: grid;
+            gap: 1rem;
+        }
+
+        .panel-section {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            display: grid;
+            gap: 0.5rem;
+        }
+
+        .panel-section h4 {
+            margin-bottom: 0.25rem;
+            color: var(--text-secondary);
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+        }
+
+        .panel-actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.5rem;
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            border-radius: 8px;
+        }
+
+        .panel-grid {
+            display: grid;
+            gap: 0.65rem;
+        }
+
+        .panel-grid.two-col {
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+
+        @media (max-width: 1024px) {
+            .side-panel {
+                width: 100%;
+            }
         }
 
         /* Inline Edit Fields */
@@ -817,7 +1143,8 @@
 
         .status-select-container {
             position: relative;
-            min-width: 170px;
+            min-width: 140px;
+            max-width: 220px;
         }
 
         .status-select-trigger {
@@ -1516,6 +1843,25 @@
                 height: 50px;
             }
 
+            .month-selector-controls {
+                flex-direction: column;
+                align-items: stretch;
+            }
+
+            .month-nav {
+                width: 100%;
+                justify-content: center;
+            }
+
+            .status-filter {
+                width: 100%;
+                justify-content: space-between;
+            }
+
+            .status-filter select {
+                width: 100%;
+            }
+
             .events-table {
                 font-size: 0.85rem;
             }
@@ -1607,8 +1953,14 @@
     </nav>
 
     <div class="month-selector">
-        <div class="month-scale" id="monthScale">
-            <!-- Month circles will be generated by JavaScript -->
+        <div class="month-selector-controls">
+            <div class="month-nav">
+                <button class="month-nav-btn" onclick="shiftMonthScale(-1)" aria-label="חודשים קודמים">←</button>
+                <div class="month-scale" id="monthScale">
+                    <!-- Month circles will be generated by JavaScript -->
+                </div>
+                <button class="month-nav-btn" onclick="shiftMonthScale(1)" aria-label="חודשים הבאים">→</button>
+            </div>
         </div>
     </div>
 
@@ -1625,6 +1977,61 @@
 
     <div class="toast" id="toast">
         <div id="toastMessage"></div>
+    </div>
+
+    <div class="side-panel-overlay" id="sidePanelOverlay" onclick="closeEventPanel()"></div>
+    <div class="side-panel" id="eventSidePanel">
+        <div class="side-panel-header">
+            <div>
+                <h3 style="margin: 0; font-size: 1.1rem;">פרטי אירוע</h3>
+            </div>
+            <button class="btn btn-secondary" onclick="closeEventPanel()">✕</button>
+        </div>
+        <div class="side-panel-body" id="sidePanelBody">
+        </div>
+    </div>
+
+    <!-- Add Contact Modal -->
+    <div class="modal-overlay" id="addContactModal" onclick="closeAddContactModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()">
+            <div class="modal-header">
+                <h3>הוספת איש קשר</h3>
+            </div>
+            <div class="modal-body" style="display: grid; gap: 0.75rem;">
+                <label style="display: grid; gap: 0.35rem;">שם
+                    <input type="text" id="addContactName" class="inline-edit" placeholder="שם מלא">
+                </label>
+                <label style="display: grid; gap: 0.35rem;">טלפון (E.164)
+                    <input type="text" id="addContactPhone" class="inline-edit" placeholder="+972..." >
+                </label>
+                <label style="display: grid; gap: 0.35rem;">תפקיד
+                    <select id="addContactRole" class="inline-edit">
+                        <option value="producer">Producer</option>
+                        <option value="technical">Technical</option>
+                    </select>
+                </label>
+                <p style="font-size: 0.85rem; color: var(--text-secondary); margin: 0;">הטלפון ינורמל אוטומטית לפורמט +972.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeAddContactModal()">ביטול</button>
+                <button class="btn btn-primary" onclick="submitAddContact()">שמור</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Call Log Modal -->
+    <div class="modal-overlay" id="callLogModal" onclick="closeCallLogModal()">
+        <div class="modal-dialog" onclick="event.stopPropagation()" style="max-width: 720px;">
+            <div class="modal-header">
+                <h3>לוג שיחות</h3>
+            </div>
+            <div class="modal-body" id="callLogBody" style="max-height: 60vh; overflow-y: auto; display: grid; gap: 0.75rem;">
+                <div style="text-align: center; color: var(--text-muted); padding: 1rem;">טוען...</div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" onclick="closeCallLogModal()">סגור</button>
+            </div>
+        </div>
     </div>
 
     <!-- Confirmation Modal -->
@@ -1670,34 +2077,68 @@
         let notificationEventSource = null;
         const ORG_ID = 1;
         const HALL_STORAGE_KEY = 'events.activeHall';
+        const COLUMN_VISIBILITY_KEY = 'events.columnVisibility';
+        const STATUS_FILTER_KEY = 'events.statusFilter';
+        const MONTHS_TO_SHOW = 5;
+        const MONTH_NAV_STEP = 2;
+        const SCROLL_RETRY_LIMIT = 10;
+        const SCROLL_RETRY_DELAY = 300;
+        const TABLE_COLUMNS = [
+            { key: 'status', label: 'Status' },
+            { key: 'info', label: 'Date / Day / Event' },
+            { key: 'times', label: 'Times' },
+            { key: 'contacts', label: 'Contacts' },
+            { key: 'notes', label: 'Notes' },
+            { key: 'delivery', label: 'Message' },
+            { key: 'actions', label: 'Actions' },
+        ];
+        let columnVisibility = {};
+        let eventsCache = new Map();
         let notificationSound = null;
         let audioContext = null;
         let isMuted = false;
         const STATUS_OPTIONS = ['draft', 'pending', 'confirmed', 'cancelled', 'follow_up', 'contact_required'];
+        let activeStatusFilter = 'all';
         let activeStatusMenu = null;
+        let monthScaleStartOffset = -2;
+        let pendingNavigationTarget = null;
+        const RESEND_CONFIRM_MESSAGE = 'הודעה נשלחה כבר, האם ברצונך לשלוח שוב?';
         
         // Constants
-        const EVENT_LOAD_TIMEOUT = 1000; // ms to wait for events to load before scrolling
         const NAVIGATION_SCROLL_DELAY = 500; // ms to wait before scrolling after navigation
+        let activeColumnMenu = null;
+        let activeAddContactEventId = null;
+        let activeAddContactRole = 'producer';
+        let activeCallLogEventId = null;
 
         // Initialize
         document.addEventListener('DOMContentLoaded', () => {
             loadTheme();
-            generateMonthSelector();
+            loadColumnVisibility();
+            initStatusFilter();
             
+            const urlParams = new URLSearchParams(window.location.search);
             // Load saved month or default to current
             const saved = localStorage.getItem('events.selectedMonth');
             const today = new Date();
             const currentMonthValue = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
-            const defaultMonth = saved || currentMonthValue;
+            const deepLinkMonth = urlParams.get('month');
+            const deepLinkEventId = urlParams.get('eventId');
+            const defaultMonth = deepLinkMonth || saved || currentMonthValue;
+
+            const parsedDeepLinkId = deepLinkEventId ? parseInt(deepLinkEventId) : null;
+            if (parsedDeepLinkId && deepLinkMonth) {
+                pendingNavigationTarget = {
+                    eventId: parsedDeepLinkId,
+                    eventDate: urlParams.get('eventDate') || urlParams.get('event_date') || null,
+                };
+            }
             
             selectMonth(defaultMonth);
             connectSSE();
             initNotifications();
-            checkDeepLink();
             
             // Check for success message after sending tech reminder
-            const urlParams = new URLSearchParams(window.location.search);
             if (urlParams.get('reminder_sent') === 'true') {
                 showToast('התזכורת נשלחה בהצלחה!', 'success');
                 // Clean URL without reloading
@@ -1759,20 +2200,20 @@
             const scale = document.getElementById('monthScale');
             const today = new Date();
             const currentYear = today.getFullYear();
-            const currentMonth = today.getMonth() + 1;
+            const currentMonthNumber = today.getMonth() + 1;
             const months = [];
 
-            // Generate 12 months: 6 before, current, 5 after
-            for (let i = -6; i <= 5; i++) {
-                const date = new Date(today.getFullYear(), today.getMonth() + i, 1);
+            for (let i = 0; i < MONTHS_TO_SHOW; i++) {
+                const offset = monthScaleStartOffset + i;
+                const date = new Date(today.getFullYear(), today.getMonth() + offset, 1);
                 const monthYear = date.getFullYear();
                 const monthNum = date.getMonth() + 1;
                 
                 // Determine if past, current, or future
                 let timeClass = '';
-                if (monthYear < currentYear || (monthYear === currentYear && monthNum < currentMonth)) {
+                if (monthYear < currentYear || (monthYear === currentYear && monthNum < currentMonthNumber)) {
                     timeClass = 'past';
-                } else if (monthYear === currentYear && monthNum === currentMonth) {
+                } else if (monthYear === currentYear && monthNum === currentMonthNumber) {
                     timeClass = 'current';
                 } else {
                     timeClass = 'future';
@@ -1795,6 +2236,40 @@
                     <div class="month-label">${m.label}</div>
                 </div>
             `).join('');
+
+            highlightSelectedMonth();
+        }
+
+        function highlightSelectedMonth() {
+            document.querySelectorAll('.month-circle').forEach(circle => {
+                circle.classList.toggle('selected', circle.dataset.month === currentMonth);
+            });
+        }
+
+        function ensureMonthVisible(month) {
+            if (!month) return;
+            const [yearStr, monthStr] = month.split('-');
+            const targetYear = parseInt(yearStr, 10);
+            const targetMonth = parseInt(monthStr, 10);
+            if (isNaN(targetYear) || isNaN(targetMonth)) return;
+
+            const today = new Date();
+            const currentIndex = today.getFullYear() * 12 + today.getMonth();
+            const targetIndex = targetYear * 12 + (targetMonth - 1);
+            const diff = targetIndex - currentIndex;
+            const windowEnd = monthScaleStartOffset + MONTHS_TO_SHOW - 1;
+
+            if (diff < monthScaleStartOffset) {
+                monthScaleStartOffset = diff - Math.floor((MONTHS_TO_SHOW - 1) / 2);
+            } else if (diff > windowEnd) {
+                monthScaleStartOffset = diff - Math.floor((MONTHS_TO_SHOW - 1) / 2);
+            }
+        }
+
+        function shiftMonthScale(direction) {
+            monthScaleStartOffset += direction * MONTH_NAV_STEP;
+            generateMonthSelector();
+            highlightSelectedMonth();
         }
 
         function selectMonth(month) {
@@ -1803,13 +2278,71 @@
             // Save to localStorage (PHASE 2 - Task 3)
             localStorage.setItem('events.selectedMonth', month);
             
-            // Update UI - add selected class (PHASE 2 - Task 4)
-            document.querySelectorAll('.month-circle').forEach(circle => {
-                circle.classList.toggle('selected', circle.dataset.month === month);
-            });
+            ensureMonthVisible(month);
+            generateMonthSelector();
 
             // Load events
             loadEvents(month);
+        }
+
+        function renderStatusFilterControl() {
+            return `
+                <div class="status-filter">
+                    <label>סינון סטטוס</label>
+                    <select class="status-filter-select" onchange="onStatusFilterChange(this.value)">
+                        ${getStatusFilterOptions()}
+                    </select>
+                </div>
+            `;
+        }
+
+        function getStatusFilterOptions() {
+            const options = ['all', ...STATUS_OPTIONS];
+            const labels = {
+                all: 'כל הסטטוסים',
+                draft: 'Draft',
+                pending: 'Pending',
+                confirmed: 'Confirmed',
+                follow_up: 'Follow Up',
+                contact_required: 'Contact Required',
+                cancelled: 'Cancelled'
+            };
+            return options.map(opt => `<option value="${opt}">${labels[opt] || opt}</option>`).join('');
+        }
+
+        function syncStatusFilterUI() {
+            document.querySelectorAll('.status-filter-select').forEach(select => {
+                if (select.value !== activeStatusFilter) {
+                    select.value = activeStatusFilter;
+                }
+            });
+        }
+
+        function initStatusFilter() {
+            const saved = localStorage.getItem(STATUS_FILTER_KEY);
+            const allowed = ['all', ...STATUS_OPTIONS];
+            activeStatusFilter = allowed.includes(saved) ? saved : 'all';
+            syncStatusFilterUI();
+        }
+
+        function onStatusFilterChange(value) {
+            activeStatusFilter = value;
+            localStorage.setItem(STATUS_FILTER_KEY, value);
+            applyStatusFilter();
+            syncStatusFilterUI();
+        }
+
+        function applyStatusFilter() {
+            document.querySelectorAll('.events-table tbody tr.event-row').forEach(row => {
+                const rowStatus = (row.dataset.status || 'draft').toLowerCase();
+                const matches = activeStatusFilter === 'all' || rowStatus === activeStatusFilter;
+                row.classList.toggle('filtered-out', !matches);
+                const detailsRow = document.getElementById(`details-${row.dataset.eventId}`);
+                if (detailsRow) {
+                    detailsRow.classList.toggle('filtered-out', !matches);
+                }
+            });
+            syncStatusFilterUI();
         }
 
         // Load Events
@@ -1857,6 +2390,9 @@
                 localStorage.setItem(HALL_STORAGE_KEY, activeHall);
             }
 
+            // Reset and repopulate events cache
+            eventsCache = new Map();
+
             container.innerHTML = `
                 <div class="hall-tabs">
                     <div class="hall-tab-list">
@@ -1872,28 +2408,43 @@
                     </div>
                     <div class="hall-tab-panels">
                         ${hallEntries.map(([hallName, events]) => `
-                            <div class="hall-tab-panel ${hallName === activeHall ? 'active' : ''}" data-hall="${escapeHtml(hallName)}">
-                                <div class="hall-section">
-                                    <div class="hall-body">
-                                        <table class="events-table" data-hall="${escapeHtml(hallName)}">
+                <div class="hall-tab-panel ${hallName === activeHall ? 'active' : ''}" data-hall="${escapeHtml(hallName)}">
+                            <div class="hall-section">
+                                <div class="hall-body">
+                                    <div class="table-toolbar">
+                                        <div class="table-toolbar-row">
+                                            ${renderStatusFilterControl()}
+                                            <div style="position: relative;">
+                                                <button type="button" class="btn-ghost column-menu-toggle" data-hall="${escapeHtml(hallName)}" onclick="toggleColumnMenu('${escapeHtml(hallName)}')">Columns ▾</button>
+                                                <div class="column-menu" id="column-menu-${hallName.replace(/\s+/g, '-')}">
+                                                    ${TABLE_COLUMNS.map(col => `
+                                                        <label>
+                                                            <input type="checkbox" ${columnVisibility[col.key] !== false ? 'checked' : ''} onchange="setColumnVisibility('${col.key}', this.checked)">
+                                                            ${col.label}
+                                                        </label>
+                                                    `).join('')}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <table class="events-table" data-hall="${escapeHtml(hallName)}">
                                             <thead>
                                                 <tr id="header-row-${hallName.replace(/\s+/g, '-')}">
                                                     <th data-col="expander" style="width: 40px;"></th>
-                                                    <th class="sortable" draggable="true" data-col="name" onclick="sortTable(this, 'name')">Name</th>
-                                                    <th class="sortable sorted-asc" draggable="true" data-col="event_date" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date</th>
-                                                    <th draggable="true" data-col="day" style="width: 80px;">Day</th>
-                                                    <th class="sortable" draggable="true" data-col="show_time" onclick="sortTable(this, 'show_time')">Show Time</th>
-                                                    <th class="sortable" draggable="true" data-col="load_in_time" onclick="sortTable(this, 'load_in_time')">Load In</th>
                                                     <th class="sortable" draggable="true" data-col="status" onclick="sortTable(this, 'status')">Status</th>
-                                                    <th class="sortable" draggable="true" data-col="delivery" onclick="sortTable(this, 'delivery')">Delivery</th>
-                                                    <th class="sortable" draggable="true" data-col="producer" onclick="sortTable(this, 'producer')">Producer</th>
-                                                    <th class="sortable" draggable="true" data-col="technical" onclick="sortTable(this, 'technical')">Technical</th>
-                                                    <th class="sortable" draggable="true" data-col="notes" onclick="sortTable(this, 'notes')">Notes</th>
+                                                    <th class="sortable sorted-asc" draggable="true" data-col="info" data-default-sort="true" onclick="sortTable(this, 'event_date')">Date / Event</th>
+                                                    <th class="sortable" draggable="true" data-col="times" onclick="sortTable(this, 'show_time')">Times</th>
+                                                    <th draggable="true" data-col="contacts">Contacts</th>
+                                                    <th draggable="true" data-col="notes">Notes</th>
+                                                    <th draggable="true" data-col="delivery">Message</th>
                                                     <th draggable="true" data-col="actions">Actions</th>
                                                 </tr>
                                             </thead>
                                             <tbody>
-                                                ${events.map(event => renderEventRow(event)).join('')}
+                                                ${events.map(event => {
+                                                    eventsCache.set(event.event_id, event);
+                                                    return renderEventRow(event);
+                                                }).join('')}
                                             </tbody>
                                         </table>
                                     </div>
@@ -1909,6 +2460,18 @@
 
             // PHASE 5: Initialize column resize
             initColumnResize();
+
+            // Apply column visibility preferences
+            applyColumnVisibility();
+
+            // Enable row click for side panel
+            attachRowClickHandlers();
+            applyStatusFilter();
+            syncStatusFilterUI();
+
+            if (pendingNavigationTarget && pendingNavigationTarget.eventId && eventsCache.has(pendingNavigationTarget.eventId)) {
+                setTimeout(() => scrollAndHighlightEvent(pendingNavigationTarget.eventId), NAVIGATION_SCROLL_DELAY);
+            }
 
             // Note: Shifts are loaded on-demand when user expands the section
         }
@@ -1944,6 +2507,13 @@
             } catch (e) {
                 return '—';
             }
+        }
+
+        function getTodayISODate() {
+            const now = new Date();
+            const tzOffset = now.getTimezoneOffset() * 60000;
+            const local = new Date(now - tzOffset);
+            return local.toISOString().split('T')[0];
         }
 
         // Render delivery status chip with proper colors (PHASE 1)
@@ -2027,7 +2597,13 @@
                 });
             }
 
+            const row = trigger.closest('tr.event-row');
+            if (row) {
+                row.setAttribute('data-status', (status || '').toLowerCase());
+            }
+
             updateHallConfirmedCounts();
+            applyStatusFilter();
         }
 
         function renderEventRow(event) {
@@ -2044,110 +2620,97 @@
             const loadInTime = event.load_in_time_display || '';
             const eventDate = event.event_date || '';
             const defaultTime = event.load_in_time_display || '';
+            const isTodayEvent = eventDate === getTodayISODate();
 
             return `
-                <tr data-event-id="${event.event_id}" class="event-row">
-                    <td class="expander-cell">
+                <tr data-event-id="${event.event_id}" class="event-row ${isTodayEvent ? 'today-event' : ''}" data-event_date="${eventDate}" data-show_time="${showTime}" data-load_in_time="${loadInTime}" data-status="${statusClass}">
+                    <td class="expander-cell" data-col="expander">
                         <button class="expander-btn" onclick="toggleRowDetails(${event.event_id})" id="expander-${event.event_id}" aria-label="Toggle shifts">
                             ▶
                         </button>
                     </td>
-                    <td>
-                        <input type="text" class="inline-edit" value="${escapeHtml(event.name || '')}" 
-                               onchange="markDirty(${event.event_id}, 'name', this.value)">
+                    <td data-col="status">
+                        <div class="status-select-container readonly" id="status-select-${event.event_id}" data-status="${statusClass}" onclick="openEventPanel(${event.event_id})" style="cursor: pointer;">
+                            ${renderStatusChip(event)}
+                        </div>
                     </td>
-                    <td>
-                        <input type="date" class="inline-edit" value="${event.event_date || ''}" 
-                               onchange="markDirty(${event.event_id}, 'event_date', this.value)">
-                    </td>
-                    <td style="text-align: center; color: var(--text-secondary); font-size: 0.9rem;">
-                        ${getDayOfWeek(event.event_date)}
-                    </td>
-                    <td>
-                        <input type="time" class="inline-edit" value="${event.show_time_display}" 
-                               onchange="markDirty(${event.event_id}, 'show_time', this.value)">
-                    </td>
-                    <td>
-                        <input type="time" class="inline-edit" value="${event.load_in_time_display}" 
-                               onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
-                    </td>
-                    <td>
-                        <div class="status-select-container" id="status-select-${event.event_id}" data-status="${statusClass}">
-                            <button type="button" class="status-select-trigger" onclick="toggleStatusMenu(${event.event_id})" aria-haspopup="listbox" aria-expanded="false">
-                                ${renderStatusChip(event)}
-                                <span class="status-select-caret">▼</span>
-                            </button>
-                            <div class="status-select-menu" id="status-menu-${event.event_id}" role="listbox" aria-label="Select status">
-                                ${STATUS_OPTIONS.map(statusOption => `
-                                    <button type="button" class="status-option ${statusOption === statusValue ? 'selected' : ''}" role="option" data-value="${statusOption}" onclick="selectStatus(${event.event_id}, '${statusOption}')">
-                                        ${renderStatusChip({ status: statusOption })}
-                                    </button>
-                                `).join('')}
+                    <td data-col="info">
+                        <div class="info-pill">
+                            <div class="event-info-grid">
+                                <div style="display: grid; gap: 0.25rem;">
+                                    <small>Date</small>
+                                    <div style="display: flex; align-items: center; gap: 0.35rem;">
+                                        <span class="readonly-value" data-field="event_date">${eventDate || '—'}</span>
+                                        <span style="color: var(--text-secondary); font-weight: 600;">${getDayOfWeek(event.event_date)}</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <small>Event</small>
+                                    <span class="readonly-value" data-field="name">${escapeHtml(event.name || '')}</span>
+                                </div>
                             </div>
                         </div>
                     </td>
-                    <td>
-                        ${renderDeliveryStatusChip(event.latest_delivery_status)}
+                    <td data-col="times">
+                        <div class="info-pill">
+                            <div class="event-cell compact">
+                                <div>
+                                    <small>Load In</small>
+                                    <span class="readonly-value" data-field="load_in_time">${loadInTime || '—'}</span>
+                                </div>
+                                <div>
+                                    <small>Show Time</small>
+                                    <span class="readonly-value" data-field="show_time">${showTime || '—'}</span>
+                                </div>
+                            </div>
+                        </div>
                     </td>
-                    <td>
-                        <div class="contact-dropdown-container" id="producer-${event.event_id}">
-                            <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'producer', 'producer')">
-                                <div style="flex: 1;">
-                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.producer_name || 'Select producer')}</div>
+                    <td data-col="contacts">
+                        <div class="contact-block">
+                            <div class="contact-row">
+                                <div style="min-width: 0;">
+                                    <div class="contact-label">Producer</div>
+                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.producer_name || '—')}</div>
                                     ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.producer_phone)}</div>` : ''}
                                 </div>
-                                <span style="color: var(--text-muted);">▼</span>
                             </div>
-                        </div>
-                    </td>
-                    <td>
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <div class="contact-dropdown-container" id="technical-${event.event_id}" style="flex: 1;">
-                                <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'technical')">
-                                    <div style="flex: 1;">
-                                        <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || 'Select technical')}</div>
-                                        ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
-                                    </div>
-                                    <span style="color: var(--text-muted);">▼</span>
+                            <div class="contact-row">
+                                <div style="min-width: 0;">
+                                    <div class="contact-label">Technical</div>
+                                    <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || '—')}</div>
+                                    ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
                                 </div>
                             </div>
-                            <button class="btn btn-sm" 
-                                    onclick="showSuggestions(${event.event_id}, this)" 
-                                    title="הצעות טכנאים"
-                                    style="padding: 0.3rem 0.6rem; font-size: 0.85rem; white-space: nowrap;">
-                                💡
-                            </button>
-                            ${event.technical_contact_id ? `
-                            <button class="btn btn-sm btn-outline-info" 
-                                    onclick="sendTechReminder(${event.event_id})" 
-                                    title="${event.tech_reminder_sent_at_display ? 'נשלח לאחרונה: ' + escapeHtml(event.tech_reminder_sent_at_display) : 'שלח תזכורת טכנית עם פרטי עובד פותח'}"
-                                    style="padding: 0.3rem 0.6rem; font-size: 0.85rem; white-space: nowrap;">
-                                🔔
-                            </button>
-                            ` : ''}
                         </div>
                     </td>
-                    <td>
-                        <input type="text" class="inline-edit" value="${escapeHtml(event.notes || '')}" 
+                    <td data-col="notes">
+                        <input type="text" class="inline-edit" data-field="notes" value="${escapeHtml(event.notes || '')}" 
                                onchange="markDirty(${event.event_id}, 'notes', this.value)">
                     </td>
-                    <td>
-                        <div class="actions-container">
+                    <td data-col="delivery">
+                        ${renderDeliveryStatusChip(event.latest_delivery_status)}
+                    </td>
+                    <td data-col="actions">
+                        <div class="actions-container" style="flex-wrap: wrap; gap: 0.35rem;">
+                            <button class="action-icon" onclick="openEventPanel(${event.event_id})" title="Edit in side panel">✏️</button>
+                            <button class="action-icon whatsapp ${event.init_sent_at ? 'sent' : ''}" 
+                                    onclick="sendWhatsApp(${event.event_id})"
+                                    title="${event.init_sent_at ? 'נשלח לאחרונה: ' + escapeHtml(event.init_sent_at_display) : 'שליחת איניט'}">
+                                📱
+                            </button>
+                            <button class="action-icon" ${event.technical_contact_id ? '' : 'disabled'} onclick="sendTechReminder(${event.event_id})" title="${event.technical_contact_id ? 'תזכורת טכנאי' : 'בחרו טכנאי לפני שליחת תזכורת'}">🔔</button>
+                            <button class="action-icon" onclick="toggleRowDetails(${event.event_id})" title="ניהול עובדים ותזכורות">🧑‍🤝‍🧑</button>
+                            <button class="action-icon" onclick="saveChanges()" title="שמור שינויים">💾</button>
                             <button class="action-icon delete" 
                                     onclick="deleteEvent(${event.event_id})"
                                     title="Delete event">
                                 🗑️
                             </button>
-                            <button class="action-icon whatsapp ${event.init_sent_at ? 'sent' : ''}" 
-                                    onclick="sendWhatsApp(${event.event_id})"
-                                    title="${event.init_sent_at ? 'נשלח לאחרונה: ' + escapeHtml(event.init_sent_at_display) : 'טרם נשלח'}">
-                                📱
-                            </button>
                         </div>
                     </td>
                 </tr>
                 <tr class="row-details" id="details-${event.event_id}" data-event-id="${event.event_id}">
-                    <td colspan="12" style="padding: 0;">
+                    <td colspan="8" style="padding: 0;">
                         <div class="row-details-content">
                             <div id="shifts-container-${event.event_id}">
                                 <div style="text-align: center; padding: 1rem; color: var(--text-muted);">
@@ -2174,7 +2737,26 @@
 
             // Mark row visually
             const row = document.querySelector(`tr[data-event-id="${eventId}"]`);
-            if (row) row.classList.add('dirty');
+            if (row) {
+                row.classList.add('dirty');
+                if (field === 'event_date') {
+                    row.setAttribute('data-event_date', value);
+                }
+                if (field === 'show_time') {
+                    row.setAttribute('data-show_time', value);
+                }
+                if (field === 'load_in_time') {
+                    row.setAttribute('data-load_in_time', value);
+                }
+                if (field === 'status') {
+                    row.setAttribute('data-status', (value || '').toLowerCase());
+                }
+            }
+
+            if (eventsCache.has(eventId)) {
+                const updated = { ...eventsCache.get(eventId), [field]: value };
+                eventsCache.set(eventId, updated);
+            }
 
             // Show save button
             document.getElementById('saveBtn').classList.add('visible');
@@ -2286,6 +2868,21 @@
             if (eventData.status !== undefined) {
                 updateStatusTrigger(eventId, eventData.status || 'draft');
             }
+
+            // Update row dataset for sorting/highlights
+            row.setAttribute('data-event_date', eventData.event_date || '');
+            row.setAttribute('data-show_time', eventData.show_time_display || '');
+            row.setAttribute('data-load_in_time', eventData.load_in_time_display || '');
+            if (eventData.status) {
+                row.setAttribute('data-status', (eventData.status || '').toLowerCase());
+            }
+
+            // Refresh today highlight
+            const isToday = (eventData.event_date || '') === getTodayISODate();
+            row.classList.toggle('today-event', isToday);
+
+            const existing = eventsCache.get(eventId) || {};
+            eventsCache.set(eventId, { ...existing, ...eventData });
         }
 
         function updateHallConfirmedCounts() {
@@ -2303,8 +2900,9 @@
         // Contact Dropdown (PHASE 4)
         let activeDropdown = null;
 
-        async function toggleContactDropdown(eventId, fieldType, role) {
-            const containerId = `${fieldType}-${eventId}`;
+        async function toggleContactDropdown(eventId, fieldType, role, source = 'table') {
+            const prefix = source === 'panel' ? 'panel-' : '';
+            const containerId = `${prefix}${fieldType}-${eventId}`;
             const container = document.getElementById(containerId);
             
             // Close any existing dropdown
@@ -2332,9 +2930,9 @@
             menu.className = 'contact-dropdown-menu visible';
             menu.innerHTML = `
                 <div class="contact-dropdown-search">
-                    <input type="text" placeholder="Search by name or phone..." oninput="filterContactDropdown(${eventId}, '${fieldType}', '${role}', this.value)">
+                    <input type="text" placeholder="Search by name or phone..." oninput="filterContactDropdown(${eventId}, '${fieldType}', '${role}', this.value, '${source}')">
                 </div>
-                <div class="contact-dropdown-list" id="${fieldType}-list-${eventId}">
+                <div class="contact-dropdown-list" id="${prefix}${fieldType}-list-${eventId}">
                     <div class="contact-dropdown-empty">Loading...</div>
                 </div>
             `;
@@ -2344,7 +2942,7 @@
             activeDropdown = container;
             
             // Load contacts
-            await loadContactsForDropdown(eventId, fieldType, role);
+            await loadContactsForDropdown(eventId, fieldType, role, '', source);
             
             // Focus search input
             menu.querySelector('.contact-dropdown-search input')?.focus();
@@ -2384,13 +2982,275 @@
             }
         }
 
-        async function loadContactsForDropdown(eventId, fieldType, role, searchTerm = '') {
+        function normalizePhoneToE164IL(phone) {
+            if (!phone) return '';
+            let digits = phone.replace(/\D+/g, '');
+            if (!digits) return '';
+            if (phone.trim().startsWith('+')) {
+                digits = '+' + digits;
+            } else if (digits.startsWith('972')) {
+                digits = '+' + digits;
+            } else if (digits.startsWith('0')) {
+                digits = '+972' + digits.slice(1);
+            } else {
+                digits = '+' + digits;
+            }
+            return digits;
+        }
+
+        function openAddContactModal(eventId, defaultRole = 'producer') {
+            activeAddContactEventId = eventId;
+            activeAddContactRole = defaultRole;
+            document.getElementById('addContactName').value = '';
+            document.getElementById('addContactPhone').value = '';
+            document.getElementById('addContactRole').value = defaultRole;
+            document.getElementById('addContactModal').classList.add('visible');
+        }
+
+        function closeAddContactModal() {
+            document.getElementById('addContactModal').classList.remove('visible');
+            activeAddContactEventId = null;
+        }
+
+        async function submitAddContact() {
+            const name = document.getElementById('addContactName').value.trim();
+            const rawPhone = document.getElementById('addContactPhone').value.trim();
+            const role = document.getElementById('addContactRole').value;
+
+            if (!name || !rawPhone) {
+                showToast('נא למלא שם וטלפון', 'error');
+                return;
+            }
+
+            const phone = normalizePhoneToE164IL(rawPhone);
+            if (!phone.startsWith('+') || phone.length < 8) {
+                showToast('טלפון לא תקין, השתמש בפורמט +972...', 'error');
+                return;
+            }
+
+            try {
+                const response = await fetch(`/api/contacts?org_id=${ORG_ID}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, phone, role }),
+                });
+
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.detail || 'Failed to create contact');
+                }
+
+                const data = await response.json();
+                showToast('איש הקשר נוסף בהצלחה', 'success');
+                closeAddContactModal();
+
+                // Refresh dropdowns for the active event/role if open
+                if (activeAddContactEventId) {
+                    loadContactsForDropdown(activeAddContactEventId, role === 'producer' ? 'producer' : 'technical', role);
+                }
+            } catch (e) {
+                console.error('Failed to add contact', e);
+                showToast('יצירת איש הקשר נכשלה', 'error');
+            }
+        }
+
+        function closeCallLogModal() {
+            document.getElementById('callLogModal').classList.remove('visible');
+            document.getElementById('callLogBody').innerHTML = '';
+            activeCallLogEventId = null;
+        }
+
+        async function openCallLog(eventId) {
+            activeCallLogEventId = eventId;
+            const body = document.getElementById('callLogBody');
+            body.innerHTML = '<div style="text-align:center; color: var(--text-muted); padding:1rem;">טוען...</div>';
+            document.getElementById('callLogModal').classList.add('visible');
+
+            try {
+                const resp = await fetch(`/api/events/${eventId}/messages?org_id=${ORG_ID}`);
+                if (!resp.ok) {
+                    throw new Error('Failed to load log');
+                }
+                const data = await resp.json();
+                const messages = data.messages || [];
+                if (messages.length === 0) {
+                    body.innerHTML = '<div style="text-align:center; color: var(--text-muted); padding:1rem;">אין הודעות עבור אירוע זה</div>';
+                    return;
+                }
+
+                body.innerHTML = messages.map(msg => {
+                    const ts = msg.sent_at || msg.received_at || msg.created_at || '';
+                    const direction = msg.direction === 'incoming' ? '⬅️ נכנס' : '➡️ נשלח';
+                    const status = msg.delivery_status ? `<span style="color: var(--text-secondary); font-size:0.85rem;">(${msg.delivery_status})</span>` : '';
+                    return `
+                        <div style="border:1px solid var(--border-color); border-radius:10px; padding:0.75rem; display:grid; gap:0.35rem;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; gap:0.5rem;">
+                                <strong>${direction}</strong>
+                                <span style="color: var(--text-muted); font-size:0.85rem;">${ts}</span>
+                            </div>
+                            <div style="color: var(--text-secondary); font-size:0.9rem;">${escapeHtml(msg.body || '')}</div>
+                            <div style="display:flex; gap:0.5rem; flex-wrap:wrap; color: var(--text-muted); font-size:0.85rem;">
+                                ${msg.contact_name ? `<span>${escapeHtml(msg.contact_name)}</span>` : ''}
+                                ${msg.contact_phone ? `<span>${escapeHtml(msg.contact_phone)}</span>` : ''}
+                                ${status}
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            } catch (e) {
+                console.error('Failed to load call log', e);
+                body.innerHTML = '<div style="text-align:center; color: var(--danger-color); padding:1rem;">שגיאה בטעינת הלוג</div>';
+            }
+        }
+
+        function attachRowClickHandlers() {
+            document.querySelectorAll('.events-table tbody tr.event-row').forEach(row => {
+                row.onclick = (e) => {
+                    const isInteractive = e.target.closest('button, input, select, textarea, .contact-dropdown-menu, .status-select-menu, .resize-handle, .contact-dropdown-trigger, .status-select-trigger');
+                    if (isInteractive) return;
+                    const eventId = Number(row.dataset.eventId);
+                    if (eventId) {
+                        openEventPanel(eventId);
+                    }
+                };
+            });
+        }
+
+        function setContactTriggerDefault(eventId, role, source = 'table') {
+            const prefix = source === 'panel' ? 'panel-' : '';
+            const container = document.getElementById(`${prefix}${role}-${eventId}`);
+            const trigger = container?.querySelector('.contact-dropdown-trigger');
+            if (trigger) {
+                trigger.innerHTML = `
+                    <div style="flex: 1;">
+                        <div style="font-weight: 600; font-size: 0.9rem;">${role === 'producer' ? 'Select producer' : 'Select technical'}</div>
+                    </div>
+                    <span style="color: var(--text-muted);">▼</span>
+                `;
+            }
+        }
+
+        function removeContactFromEvent(eventId, role) {
+            setContactTriggerDefault(eventId, role, 'table');
+            setContactTriggerDefault(eventId, role, 'panel');
+            markDirty(eventId, `${role}_contact_id`, null);
+            markDirty(eventId, `${role}_name`, null);
+            markDirty(eventId, `${role}_phone`, null);
+            showToast('איש הקשר הוסר מהאירוע (לא נמחק ממערכת הקשר)', 'info');
+        }
+
+        function renderSidePanelContent(event) {
+            const statusOptions = STATUS_OPTIONS.map(opt => `<option value="${opt}" ${opt === (event.status || 'draft') ? 'selected' : ''}>${opt}</option>`).join('');
+            const initTooltip = event.init_sent_at ? `נשלח לאחרונה: ${escapeHtml(event.init_sent_at_display || '')}` : 'שליחת איניט';
+            const techReminderTooltip = event.tech_reminder_sent_at ? `נשלח לאחרונה: ${escapeHtml(event.tech_reminder_sent_at_display || '')}` : 'תזכורת טכנאי';
+            return `
+                <div class="panel-section">
+                    <h4>General Info</h4>
+                    <div class="panel-grid two-col">
+                        <label>Date
+                            <input type="date" class="inline-edit" value="${event.event_date || ''}" onchange="markDirty(${event.event_id}, 'event_date', this.value)">
+                        </label>
+                        <label>Status
+                            <select class="inline-edit" onchange="selectStatus(${event.event_id}, this.value)">
+                                ${statusOptions}
+                            </select>
+                        </label>
+                        <label>Show Time
+                            <input type="time" class="inline-edit" value="${event.show_time_display || ''}" onchange="markDirty(${event.event_id}, 'show_time', this.value)">
+                        </label>
+                        <label>Load In
+                            <input type="time" class="inline-edit" value="${event.load_in_time_display || ''}" onchange="markDirty(${event.event_id}, 'load_in_time', this.value)">
+                        </label>
+                        <label>Event Name
+                            <input type="text" class="inline-edit" value="${escapeHtml(event.name || '')}" onchange="markDirty(${event.event_id}, 'name', this.value)">
+                        </label>
+                        <label>Day
+                            <input type="text" class="inline-edit" value="${getDayOfWeek(event.event_date)}" disabled>
+                        </label>
+                    </div>
+                </div>
+                <div class="panel-section">
+                    <h4>Contacts</h4>
+                    <div class="panel-actions" style="justify-content: flex-start; gap: 0.35rem;">
+                        <button class="btn btn-secondary icon-btn" onclick="openAddContactModal(${event.event_id})" title="הוספת איש קשר">➕</button>
+                        <button class="btn btn-secondary icon-btn" onclick="showSuggestions(${event.event_id}, this)" title="הצעות טכנאים">💡</button>
+                        <button class="btn btn-secondary icon-btn" onclick="removeContactFromEvent(${event.event_id}, 'producer')" title="הסר מפיק">🧹 P</button>
+                        <button class="btn btn-secondary icon-btn" onclick="removeContactFromEvent(${event.event_id}, 'technical')" title="הסר טכנאי">🧹 T</button>
+                        <button class="btn btn-secondary icon-btn" onclick="openCallLog(${event.event_id})" title="לוג שיחות">📜</button>
+                    </div>
+                    <div class="panel-grid two-col">
+                        <label>Producer Contact
+                            <div class="contact-dropdown-container" id="panel-producer-${event.event_id}">
+                                <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'producer', 'producer', 'panel')">
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.producer_name || 'Select producer')}</div>
+                                        ${event.producer_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.producer_phone)}</div>` : ''}
+                                    </div>
+                                    <span style="color: var(--text-muted);">▼</span>
+                                </div>
+                            </div>
+                        </label>
+                        <label>Technical Contact
+                            <div class="contact-dropdown-container" id="panel-technical-${event.event_id}">
+                                <div class="contact-dropdown-trigger" onclick="toggleContactDropdown(${event.event_id}, 'technical', 'technical', 'panel')">
+                                    <div style="flex: 1;">
+                                        <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(event.technical_name || 'Select technical')}</div>
+                                        ${event.technical_phone ? `<div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(event.technical_phone)}</div>` : ''}
+                                    </div>
+                                    <span style="color: var(--text-muted);">▼</span>
+                                </div>
+                            </div>
+                        </label>
+                    </div>
+                    <div class="panel-actions"></div>
+                </div>
+                <div class="panel-section">
+                    <h4>Notes</h4>
+                    <textarea class="inline-edit" style="width: 100%; min-height: 120px;" onchange="markDirty(${event.event_id}, 'notes', this.value)">${escapeHtml(event.notes || '')}</textarea>
+                </div>
+                <div class="panel-section">
+                    <h4>Actions</h4>
+                    <div class="panel-actions">
+                        <button class="btn btn-primary" onclick="sendWhatsApp(${event.event_id})" title="${initTooltip}">שליחת איניט</button>
+                        <button class="btn btn-secondary" onclick="sendTechReminder(${event.event_id})" title="${techReminderTooltip}">תזכורת טכנאי</button>
+                        <button class="btn btn-secondary" onclick="toggleRowDetails(${event.event_id})">ניהול עובדים</button>
+                        <button class="btn btn-primary" onclick="saveChanges()">שמור</button>
+                        <button class="btn btn-danger" onclick="deleteEvent(${event.event_id})">מחיקה</button>
+                    </div>
+                </div>
+            `;
+        }
+
+        async function openEventPanel(eventId) {
+            const overlay = document.getElementById('sidePanelOverlay');
+            const panel = document.getElementById('eventSidePanel');
+            const body = document.getElementById('sidePanelBody');
+
+            const eventData = eventsCache.get(eventId);
+
+            if (!eventData) {
+                showToast('לא נמצאו נתונים להצגה', 'error');
+                return;
+            }
+
+            body.innerHTML = renderSidePanelContent(eventData);
+            overlay.classList.add('visible');
+            panel.classList.add('visible');
+        }
+
+        function closeEventPanel() {
+            document.getElementById('sidePanelOverlay').classList.remove('visible');
+            document.getElementById('eventSidePanel').classList.remove('visible');
+        }
+
+        async function loadContactsForDropdown(eventId, fieldType, role, searchTerm = '', source = 'table') {
             try {
                 const url = `/api/contacts/by-role?org_id=${ORG_ID}&role=${encodeURIComponent(role)}${searchTerm ? '&search=' + encodeURIComponent(searchTerm) : ''}`;
                 const response = await fetch(url);
                 const data = await response.json();
                 
-                const listId = `${fieldType}-list-${eventId}`;
+                const prefix = source === 'panel' ? 'panel-' : '';
+                const listId = `${prefix}${fieldType}-list-${eventId}`;
                 const listEl = document.getElementById(listId);
                 if (!listEl) return;
                 
@@ -2400,14 +3260,15 @@
                 }
                 
                 listEl.innerHTML = data.contacts.map(contact => `
-                    <div class="contact-dropdown-item" onclick="selectContact(${eventId}, '${fieldType}', ${contact.contact_id}, '${escapeHtml(contact.name)}', '${escapeHtml(contact.phone)}')">
+                    <div class="contact-dropdown-item" onclick="selectContact(${eventId}, '${fieldType}', ${contact.contact_id}, '${escapeHtml(contact.name)}', '${escapeHtml(contact.phone)}', '${source}')">
                         <div class="contact-dropdown-item-name">${escapeHtml(contact.name)}</div>
                         <div class="contact-dropdown-item-phone">${escapeHtml(contact.phone)}</div>
                     </div>
                 `).join('');
             } catch (error) {
                 console.error('Failed to load contacts:', error);
-                const listId = `${fieldType}-list-${eventId}`;
+                const prefix = source === 'panel' ? 'panel-' : '';
+                const listId = `${prefix}${fieldType}-list-${eventId}`;
                 const listEl = document.getElementById(listId);
                 if (listEl) {
                     listEl.innerHTML = '<div class="contact-dropdown-empty">Error loading contacts</div>';
@@ -2415,21 +3276,33 @@
             }
         }
 
-        function filterContactDropdown(eventId, fieldType, role, searchTerm) {
-            loadContactsForDropdown(eventId, fieldType, role, searchTerm);
+        function filterContactDropdown(eventId, fieldType, role, searchTerm, source = 'table') {
+            loadContactsForDropdown(eventId, fieldType, role, searchTerm, source);
         }
 
-        function selectContact(eventId, fieldType, contactId, name, phone) {
+        function selectContact(eventId, fieldType, contactId, name, phone, source = 'table') {
             // Update the UI
-            const container = document.getElementById(`${fieldType}-${eventId}`);
-            const trigger = container.querySelector('.contact-dropdown-trigger');
-            trigger.innerHTML = `
+            const prefix = source === 'panel' ? 'panel-' : '';
+            const container = document.getElementById(`${prefix}${fieldType}-${eventId}`);
+            const trigger = container?.querySelector('.contact-dropdown-trigger');
+            const triggerContent = `
                 <div style="flex: 1;">
                     <div style="font-weight: 600; font-size: 0.9rem;">${escapeHtml(name)}</div>
                     <div style="font-size: 0.8rem; color: var(--text-muted);">${escapeHtml(phone)}</div>
                 </div>
                 <span style="color: var(--text-muted);">▼</span>
             `;
+            if (trigger) {
+                trigger.innerHTML = triggerContent;
+            }
+
+            // Also update paired table/panel trigger if exists
+            const counterpartPrefix = source === 'panel' ? '' : 'panel-';
+            const counterpart = document.getElementById(`${counterpartPrefix}${fieldType}-${eventId}`);
+            const counterpartTrigger = counterpart?.querySelector('.contact-dropdown-trigger');
+            if (counterpartTrigger) {
+                counterpartTrigger.innerHTML = triggerContent;
+            }
             
             // Mark as dirty
             markDirty(eventId, `${fieldType}_contact_id`, contactId);
@@ -2905,14 +3778,33 @@
         }
 
         async function sendShiftReminder(eventId, shiftId) {
+            const shifts = loadedShifts.get(eventId) || [];
+            const shift = shifts.find(s => s.shift_id === shiftId);
+            if (shift?.reminder_24h_sent_at) {
+                showConfirmModal('אישור שליחה', RESEND_CONFIRM_MESSAGE, () => sendShiftReminderRequest(eventId, shiftId));
+                return;
+            }
+            await sendShiftReminderRequest(eventId, shiftId);
+        }
+
+        async function sendShiftReminderRequest(eventId, shiftId) {
             try {
                 const response = await fetch(`/api/shifts/${shiftId}/send-reminder?org_id=${ORG_ID}`, {
                     method: 'POST',
                 });
 
                 if (response.ok) {
+                    const timestamps = getCurrentIsraelTimestampDisplay();
+                    const shifts = loadedShifts.get(eventId) || [];
+                    const updatedShifts = shifts.map(s => s.shift_id === shiftId ? {
+                        ...s,
+                        reminder_24h_sent_at: timestamps.iso,
+                        reminder_sent_display: timestamps.display
+                    } : s);
+                    loadedShifts.set(eventId, updatedShifts);
+
                     // Optimistic update - change icon to blue (sent)
-                    const btn = document.querySelector(`tr[data-shift-id="${shiftId}"] .action-icon.whatsapp`);
+                    const btn = document.querySelector(`tr[data-shift-id="${shiftId}"] .action-icon.reminder`);
                     if (btn) {
                         btn.classList.add('sent');
                         btn.title = 'נשלח בעבר – שלח שוב';
@@ -2971,7 +3863,24 @@
 
         // Send technical reminder with opening employee details
         async function sendTechReminder(eventId) {
+            const eventData = eventsCache.get(eventId);
+            if (eventData?.tech_reminder_sent_at) {
+                showConfirmModal('אישור שליחה', RESEND_CONFIRM_MESSAGE, () => sendTechReminderRequest(eventId));
+                return;
+            }
+            await sendTechReminderRequest(eventId);
+        }
+
+        async function sendTechReminderRequest(eventId) {
             try {
+                const timestamps = getCurrentIsraelTimestampDisplay();
+                const currentEventData = eventsCache.get(eventId) || {};
+                eventsCache.set(eventId, {
+                    ...currentEventData,
+                    tech_reminder_sent_at: timestamps.iso,
+                    tech_reminder_sent_at_display: timestamps.display
+                });
+
                 // Send directly without confirmation dialog
                 const form = document.createElement('form');
                 form.method = 'POST';
@@ -2986,12 +3895,29 @@
 
         // Send WhatsApp (PHASE 3 - Task 5B)
         async function sendWhatsApp(eventId) {
+            const eventData = eventsCache.get(eventId);
+            if (eventData?.init_sent_at) {
+                showConfirmModal('אישור שליחה', RESEND_CONFIRM_MESSAGE, () => sendWhatsAppRequest(eventId));
+                return;
+            }
+            await sendWhatsAppRequest(eventId);
+        }
+
+        async function sendWhatsAppRequest(eventId) {
             try {
                 const response = await fetch(`/api/events/${eventId}/send-whatsapp?org_id=${ORG_ID}`, {
                     method: 'POST',
                 });
 
                 if (response.ok) {
+                    const timestamps = getCurrentIsraelTimestampDisplay();
+                    const currentEventData = eventsCache.get(eventId) || {};
+                    eventsCache.set(eventId, {
+                        ...currentEventData,
+                        init_sent_at: timestamps.iso,
+                        init_sent_at_display: timestamps.display
+                    });
+
                     // Optimistic update - change icon to blue (sent)
                     const btn = document.querySelector(`tr[data-event-id="${eventId}"] .action-icon.whatsapp`);
                     if (btn) {
@@ -3046,7 +3972,7 @@
         function sortTable(th, field) {
             const table = th.closest('table');
             const tbody = table.querySelector('tbody');
-            const rows = Array.from(tbody.querySelectorAll('tr.event-row'));  // Only get event rows, not detail rows
+            const rows = Array.from(tbody.querySelectorAll('tr.event-row'));
 
             // Determine sort direction (toggle between asc/desc)
             let direction = 'asc';
@@ -3065,39 +3991,16 @@
 
             // Sort rows
             rows.sort((a, b) => {
-                // Get the cells at this column index
-                const aCell = a.querySelectorAll('td')[colIndex];
-                const bCell = b.querySelectorAll('td')[colIndex];
-                
-                let aVal = '';
-                let bVal = '';
-                
-                // Try to get value from input field first
-                const aInput = aCell?.querySelector('input');
-                const bInput = bCell?.querySelector('input');
-                
-                if (aInput) {
-                    aVal = aInput.value || '';
-                } else {
-                    // Get text content from the cell
-                    aVal = aCell ? aCell.textContent.trim() : '';
-                }
-                
-                if (bInput) {
-                    bVal = bInput.value || '';
-                } else {
-                    // Get text content from the cell
-                    bVal = bCell ? bCell.textContent.trim() : '';
-                }
+                let aVal = getRowFieldValue(a, field);
+                let bVal = getRowFieldValue(b, field);
 
                 // Handle date/time fields - convert to timestamps for proper sorting
-                if (field === 'event_date' || field === 'show_time' || field === 'load_in_time') {
-                    aVal = aVal ? new Date(aVal).getTime() : 0;
-                    bVal = bVal ? new Date(bVal).getTime() : 0;
-                } else {
-                    // Convert to lowercase for case-insensitive text comparison
-                    if (typeof aVal === 'string') aVal = aVal.toLowerCase();
-                    if (typeof bVal === 'string') bVal = bVal.toLowerCase();
+                if (field === 'event_date') {
+                    aVal = aVal ? new Date(aVal + 'T00:00:00').getTime() : 0;
+                    bVal = bVal ? new Date(bVal + 'T00:00:00').getTime() : 0;
+                } else if (field === 'show_time' || field === 'load_in_time') {
+                    aVal = aVal ? new Date(`1970-01-01T${aVal}:00`).getTime() : 0;
+                    bVal = bVal ? new Date(`1970-01-01T${bVal}:00`).getTime() : 0;
                 }
 
                 if (direction === 'asc') {
@@ -3107,19 +4010,42 @@
                 }
             });
 
-            // Re-append sorted rows to DOM (need to also move their detail rows)
+            // Re-append sorted rows to DOM
             rows.forEach(row => {
                 tbody.appendChild(row);
-                // Find and move the associated details row if it exists
-                const eventId = row.dataset.eventId;
-                const detailsRow = tbody.querySelector(`tr.row-details[data-event-id="${eventId}"]`);
-                if (detailsRow) {
-                    tbody.appendChild(detailsRow);
+                const details = document.getElementById(`details-${row.dataset.eventId}`);
+                if (details) {
+                    tbody.appendChild(details);
                 }
             });
 
             // Update sort indicator on clicked column
             th.classList.add(direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
+        }
+
+        function getRowFieldValue(row, field) {
+            const direct = row.querySelector(`[data-field="${field}"]`);
+            if (direct) {
+                return direct.value || direct.textContent || '';
+            }
+
+            if (field === 'status') {
+                return row.getAttribute('data-status') || '';
+            }
+
+            if (field === 'event_date') {
+                return row.getAttribute('data-event_date') || '';
+            }
+
+            if (field === 'show_time') {
+                return row.getAttribute('data-show_time') || '';
+            }
+
+            if (field === 'load_in_time') {
+                return row.getAttribute('data-load_in_time') || '';
+            }
+
+            return '';
         }
 
         // Column Order Management (PHASE 5 - Task 8)
@@ -3246,12 +4172,22 @@
 
             try {
                 const order = JSON.parse(savedOrder);
-                
+
                 // Apply to all tables
                 document.querySelectorAll('.events-table').forEach(table => {
                     const headerRow = table.querySelector('thead tr');
                     const headers = Array.from(headerRow.children);
                     const currentOrder = headers.map(th => th.getAttribute('data-col'));
+
+                    // If saved order no longer matches current columns, skip reorder and refresh storage
+                    const filteredSaved = order.filter(Boolean);
+                    const currentSet = new Set(currentOrder);
+                    const savedSet = new Set(filteredSaved);
+                    const sameSize = currentSet.size === savedSet.size && [...currentSet].every(v => savedSet.has(v));
+                    if (!sameSize) {
+                        saveColumnOrder(table);
+                        return;
+                    }
 
                     // Only reorder if order is different
                     if (JSON.stringify(currentOrder) !== JSON.stringify(order)) {
@@ -3451,6 +4387,86 @@
             }
         }
 
+        // Column visibility
+        function loadColumnVisibility() {
+            const saved = localStorage.getItem(COLUMN_VISIBILITY_KEY);
+            if (saved) {
+                try {
+                    columnVisibility = JSON.parse(saved);
+                } catch (e) {
+                    columnVisibility = {};
+                }
+            }
+            // Ensure defaults are present
+            TABLE_COLUMNS.forEach(col => {
+                if (columnVisibility[col.key] === undefined) {
+                    columnVisibility[col.key] = true;
+                }
+            });
+        }
+
+        function saveColumnVisibility() {
+            localStorage.setItem(COLUMN_VISIBILITY_KEY, JSON.stringify(columnVisibility));
+        }
+
+        function setColumnVisibility(key, isVisible) {
+            columnVisibility[key] = isVisible;
+            saveColumnVisibility();
+            applyColumnVisibility();
+        }
+
+        function applyColumnVisibility() {
+            document.querySelectorAll('.events-table').forEach(table => {
+                const headers = Array.from(table.querySelectorAll('thead th'));
+                const visibleCount = headers.filter(th => th.getAttribute('data-col') !== 'expander' && columnVisibility[th.getAttribute('data-col')] !== false).length + 1; // + expander
+
+                headers.forEach(th => {
+                    const col = th.getAttribute('data-col');
+                    if (!col || col === 'expander') return;
+                    th.classList.toggle('hidden-col', columnVisibility[col] === false);
+                });
+
+                table.querySelectorAll('tbody tr').forEach(row => {
+                    Array.from(row.children).forEach(cell => {
+                        const col = cell.getAttribute('data-col');
+                        if (!col || col === 'expander') return;
+                        cell.classList.toggle('hidden-col', columnVisibility[col] === false);
+                    });
+
+                    // Adjust colspan for detail rows
+                    if (row.classList.contains('row-details')) {
+                        const cell = row.querySelector('td');
+                        if (cell) {
+                            cell.colSpan = visibleCount;
+                        }
+                    }
+                });
+            });
+        }
+
+        function toggleColumnMenu(hallName) {
+            document.querySelectorAll('.column-menu').forEach(menu => {
+                menu.classList.remove('open');
+            });
+            const menu = document.getElementById(`column-menu-${hallName.replace(/\s+/g, '-')}`);
+            if (menu) {
+                const willOpen = !menu.classList.contains('open');
+                menu.classList.toggle('open', willOpen);
+                activeColumnMenu = willOpen ? menu : null;
+            }
+        }
+
+        document.addEventListener('click', (e) => {
+            if (activeColumnMenu) {
+                const withinMenu = activeColumnMenu.contains(e.target);
+                const toggleBtn = e.target.closest('.column-menu-toggle');
+                if (!withinMenu && !toggleBtn) {
+                    activeColumnMenu.classList.remove('open');
+                    activeColumnMenu = null;
+                }
+            }
+        });
+
         // Toast Notifications
         function showToast(message, type = 'info') {
             const toast = document.getElementById('toast');
@@ -3525,6 +4541,14 @@
             const div = document.createElement('div');
             div.textContent = text || '';
             return div.innerHTML;
+        }
+
+        function getCurrentIsraelTimestampDisplay() {
+            const now = new Date();
+            return {
+                iso: now.toISOString(),
+                display: now.toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', hour12: false })
+            };
         }
 
         // ===================================
@@ -3750,28 +4774,13 @@
             window.location.href = '/ui/messages';
         }
         
-        // Deep linking support
-        function checkDeepLink() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const eventId = urlParams.get('eventId');
-            const month = urlParams.get('month');
-            
-            if (eventId && month) {
-                // Select the month first
-                selectMonth(month);
-                
-                // Wait for events to load, then navigate to the specific event
-                setTimeout(() => {
-                    scrollAndHighlightEvent(parseInt(eventId));
-                }, EVENT_LOAD_TIMEOUT);
-            }
-        }
-        
         function navigateToEvent(eventId, eventDate) {
             if (!eventDate) {
                 console.warn('No event date provided for navigation');
                 return;
             }
+
+            pendingNavigationTarget = { eventId, eventDate };
             
             // Close notification panel
             const panel = document.getElementById('notificationPanel');
@@ -3795,7 +4804,7 @@
             }, NAVIGATION_SCROLL_DELAY);
         }
         
-        function scrollAndHighlightEvent(eventId) {
+        function scrollAndHighlightEvent(eventId, attempt = 0) {
             // Validate and sanitize eventId to prevent XSS
             const safeEventId = parseInt(eventId);
             if (!safeEventId || isNaN(safeEventId)) {
@@ -3807,8 +4816,24 @@
             const eventRow = document.querySelector(`tr[data-event-id="${safeEventId}"]`);
             
             if (!eventRow) {
-                console.warn('Event row not found:', safeEventId);
+                if (attempt < SCROLL_RETRY_LIMIT) {
+                    setTimeout(() => scrollAndHighlightEvent(safeEventId, attempt + 1), SCROLL_RETRY_DELAY);
+                } else {
+                    console.warn('Event row not found after retries:', safeEventId);
+                    pendingNavigationTarget = null;
+                }
                 return;
+            }
+
+            const rowStatus = (eventRow.dataset.status || 'draft').toLowerCase();
+            if (activeStatusFilter !== 'all' && activeStatusFilter !== rowStatus) {
+                const filterEl = document.getElementById('statusFilter');
+                activeStatusFilter = 'all';
+                localStorage.setItem(STATUS_FILTER_KEY, 'all');
+                if (filterEl) {
+                    filterEl.value = 'all';
+                }
+                applyStatusFilter();
             }
             
             // Activate the hall tab containing this event
@@ -3827,6 +4852,8 @@
                     eventRow.classList.remove('event-highlight');
                 }, 3000);
             }, 300);
+
+            pendingNavigationTarget = null;
         }
 
         // Cleanup on page unload

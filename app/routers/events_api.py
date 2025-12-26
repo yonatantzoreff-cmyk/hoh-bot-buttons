@@ -8,7 +8,7 @@ import logging
 from datetime import datetime, date
 from typing import Optional, Dict, Any, List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
@@ -42,6 +42,12 @@ class EventPatchRequest(BaseModel):
     technical_contact_id: Optional[int] = None
     notes: Optional[str] = None
     status: Optional[str] = None
+
+
+class ContactCreateRequest(BaseModel):
+    name: str = Field(..., min_length=1)
+    phone: str = Field(..., min_length=3)
+    role: str = Field(..., description="producer | technical")
 
 
 class TechnicalSuggestion(BaseModel):
@@ -150,6 +156,7 @@ async def list_events(
 async def update_event(
     event_id: int,
     updates: EventPatchRequest,
+    request: Request,
     org_id: int = Query(1),
     hoh: HOHService = Depends(get_hoh_service),
 ):
@@ -163,31 +170,32 @@ async def update_event(
         if not event:
             raise HTTPException(status_code=404, detail="Event not found")
         
-        # Build update parameters - only include non-None values
+        # Build update parameters - respect presence of keys (to allow clearing)
+        payload_dict = await request.json()
         update_params = {}
-        if updates.name is not None:
+        if "name" in payload_dict:
             update_params["event_name"] = updates.name
-        if updates.event_date is not None:
+        if "event_date" in payload_dict:
             update_params["event_date_str"] = updates.event_date
-        if updates.show_time is not None:
+        if "show_time" in payload_dict:
             update_params["show_time_str"] = updates.show_time
-        if updates.load_in_time is not None:
+        if "load_in_time" in payload_dict:
             update_params["load_in_time_str"] = updates.load_in_time
-        if updates.producer_name is not None:
+        if "producer_name" in payload_dict:
             update_params["producer_name"] = updates.producer_name
-        if updates.producer_phone is not None:
+        if "producer_phone" in payload_dict:
             update_params["producer_phone"] = updates.producer_phone
-        if updates.producer_contact_id is not None:
+        if "producer_contact_id" in payload_dict:
             update_params["producer_contact_id"] = updates.producer_contact_id
-        if updates.technical_name is not None:
+        if "technical_name" in payload_dict:
             update_params["technical_name"] = updates.technical_name
-        if updates.technical_phone is not None:
+        if "technical_phone" in payload_dict:
             update_params["technical_phone"] = updates.technical_phone
-        if updates.technical_contact_id is not None:
+        if "technical_contact_id" in payload_dict:
             update_params["technical_contact_id"] = updates.technical_contact_id
-        if updates.notes is not None:
+        if "notes" in payload_dict:
             update_params["notes"] = updates.notes
-        if updates.status is not None:
+        if "status" in payload_dict:
             update_params["status"] = updates.status
         
         # Use existing service method which has all the validation
@@ -737,6 +745,48 @@ async def get_contacts_by_role(
     
     except Exception as e:
         logger.exception("Failed to get contacts by role")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/contacts")
+async def create_contact(
+    payload: ContactCreateRequest,
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """Create a new contact and return the created record."""
+    try:
+        contact_id = hoh.create_contact(
+            org_id=org_id,
+            name=payload.name.strip(),
+            phone=payload.phone.strip(),
+            role=payload.role.strip(),
+        )
+        contact = hoh.get_contact(org_id=org_id, contact_id=contact_id)
+        return {
+            "contact": {
+                "contact_id": contact_id,
+                "name": contact.get("name"),
+                "phone": contact.get("phone"),
+                "role": contact.get("role"),
+            }
+        }
+    except Exception as e:
+        logger.exception("Failed to create contact")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@router.get("/events/{event_id}/messages")
+async def list_event_messages(
+    event_id: int,
+    org_id: int = Query(1),
+    hoh: HOHService = Depends(get_hoh_service),
+):
+    """Return message log for a specific event."""
+    try:
+        messages = hoh.list_messages_for_event(org_id=org_id, event_id=event_id)
+        return {"messages": messages}
+    except Exception as e:
+        logger.exception(f"Failed to list messages for event {event_id}")
         raise HTTPException(status_code=500, detail=str(e))
 
 

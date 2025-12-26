@@ -1698,7 +1698,7 @@ async def calendar_import_page() -> HTMLResponse:
     }
 
     async function updateField(stagingId, field, rawValue) {
-      const payload = {};
+      const payload = {{}};
       const value = rawValue === '' ? null : rawValue;
       payload[field] = value;
 
@@ -1997,6 +1997,7 @@ async def edit_employee_form(
     phone = escape(employee.get("phone") or "")
     role = escape(employee.get("role") or "")
     notes = escape(employee.get("notes") or "")
+    is_active = employee.get("is_active", True)
     
     form = f"""
     <div class="row justify-content-center">
@@ -2021,6 +2022,13 @@ async def edit_employee_form(
                 <label class="form-label" for="notes">Notes</label>
                 <textarea class="form-control" id="notes" name="notes" rows="3">{notes}</textarea>
               </div>
+              <div class="mb-3">
+                <label class="form-label" for="is_active">סטטוס / Status</label>
+                <select class="form-select" id="is_active" name="is_active">
+                  <option value="true" {"selected" if is_active else ""}>פעיל / Active</option>
+                  <option value="false" {"selected" if not is_active else ""}>לא פעיל / Inactive</option>
+                </select>
+              </div>
               <div class="d-flex justify-content-end">
                 <a class="btn btn-outline-secondary me-2" href="/ui/employees">ביטול / Cancel</a>
                 <button class="btn btn-primary" type="submit">שמור / Save</button>
@@ -2043,6 +2051,7 @@ async def update_employee(
     phone: str = Form(...),
     role: str | None = Form(None),
     notes: str | None = Form(None),
+    is_active: bool = Form(True),
     hoh: HOHService = Depends(get_hoh_service),
 ):
     """Update an employee."""
@@ -2053,6 +2062,7 @@ async def update_employee(
         phone=phone.strip(),
         role=role.strip() if role else None,
         notes=notes.strip() if notes else None,
+        is_active=is_active,
     )
     return RedirectResponse(url="/ui/employees", status_code=303)
 
@@ -2167,6 +2177,23 @@ async def shift_organizer_page(
     let currentData = null;
     let generatedSlots = null;
     let employees = [];
+    let eventsById = {{}};
+    
+    function formatDateTimeLocal(value) {{
+      if (!value) return '';
+      const date = new Date(value);
+      return new Date(date.getTime() - date.getTimezoneOffset() * 60000)
+        .toISOString()
+        .slice(0, 16);
+    }}
+    
+    function buildEmployeeOptions(selectedId) {{
+      return '<option value=\"\">-- Select Employee --</option>' + employees.map(emp => `
+        <option value=\"${{emp.employee_id}}\" ${{selectedId === emp.employee_id ? 'selected' : ''}}>
+          ${{emp.name}}
+        </option>
+      `).join('');
+    }}
     
     // Load initial data
     async function loadMonthData() {{
@@ -2175,6 +2202,7 @@ async def shift_organizer_page(
         const data = await response.json();
         currentData = data;
         employees = data.employees;
+        eventsById = Object.fromEntries((data.events || []).map(ev => [ev.event_id, ev]));
         renderEvents(data);
         renderStats(data.employee_stats);
       }} catch (error) {{
@@ -2234,18 +2262,19 @@ async def shift_organizer_page(
     function renderEvent(event, shifts) {{
       const eventDate = new Date(event.event_date + 'T00:00:00');
       const dateStr = eventDate.toLocaleDateString('en-GB');
+      const dayStr = eventDate.toLocaleDateString('en-GB', {{ weekday: 'short' }});
       const showTime = event.show_time ? new Date(event.show_time).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : '-';
       const loadInTime = event.load_in_time ? new Date(event.load_in_time).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : '-';
       
       return `
-        <div class="card mb-3" data-event-id="${{event.event_id}}">
+        <div class="card mb-3 event-card" data-event-id="${{event.event_id}}">
           <div class="card-header">
             <div class="row align-items-center">
               <div class="col-md-3">
                 <strong>${{event.name}}</strong>
               </div>
               <div class="col-md-2">
-                <small class="text-muted">Date:</small> ${{dateStr}}
+                <small class="text-muted">Date:</small> ${{dateStr}} <span class="text-muted">(${{dayStr}})</span>
               </div>
               <div class="col-md-2">
                 <small class="text-muted">Show:</small> ${{showTime}}
@@ -2257,11 +2286,16 @@ async def shift_organizer_page(
                 ${{event.notes ? `<small class="text-muted">${{event.notes}}</small>` : ''}}
               </div>
             </div>
+            <div class="text-end mt-2">
+              <button class="btn btn-sm btn-outline-primary" onclick="addSlot(${{event.event_id}})">
+                + Add Shift
+              </button>
+            </div>
           </div>
           <div class="card-body">
             <div class="slots-container" data-event-id="${{event.event_id}}">
               ${{shifts.map((shift, idx) => renderSlot(event.event_id, shift, idx)).join('')}}
-              ${{shifts.length === 0 ? '<p class="text-muted">No shifts assigned yet. Click "Generate Shifts" to auto-assign.</p>' : ''}}
+              ${{shifts.length === 0 ? '<p class="text-muted">No shifts assigned yet. Click "Generate Shifts" to auto-assign or add manually.</p>' : ''}}
             </div>
           </div>
         </div>
@@ -2269,36 +2303,32 @@ async def shift_organizer_page(
     }}
     
     function renderSlot(eventId, shift, index) {{
-      const startTime = shift.start_at ? new Date(shift.start_at).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : 
-                        (shift.call_time ? new Date(shift.call_time).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}}) : '-');
-      const employeeOptions = employees.map(emp => `
-        <option value="${{emp.employee_id}}" ${{shift.employee_id === emp.employee_id ? 'selected' : ''}}>
-          ${{emp.name}}
-        </option>
-      `).join('');
-      
+      const startValue = formatDateTimeLocal(shift.start_at || shift.call_time);
       const isLocked = shift.is_locked || false;
       const lockIcon = isLocked ? '🔒' : '';
       
       return `
-        <div class="row mb-2 align-items-center slot-row" data-slot-index="${{index}}">
-          <div class="col-md-2">
-            <input type="time" class="form-control form-control-sm" value="${{startTime}}" disabled>
-          </div>
+        <div class="row mb-2 align-items-center slot-row" 
+             data-slot-index="${{index}}"
+             data-event-id="${{eventId}}"
+             data-start="${{shift.start_at || shift.call_time || ''}}"
+             data-end="${{shift.end_at || shift.call_time || ''}}"
+             data-is-locked="${{isLocked}}"
+             data-shift-id="${{shift.shift_id || ''}}"
+             data-shift-type="${{shift.shift_type || ''}}">
           <div class="col-md-4">
-            <select class="form-select form-select-sm employee-select">
-              <option value="">-- Select Employee --</option>
-              ${{employeeOptions}}
-            </select>
+            <input type="datetime-local" class="form-control form-control-sm start-at" value="${{startValue}}" ${{isLocked ? 'disabled' : ''}}>
           </div>
-          <div class="col-md-2">
-            ${{shift.employee_name || '-'}}
+          <div class="col-md-5">
+            <select class="form-select form-select-sm employee-select" ${{isLocked ? 'disabled' : ''}}>
+              ${{buildEmployeeOptions(shift.employee_id)}}
+            </select>
           </div>
           <div class="col-md-2">
             <span class="badge bg-${{isLocked ? 'warning' : 'secondary'}}">${{lockIcon}} ${{shift.shift_type || 'shift'}}</span>
           </div>
-          <div class="col-md-2 text-end">
-            <button class="btn btn-sm btn-outline-danger" onclick="removeSlot(this)">✕</button>
+          <div class="col-md-1 text-end">
+            <button class="btn btn-sm btn-outline-danger" onclick="removeSlot(this)" ${{isLocked ? 'disabled' : ''}}>✕</button>
           </div>
         </div>
       `;
@@ -2306,6 +2336,53 @@ async def shift_organizer_page(
     
     function removeSlot(btn) {{
       btn.closest('.slot-row').remove();
+      document.getElementById('saveBtn').disabled = false;
+    }}
+    
+    document.addEventListener('change', (event) => {{
+      if (event.target.closest('.slot-row')) {{
+        document.getElementById('saveBtn').disabled = false;
+      }}
+      
+      if (event.target.classList.contains('start-at')) {{
+        const row = event.target.closest('.slot-row');
+        if (row && event.target.value) {{
+          const iso = new Date(event.target.value).toISOString();
+          row.dataset.start = iso;
+          row.dataset.end = iso;
+        }}
+      }}
+    }});
+    
+    function getDefaultTimes(eventId) {{
+      const event = eventsById[eventId];
+      const now = new Date();
+      if (!event) {{
+        return {{ start: now, end: now }};
+      }}
+      
+      const baseDate = new Date(event.event_date + 'T00:00:00');
+      const start = event.load_in_time ? new Date(event.load_in_time) :
+                    (event.show_time ? new Date(event.show_time) : new Date(baseDate.setHours(18, 0, 0, 0)));
+      return {{ start, end: start }};
+    }}
+    
+    function addSlot(eventId) {{
+      const container = document.querySelector(`.slots-container[data-event-id="${{eventId}}"]`);
+      if (!container) return;
+      
+      const times = getDefaultTimes(eventId);
+      const newShift = {{
+        start_at: times.start.toISOString(),
+        end_at: times.end.toISOString(),
+        employee_id: null,
+        shift_type: 'shift',
+        is_locked: false,
+        shift_id: null,
+      }};
+      
+      const newIndex = container.querySelectorAll('.slot-row').length;
+      container.insertAdjacentHTML('beforeend', renderSlot(eventId, newShift, newIndex));
       document.getElementById('saveBtn').disabled = false;
     }}
     
@@ -2368,13 +2445,7 @@ async def shift_organizer_page(
     }}
     
     function renderGeneratedSlot(eventId, slot, index) {{
-      const startTime = new Date(slot.start_at).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}});
-      const endTime = new Date(slot.end_at).toLocaleTimeString('en-GB', {{hour: '2-digit', minute: '2-digit'}});
-      const employeeOptions = employees.map(emp => `
-        <option value="${{emp.employee_id}}" ${{slot.suggested_employee_id === emp.employee_id ? 'selected' : ''}}>
-          ${{emp.name}}
-        </option>
-      `).join('');
+      const employeeOptions = buildEmployeeOptions(slot.suggested_employee_id);
       
       const isUnfilled = !slot.suggested_employee_id;
       const bgClass = isUnfilled ? 'bg-danger text-white' : '';
@@ -2386,18 +2457,16 @@ async def shift_organizer_page(
              data-event-id="${{eventId}}"
              data-start="${{slot.start_at}}"
              data-end="${{slot.end_at}}"
+             data-is-locked="false"
+             data-shift-type="${{slot.shift_type || 'shift'}}"
              title="${{reason}}">
-          <div class="col-md-2">
-            <small>${{startTime}} - ${{endTime}}</small>
+          <div class="col-md-4">
+            <input type="datetime-local" class="form-control form-control-sm start-at" value="${{formatDateTimeLocal(slot.start_at)}}">
           </div>
           <div class="col-md-5">
             <select class="form-select form-select-sm employee-select">
-              <option value="">-- Select Employee --</option>
               ${{employeeOptions}}
             </select>
-          </div>
-          <div class="col-md-3">
-            ${{slot.suggested_employee_name || '<em>No available employee</em>'}}
           </div>
           <div class="col-md-2 text-end">
             <button class="btn btn-sm btn-outline-danger" onclick="removeSlot(this)">✕</button>
@@ -2420,9 +2489,13 @@ async def shift_organizer_page(
         document.querySelectorAll('.slot-row').forEach(row => {{
           const eventId = parseInt(row.dataset.eventId);
           const employeeSelect = row.querySelector('.employee-select');
-          const employeeId = employeeSelect ? parseInt(employeeSelect.value) : null;
-          const startAt = row.dataset.start;
-          const endAt = row.dataset.end;
+          const employeeId = employeeSelect && employeeSelect.value ? parseInt(employeeSelect.value) : null;
+          const startInput = row.querySelector('.start-at');
+          const startAt = startInput && startInput.value ? new Date(startInput.value).toISOString() : null;
+          const endAt = row.dataset.end ? row.dataset.end : startAt;
+          const shiftId = row.dataset.shiftId ? parseInt(row.dataset.shiftId) : null;
+          const shiftType = row.dataset.shiftType || null;
+          const isLocked = row.dataset.isLocked === 'true';
           
           if (employeeId && startAt && endAt) {{
             slots.push({{
@@ -2430,10 +2503,16 @@ async def shift_organizer_page(
               employee_id: employeeId,
               start_at: startAt,
               end_at: endAt,
-              is_locked: false
+              shift_id: shiftId,
+              shift_type: shiftType,
+              is_locked: isLocked
             }});
           }}
         }});
+        
+        const eventIds = Array.from(document.querySelectorAll('.event-card'))
+          .map(card => parseInt(card.dataset.eventId))
+          .filter(id => !Number.isNaN(id));
         
         const response = await fetch('/shift-organizer/save', {{
           method: 'POST',
@@ -2442,6 +2521,7 @@ async def shift_organizer_page(
             org_id: ORG_ID,
             year: YEAR,
             month: MONTH,
+            event_ids: eventIds,
             slots: slots
           }})
         }});
@@ -2720,6 +2800,20 @@ async def scheduler_page() -> HTMLResponse:
     """Scheduler UI - View and manage scheduled message delivery."""
     
     body = """
+    <style>
+      th.sortable {
+        cursor: pointer;
+        user-select: none;
+        white-space: nowrap;
+      }
+
+      .sort-indicator {
+        font-size: 0.8em;
+        margin-left: 4px;
+        color: #6c757d;
+      }
+    </style>
+
     <div class="row mb-3">
       <div class="col">
         <h2>📅 Scheduler - Message Delivery Management</h2>
@@ -2848,12 +2942,12 @@ async def scheduler_page() -> HTMLResponse:
                 <table class="table table-hover align-middle mb-0" id="init-table">
                   <thead class="table-light">
                     <tr>
-                      <th>Event</th>
-                      <th>Producer</th>
-                      <th>Technician</th>
-                      <th>Recipient</th>
-                      <th>Send Time</th>
-                      <th>Status</th>
+                      <th class="sortable" data-sort-key="event">Event <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="producer">Producer <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="technician">Technician <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="recipient">Recipient <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="send_at">Send Time <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="status">Status <span class="sort-indicator"></span></th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -2896,12 +2990,12 @@ async def scheduler_page() -> HTMLResponse:
                 <table class="table table-hover align-middle mb-0" id="tech-table">
                   <thead class="table-light">
                     <tr>
-                      <th>Event</th>
-                      <th>Producer</th>
-                      <th>Technician</th>
-                      <th>Recipient</th>
-                      <th>Send Time</th>
-                      <th>Status</th>
+                      <th class="sortable" data-sort-key="event">Event <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="producer">Producer <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="technician">Technician <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="recipient">Recipient <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="send_at">Send Time <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="status">Status <span class="sort-indicator"></span></th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -2944,12 +3038,12 @@ async def scheduler_page() -> HTMLResponse:
                 <table class="table table-hover align-middle mb-0" id="shift-table">
                   <thead class="table-light">
                     <tr>
-                      <th>Event</th>
-                      <th>Employee</th>
-                      <th>Shift Time</th>
-                      <th>Recipient</th>
-                      <th>Send Time</th>
-                      <th>Status</th>
+                      <th class="sortable" data-sort-key="event">Event <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="employee">Employee <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="shift_time">Shift Time <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="recipient">Recipient <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="send_at">Send Time <span class="sort-indicator"></span></th>
+                      <th class="sortable" data-sort-key="status">Status <span class="sort-indicator"></span></th>
                       <th>Actions</th>
                     </tr>
                   </thead>
@@ -2970,6 +3064,16 @@ async def scheduler_page() -> HTMLResponse:
     const ORG_ID = 1;
     let countdownInterval = null;
     let currentSettings = {};
+    const jobsCache = {
+      INIT: [],
+      TECH_REMINDER: [],
+      SHIFT_REMINDER: []
+    };
+    const sortState = {
+      INIT: { column: 'send_at', direction: 'asc' },
+      TECH_REMINDER: { column: 'send_at', direction: 'asc' },
+      SHIFT_REMINDER: { column: 'send_at', direction: 'asc' }
+    };
     
     // Constants for localization
     const MISSING_RECIPIENT_TEXT = 'חסר'; // Hebrew for Missing
@@ -3182,6 +3286,7 @@ async def scheduler_page() -> HTMLResponse:
         
         // Update count
         countEl.textContent = jobs.length;
+        jobsCache[messageType] = jobs;
         
         // Hide loading
         loadingEl.classList.add('d-none');
@@ -3192,7 +3297,8 @@ async def scheduler_page() -> HTMLResponse:
           emptyEl.classList.remove('d-none');
         } else {
           tableEl.classList.remove('d-none');
-          renderJobsTable(jobs, tbodyEl, messageType);
+          renderSortedTable(messageType);
+          updateSortIndicators(messageType);
         }
       } catch (error) {
         console.error(`Error loading ${messageType} jobs:`, error);
@@ -3200,6 +3306,48 @@ async def scheduler_page() -> HTMLResponse:
         emptyEl.classList.remove('d-none');
         emptyEl.innerHTML = `<div class="alert alert-danger">Error loading jobs: ${error.message}</div>`;
       }
+    }
+
+    function getSortValue(job, column, messageType) {
+      switch (column) {
+        case 'event':
+          return `${job.event_name || ''} ${job.event_date || ''}`.toLowerCase();
+        case 'producer':
+          return (job.producer_name || '').toLowerCase();
+        case 'technician':
+          return (job.technical_name || '').toLowerCase();
+        case 'employee':
+          return (job.recipient_name || '').toLowerCase();
+        case 'recipient':
+          return (job.recipient_name || '').toLowerCase();
+        case 'shift_time':
+          return job.shift_call_time ? new Date(job.shift_call_time).getTime() : 0;
+        case 'send_at':
+          return job.send_at ? new Date(job.send_at).getTime() : 0;
+        case 'status':
+          return (job.status || '').toLowerCase();
+        default:
+          return '';
+      }
+    }
+
+    function renderSortedTable(messageType) {
+      const tbodyId = messageType === 'INIT' ? 'init-tbody' :
+                      messageType === 'TECH_REMINDER' ? 'tech-tbody' : 'shift-tbody';
+      const tbody = document.getElementById(tbodyId);
+      const jobs = jobsCache[messageType] || [];
+      const { column, direction } = sortState[messageType];
+      
+      const sorted = [...jobs].sort((a, b) => {
+        const aVal = getSortValue(a, column, messageType);
+        const bVal = getSortValue(b, column, messageType);
+        
+        if (aVal === bVal) return 0;
+        const comparison = aVal > bVal ? 1 : -1;
+        return direction === 'asc' ? comparison : -comparison;
+      });
+      
+      renderJobsTable(sorted, tbody, messageType);
     }
     
     // Render jobs into a table
@@ -3250,6 +3398,53 @@ async def scheduler_page() -> HTMLResponse:
       
       // Store jobs data for countdown updates
       tbody.dataset.jobs = JSON.stringify(jobs);
+    }
+
+    function updateSortIndicators(messageType) {
+      const tableId = messageType === 'INIT' ? 'init-table' :
+                      messageType === 'TECH_REMINDER' ? 'tech-table' : 'shift-table';
+      const table = document.getElementById(tableId);
+      const { column, direction } = sortState[messageType];
+      table.querySelectorAll('th[data-sort-key]').forEach(th => {
+        const indicator = th.querySelector('.sort-indicator');
+        if (!indicator) return;
+        
+        if (th.dataset.sortKey === column) {
+          indicator.textContent = direction === 'asc' ? '▲' : '▼';
+          indicator.classList.remove('text-muted');
+        } else {
+          indicator.textContent = '';
+        }
+      });
+    }
+
+    function setupSortHandlers() {
+      const tableConfig = {
+        INIT: document.querySelectorAll('#init-table th[data-sort-key]'),
+        TECH_REMINDER: document.querySelectorAll('#tech-table th[data-sort-key]'),
+        SHIFT_REMINDER: document.querySelectorAll('#shift-table th[data-sort-key]')
+      };
+      
+      Object.entries(tableConfig).forEach(([messageType, headers]) => {
+        headers.forEach((th) => {
+          th.addEventListener('click', () => {
+            const column = th.dataset.sortKey;
+            const current = sortState[messageType];
+            
+            if (current.column === column) {
+              current.direction = current.direction === 'asc' ? 'desc' : 'asc';
+            } else {
+              current.column = column;
+              current.direction = 'asc';
+            }
+            
+            renderSortedTable(messageType);
+            updateSortIndicators(messageType);
+          });
+        });
+        
+        updateSortIndicators(messageType);
+      });
     }
     
     // Format event summary
@@ -3708,6 +3903,7 @@ async def scheduler_page() -> HTMLResponse:
         
         console.log('Loading all jobs...');
         loadAllJobs();
+        setupSortHandlers();
         
         // Start countdown updates
         console.log('Starting countdown interval...');
