@@ -465,6 +465,8 @@ async def fetch_future_events(
         
         # Cleanup orphaned jobs (jobs for deleted events/shifts)
         # This handles edge cases where CASCADE DELETE didn't work or jobs with invalid references
+        # Note: This query uses NOT EXISTS subqueries. Performance is acceptable for typical
+        # workloads since event_id and shift_id columns already have indexes from foreign keys.
         jobs_deleted = 0
         try:
             cleanup_query = text("""

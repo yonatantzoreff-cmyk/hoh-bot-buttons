@@ -2863,7 +2863,7 @@ async def scheduler_page() -> HTMLResponse:
       <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center">
         <h5 class="mb-0">⚙️ Scheduler Settings</h5>
         <button class="btn btn-sm btn-light" id="advancedSettingsBtn">
-          <i>⚙️</i> Advanced Settings
+          ⚙️ Advanced Settings
         </button>
       </div>
       <div class="card-body">
@@ -3275,7 +3275,7 @@ async def scheduler_page() -> HTMLResponse:
       }
     }
     
-    // LocalStorage keys for persistence (Fix #4)
+    // LocalStorage keys for persisting UI state across page refreshes
     const STORAGE_KEY_PREFIX = 'scheduler_ui_';
     const STORAGE_KEY_ACTIVE_TAB = STORAGE_KEY_PREFIX + 'active_tab';
     const STORAGE_KEY_HIDE_SENT_INIT = STORAGE_KEY_PREFIX + 'hide_sent_init';
@@ -4172,10 +4172,10 @@ async def scheduler_page() -> HTMLResponse:
           saveAdvancedSettingsBtn.addEventListener('click', saveAdvancedSettings);
         }
         
-        // Attach tab click listeners to save UI state
+        // Attach tab click listeners to save UI state using Bootstrap's 'shown.bs.tab' event
         document.querySelectorAll('.nav-link').forEach(tab => {
-          tab.addEventListener('click', () => {
-            setTimeout(saveUIState, 100); // Save after tab activation
+          tab.addEventListener('shown.bs.tab', () => {
+            saveUIState(); // Save after tab activation completes
           });
         });
         
