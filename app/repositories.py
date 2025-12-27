@@ -1,6 +1,6 @@
 # repositories.py
-from datetime import datetime, timedelta, timezone
-from typing import Any, Optional
+from datetime import datetime, timedelta, timezone, date, time
+from typing import Any, Optional, List, Dict
 import logging
 
 import json
@@ -2224,6 +2224,297 @@ class EmployeeUnavailabilityRepository:
         with get_session() as session:
             session.execute(q, {"org_id": org_id, "unavailability_id": unavailability_id})
             session.commit()
+
+
+class EmployeeUnavailabilityRulesRepository:
+    """Repository for employee_unavailability_rules (recurring patterns)"""
+    
+    def create_rule(
+        self,
+        org_id: int,
+        employee_id: int,
+        pattern: str,
+        start_date: date,
+        anchor_date: Optional[date] = None,
+        days_of_week: Optional[List[int]] = None,
+        day_of_month: Optional[int] = None,
+        all_day: bool = False,
+        start_time: Optional[time] = None,
+        end_time: Optional[time] = None,
+        notes: Optional[str] = None,
+        until_date: Optional[date] = None,
+    ) -> int:
+        """Create a new recurring unavailability rule."""
+        if anchor_date is None:
+            anchor_date = start_date
+        
+        q = text("""
+            INSERT INTO employee_unavailability_rules (
+                org_id, employee_id, pattern, anchor_date,
+                days_of_week, day_of_month, all_day,
+                start_time, end_time, notes,
+                start_date, until_date,
+                created_at, updated_at
+            )
+            VALUES (
+                :org_id, :employee_id, :pattern, :anchor_date,
+                :days_of_week, :day_of_month, :all_day,
+                :start_time, :end_time, :notes,
+                :start_date, :until_date,
+                :now, :now
+            )
+            RETURNING rule_id
+        """)
+        
+        now = now_utc()
+        
+        with get_session() as session:
+            res = session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "employee_id": employee_id,
+                    "pattern": pattern,
+                    "anchor_date": anchor_date,
+                    "days_of_week": days_of_week,
+                    "day_of_month": day_of_month,
+                    "all_day": all_day,
+                    "start_time": start_time,
+                    "end_time": end_time,
+                    "notes": notes,
+                    "start_date": start_date,
+                    "until_date": until_date,
+                    "now": now,
+                },
+            )
+            rule_id = res.scalar_one()
+            session.commit()
+            return rule_id
+    
+    def get_rules_for_employee(
+        self,
+        org_id: int,
+        employee_id: int,
+    ) -> List[dict]:
+        """Get all rules for an employee."""
+        q = text("""
+            SELECT *
+            FROM employee_unavailability_rules
+            WHERE org_id = :org_id
+              AND employee_id = :employee_id
+            ORDER BY start_date DESC
+        """)
+        
+        with get_session() as session:
+            res = session.execute(q, {"org_id": org_id, "employee_id": employee_id})
+            return [dict(r) for r in res.mappings().all()]
+    
+    def get_active_rules_for_month(
+        self,
+        org_id: int,
+        year: int,
+        month: int,
+    ) -> List[dict]:
+        """Get all active rules that could apply to a given month."""
+        from datetime import date
+        from calendar import monthrange
+        
+        month_start = date(year, month, 1)
+        _, last_day = monthrange(year, month)
+        month_end = date(year, month, last_day)
+        
+        q = text("""
+            SELECT r.*, e.name AS employee_name
+            FROM employee_unavailability_rules r
+            JOIN employees e ON e.employee_id = r.employee_id AND e.org_id = r.org_id
+            WHERE r.org_id = :org_id
+              AND r.start_date <= :month_end
+              AND (r.until_date IS NULL OR r.until_date >= :month_start)
+            ORDER BY e.name, r.start_date
+        """)
+        
+        with get_session() as session:
+            res = session.execute(
+                q,
+                {
+                    "org_id": org_id,
+                    "month_start": month_start,
+                    "month_end": month_end,
+                },
+            )
+            return [dict(r) for r in res.mappings().all()]
+    
+    def get_rule_by_id(self, org_id: int, rule_id: int) -> Optional[dict]:
+        """Get a rule by ID."""
+        q = text("""
+            SELECT *
+            FROM employee_unavailability_rules
+            WHERE org_id = :org_id
+              AND rule_id = :rule_id
+        """)
+        
+        with get_session() as session:
+            res = session.execute(q, {"org_id": org_id, "rule_id": rule_id})
+            row = res.mappings().first()
+            return dict(row) if row else None
+    
+    def update_rule(
+        self,
+        org_id: int,
+        rule_id: int,
+        **kwargs
+    ) -> None:
+        """Update a rule. Only updates provided fields."""
+        allowed_fields = [
+            "pattern", "anchor_date", "days_of_week", "day_of_month",
+            "all_day", "start_time", "end_time", "notes",
+            "start_date", "until_date"
+        ]
+        
+        sets = ["updated_at = :now"]
+        params = {"org_id": org_id, "rule_id": rule_id, "now": now_utc()}
+        
+        for field in allowed_fields:
+            if field in kwargs:
+                sets.append(f"{field} = :{field}")
+                params[field] = kwargs[field]
+        
+        if len(sets) == 1:  # Only updated_at
+            return
+        
+        q = text(f"""
+            UPDATE employee_unavailability_rules
+            SET {', '.join(sets)}
+            WHERE org_id = :org_id
+              AND rule_id = :rule_id
+        """)
+        
+        with get_session() as session:
+            session.execute(q, params)
+            session.commit()
+    
+    def delete_rule(self, org_id: int, rule_id: int) -> None:
+        """Delete a rule (cascade will delete exceptions)."""
+        q = text("""
+            DELETE FROM employee_unavailability_rules
+            WHERE org_id = :org_id
+              AND rule_id = :rule_id
+        """)
+        
+        with get_session() as session:
+            session.execute(q, {"org_id": org_id, "rule_id": rule_id})
+            session.commit()
+
+
+class EmployeeUnavailabilityExceptionsRepository:
+    """Repository for employee_unavailability_exceptions"""
+    
+    def create_exception(
+        self,
+        rule_id: int,
+        exception_date: date,
+    ) -> int:
+        """Create an exception for a rule on a specific date."""
+        # First check if it already exists
+        existing_q = text("""
+            SELECT exception_id
+            FROM employee_unavailability_exceptions
+            WHERE rule_id = :rule_id AND date = :date
+        """)
+        
+        with get_session() as session:
+            existing = session.execute(
+                existing_q,
+                {"rule_id": rule_id, "date": exception_date}
+            ).scalar()
+            
+            if existing:
+                return existing
+            
+            # Create new exception
+            q = text("""
+                INSERT INTO employee_unavailability_exceptions (
+                    rule_id, date, created_at
+                )
+                VALUES (:rule_id, :date, :now)
+                RETURNING exception_id
+            """)
+            
+            now = now_utc()
+            
+            res = session.execute(
+                q,
+                {
+                    "rule_id": rule_id,
+                    "date": exception_date,
+                    "now": now,
+                },
+            )
+            exception_id = res.scalar_one()
+            session.commit()
+            return exception_id
+    
+    def get_exceptions_for_rule(self, rule_id: int) -> List[date]:
+        """Get all exception dates for a rule."""
+        q = text("""
+            SELECT date
+            FROM employee_unavailability_exceptions
+            WHERE rule_id = :rule_id
+            ORDER BY date
+        """)
+        
+        with get_session() as session:
+            res = session.execute(q, {"rule_id": rule_id})
+            return [row[0] for row in res.fetchall()]
+    
+    def get_exceptions_for_rules(self, rule_ids: List[int]) -> Dict[int, List[date]]:
+        """Get exceptions for multiple rules at once."""
+        if not rule_ids:
+            return {}
+        
+        q = text("""
+            SELECT rule_id, date
+            FROM employee_unavailability_exceptions
+            WHERE rule_id = ANY(:rule_ids)
+            ORDER BY rule_id, date
+        """)
+        
+        with get_session() as session:
+            res = session.execute(q, {"rule_ids": rule_ids})
+            
+            exceptions_by_rule = {}
+            for row in res.mappings().all():
+                rule_id = row["rule_id"]
+                exception_date = row["date"]
+                if rule_id not in exceptions_by_rule:
+                    exceptions_by_rule[rule_id] = []
+                exceptions_by_rule[rule_id].append(exception_date)
+            
+            return exceptions_by_rule
+    
+    def delete_exception(self, exception_id: int) -> None:
+        """Delete a specific exception."""
+        q = text("""
+            DELETE FROM employee_unavailability_exceptions
+            WHERE exception_id = :exception_id
+        """)
+        
+        with get_session() as session:
+            session.execute(q, {"exception_id": exception_id})
+            session.commit()
+    
+    def delete_exception_by_rule_and_date(self, rule_id: int, exception_date: date) -> None:
+        """Delete an exception by rule and date."""
+        q = text("""
+            DELETE FROM employee_unavailability_exceptions
+            WHERE rule_id = :rule_id
+              AND date = :date
+        """)
+        
+        with get_session() as session:
+            session.execute(q, {"rule_id": rule_id, "date": exception_date})
+            session.commit()
+
 
 
 class StagingEventRepository:
