@@ -27,9 +27,9 @@ def _find_start_auto_refresh_function():
     with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
         content = f.read()
     
-    # Find function from start to the next function or stop comment
+    # Find function from start until the "// Stop auto-refresh" comment
     start_auto_refresh_match = re.search(
-        r'function startAutoRefresh\(\)\s*\{(.*?)(?=\n\s*function\s|\n\s*//\s*Stop)',
+        r'function startAutoRefresh\(\)\s*\{(.*?)(?=\n\s*// Stop auto-refresh)',
         content,
         re.DOTALL
     )
