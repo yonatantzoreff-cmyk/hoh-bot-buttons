@@ -22,6 +22,23 @@ def _find_is_user_actively_editing_function():
     return is_editing_match.group(1)
 
 
+def _find_start_auto_refresh_function():
+    """Helper to extract the startAutoRefresh function body."""
+    with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Find function from start to the next function or stop comment
+    start_auto_refresh_match = re.search(
+        r'function startAutoRefresh\(\)\s*\{(.*?)(?=\n\s*function\s|\n\s*//\s*Stop)',
+        content,
+        re.DOTALL
+    )
+    if not start_auto_refresh_match:
+        raise AssertionError("startAutoRefresh function not found")
+    
+    return start_auto_refresh_match.group(1)
+
+
 def test_htmx_script_in_events_template():
     """Verify HTMX script is included in events template."""
     with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
@@ -107,36 +124,14 @@ def test_auto_refresh_cleanup_on_unload():
 
 def test_dirty_rows_check_in_auto_refresh():
     """Verify auto-refresh checks for dirty rows before refreshing."""
-    with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    # Find the startAutoRefresh function - check the entire function including callbacks
-    start_auto_refresh_match = re.search(
-        r'function startAutoRefresh\(\)\s*\{(.*?)(?=\n\s*function\s|\n\s*//\s*Stop)',
-        content,
-        re.DOTALL
-    )
-    assert start_auto_refresh_match, "startAutoRefresh function not found"
-    
-    function_body = start_auto_refresh_match.group(1)
+    function_body = _find_start_auto_refresh_function()
     # Check if it checks dirtyRows before refreshing (in setInterval callback)
     assert 'dirtyRows.size === 0' in function_body, "Auto-refresh should check dirtyRows before refreshing"
 
 
 def test_dirty_shifts_check_in_auto_refresh():
     """Verify auto-refresh checks for dirty shifts before refreshing."""
-    with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    # Find the startAutoRefresh function
-    start_auto_refresh_match = re.search(
-        r'function startAutoRefresh\(\)\s*\{(.*?)(?=\n\s*function\s|\n\s*//\s*Stop)',
-        content,
-        re.DOTALL
-    )
-    assert start_auto_refresh_match, "startAutoRefresh function not found"
-    
-    function_body = start_auto_refresh_match.group(1)
+    function_body = _find_start_auto_refresh_function()
     # Check if it checks dirtyShifts before refreshing
     assert 'dirtyShifts.size === 0' in function_body, "Auto-refresh should check dirtyShifts before refreshing"
     assert 'dirtyShifts.size > 0' in function_body, "Auto-refresh should log when skipping due to dirty shifts"
@@ -163,18 +158,7 @@ def test_is_user_actively_editing_function_exists():
 
 def test_active_editing_check_in_auto_refresh():
     """Verify auto-refresh checks if user is actively editing before refreshing."""
-    with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
-        content = f.read()
-    
-    # Find the startAutoRefresh function
-    start_auto_refresh_match = re.search(
-        r'function startAutoRefresh\(\)\s*\{(.*?)(?=\n\s*function\s|\n\s*//\s*Stop)',
-        content,
-        re.DOTALL
-    )
-    assert start_auto_refresh_match, "startAutoRefresh function not found"
-    
-    function_body = start_auto_refresh_match.group(1)
+    function_body = _find_start_auto_refresh_function()
     # Check if it checks isUserActivelyEditing before refreshing
     assert 'isUserActivelyEditing()' in function_body, "Auto-refresh should check isUserActivelyEditing before refreshing"
     assert '!isUserActivelyEditing()' in function_body, "Auto-refresh should NOT refresh when user is actively editing"
