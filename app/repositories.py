@@ -2415,18 +2415,33 @@ class EmployeeUnavailabilityExceptionsRepository:
         exception_date: date,
     ) -> int:
         """Create an exception for a rule on a specific date."""
-        q = text("""
-            INSERT INTO employee_unavailability_exceptions (
-                rule_id, date, created_at
-            )
-            VALUES (:rule_id, :date, :now)
-            ON CONFLICT (rule_id, date) DO NOTHING
-            RETURNING exception_id
+        # First check if it already exists
+        existing_q = text("""
+            SELECT exception_id
+            FROM employee_unavailability_exceptions
+            WHERE rule_id = :rule_id AND date = :date
         """)
         
-        now = now_utc()
-        
         with get_session() as session:
+            existing = session.execute(
+                existing_q,
+                {"rule_id": rule_id, "date": exception_date}
+            ).scalar()
+            
+            if existing:
+                return existing
+            
+            # Create new exception
+            q = text("""
+                INSERT INTO employee_unavailability_exceptions (
+                    rule_id, date, created_at
+                )
+                VALUES (:rule_id, :date, :now)
+                RETURNING exception_id
+            """)
+            
+            now = now_utc()
+            
             res = session.execute(
                 q,
                 {
@@ -2435,9 +2450,9 @@ class EmployeeUnavailabilityExceptionsRepository:
                     "now": now,
                 },
             )
-            row = res.first()
+            exception_id = res.scalar_one()
             session.commit()
-            return row[0] if row else None
+            return exception_id
     
     def get_exceptions_for_rule(self, rule_id: int) -> List[date]:
         """Get all exception dates for a rule."""

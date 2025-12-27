@@ -88,7 +88,8 @@ def expand_rule_for_month(
         if all_day:
             # All day = start of day to end of day in Israel time
             start_at = datetime.combine(occ_date, time(0, 0), tzinfo=ISRAEL_TZ)
-            end_at = datetime.combine(occ_date, time(23, 59, 59), tzinfo=ISRAEL_TZ)
+            # Use the last moment of the day to include all seconds
+            end_at = datetime.combine(occ_date, time(23, 59, 59, 999999), tzinfo=ISRAEL_TZ)
         else:
             # Use specific start/end times
             if not start_time or not end_time:
