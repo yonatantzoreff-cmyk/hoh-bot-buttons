@@ -5,6 +5,23 @@ Validates that the events_jacksonbot.html template includes necessary components
 import re
 
 
+def _find_is_user_actively_editing_function():
+    """Helper to extract the isUserActivelyEditing function body."""
+    with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Find function from start to the next line that has "// Start auto-refresh"
+    is_editing_match = re.search(
+        r'function isUserActivelyEditing\(\)\s*\{(.*?)(?=\n\s*// Start auto-refresh)',
+        content,
+        re.DOTALL
+    )
+    if not is_editing_match:
+        raise AssertionError("isUserActivelyEditing function not found")
+    
+    return is_editing_match.group(1)
+
+
 def test_htmx_script_in_events_template():
     """Verify HTMX script is included in events template."""
     with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
@@ -146,18 +163,8 @@ def test_active_editing_check_in_auto_refresh():
 
 def test_active_editing_checks_active_element():
     """Verify isUserActivelyEditing checks document.activeElement."""
-    with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
-        content = f.read()
+    function_body = _find_is_user_actively_editing_function()
     
-    # Find the isUserActivelyEditing function - match until the next function
-    is_editing_match = re.search(
-        r'function isUserActivelyEditing\(\)\s*\{(.*?)(?=\n\s+// Start auto-refresh)',
-        content,
-        re.DOTALL
-    )
-    assert is_editing_match, "isUserActivelyEditing function not found"
-    
-    function_body = is_editing_match.group(1)
     # Check that it uses document.activeElement
     assert 'document.activeElement' in function_body, "isUserActivelyEditing should check document.activeElement"
     # Check that it looks for INPUT, TEXTAREA
@@ -168,18 +175,8 @@ def test_active_editing_checks_active_element():
 
 def test_active_editing_checks_events_container():
     """Verify isUserActivelyEditing checks if element is within events container."""
-    with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
-        content = f.read()
+    function_body = _find_is_user_actively_editing_function()
     
-    # Find the isUserActivelyEditing function
-    is_editing_match = re.search(
-        r'function isUserActivelyEditing\(\)\s*\{(.*?)(?=\n\s+// Start auto-refresh)',
-        content,
-        re.DOTALL
-    )
-    assert is_editing_match, "isUserActivelyEditing function not found"
-    
-    function_body = is_editing_match.group(1)
     # Check that it verifies element is in eventsContainer
     assert 'eventsContainer' in function_body, "isUserActivelyEditing should check if element is in eventsContainer"
     assert 'closest' in function_body, "isUserActivelyEditing should use closest() to check parent container"

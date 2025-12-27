@@ -2481,7 +2481,7 @@
             // Check if focused element is an editable field
             const isEditableInput = activeElement.tagName === 'INPUT' || 
                                    activeElement.tagName === 'TEXTAREA' ||
-                                   activeElement.isContentEditable;
+                                   activeElement.contentEditable === 'true';
             
             // Check if it's within the events container (not a search/filter field in header)
             const isInEventsArea = activeElement.closest('#eventsContainer') !== null;
