@@ -2593,17 +2593,144 @@ async def availability_page(
         </div>
       </div>
       <div class="col text-end">
+        <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#addRecurringRuleModal">
+          + Add Recurring Rule
+        </button>
         <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUnavailabilityModal">
-          + Add Unavailability
+          + Add One-Time Unavailability
         </button>
       </div>
     </div>
     
-    <!-- Unavailability List -->
-    <div id="unavailabilityContainer">
-      <div class="text-center py-5">
-        <div class="spinner-border" role="status">
-          <span class="visually-hidden">Loading...</span>
+    <!-- Recurring Rules Section -->
+    <div class="card mb-4">
+      <div class="card-header">
+        <h5 class="mb-0">🔁 Recurring Unavailability Rules</h5>
+      </div>
+      <div class="card-body">
+        <div id="rulesContainer">
+          <div class="text-center py-3">
+            <div class="spinner-border spinner-border-sm" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- One-Time Unavailability List -->
+    <div class="card">
+      <div class="card-header">
+        <h5 class="mb-0">📅 One-Time & Manual Overrides</h5>
+      </div>
+      <div class="card-body">
+        <div id="unavailabilityContainer">
+          <div class="text-center py-3">
+            <div class="spinner-border spinner-border-sm" role="status">
+              <span class="visually-hidden">Loading...</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    
+    <!-- Add Recurring Rule Modal -->
+    <div class="modal fade" id="addRecurringRuleModal" tabindex="-1">
+      <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+          <div class="modal-header">
+            <h5 class="modal-title">Add Recurring Unavailability Rule</h5>
+            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+          </div>
+          <div class="modal-body">
+            <form id="recurringRuleForm">
+              <div class="mb-3">
+                <label class="form-label">Employee</label>
+                <select class="form-select" id="ruleEmployeeSelect" required>
+                  <option value="">-- Select Employee --</option>
+                </select>
+              </div>
+              
+              <div class="mb-3">
+                <label class="form-label">Pattern</label>
+                <select class="form-select" id="rulePattern" required>
+                  <option value="">-- Select Pattern --</option>
+                  <option value="weekly">Weekly</option>
+                  <option value="biweekly">Bi-Weekly</option>
+                  <option value="monthly">Monthly</option>
+                </select>
+              </div>
+              
+              <!-- Weekly/Biweekly Days -->
+              <div class="mb-3" id="daysOfWeekSection" style="display:none;">
+                <label class="form-label">Days of Week</label>
+                <div class="form-check-inline">
+                  <input class="form-check-input" type="checkbox" id="daySun" value="0">
+                  <label class="form-check-label me-3" for="daySun">Sun</label>
+                  <input class="form-check-input" type="checkbox" id="dayMon" value="1">
+                  <label class="form-check-label me-3" for="dayMon">Mon</label>
+                  <input class="form-check-input" type="checkbox" id="dayTue" value="2">
+                  <label class="form-check-label me-3" for="dayTue">Tue</label>
+                  <input class="form-check-input" type="checkbox" id="dayWed" value="3">
+                  <label class="form-check-label me-3" for="dayWed">Wed</label>
+                  <input class="form-check-input" type="checkbox" id="dayThu" value="4">
+                  <label class="form-check-label me-3" for="dayThu">Thu</label>
+                  <input class="form-check-input" type="checkbox" id="dayFri" value="5">
+                  <label class="form-check-label me-3" for="dayFri">Fri</label>
+                  <input class="form-check-input" type="checkbox" id="daySat" value="6">
+                  <label class="form-check-label" for="daySat">Sat</label>
+                </div>
+              </div>
+              
+              <!-- Monthly Day -->
+              <div class="mb-3" id="dayOfMonthSection" style="display:none;">
+                <label class="form-label">Day of Month (1-31)</label>
+                <input type="number" class="form-control" id="ruleDayOfMonth" min="1" max="31">
+              </div>
+              
+              <div class="row">
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Start Date</label>
+                  <input type="date" class="form-control" id="ruleStartDate" required>
+                </div>
+                <div class="col-md-6 mb-3">
+                  <label class="form-label">Until Date (Optional)</label>
+                  <input type="date" class="form-control" id="ruleUntilDate">
+                </div>
+              </div>
+              
+              <div class="mb-3">
+                <div class="form-check">
+                  <input class="form-check-input" type="checkbox" id="ruleAllDay" checked>
+                  <label class="form-check-label" for="ruleAllDay">
+                    All Day
+                  </label>
+                </div>
+              </div>
+              
+              <div id="timeSection" style="display:none;">
+                <div class="row">
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">Start Time</label>
+                    <input type="time" class="form-control" id="ruleStartTime">
+                  </div>
+                  <div class="col-md-6 mb-3">
+                    <label class="form-label">End Time</label>
+                    <input type="time" class="form-control" id="ruleEndTime">
+                  </div>
+                </div>
+              </div>
+              
+              <div class="mb-3">
+                <label class="form-label">Reason (Optional)</label>
+                <textarea class="form-control" id="ruleNotes" rows="2"></textarea>
+              </div>
+            </form>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            <button type="button" class="btn btn-success" id="saveRecurringRuleBtn">Save Rule</button>
+          </div>
         </div>
       </div>
     </div>
@@ -2613,7 +2740,7 @@ async def availability_page(
       <div class="modal-dialog">
         <div class="modal-content">
           <div class="modal-header">
-            <h5 class="modal-title">Add Unavailability</h5>
+            <h5 class="modal-title">Add One-Time Unavailability</h5>
             <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
           </div>
           <div class="modal-body">
@@ -2787,9 +2914,223 @@ async def availability_page(
       }}
     }});
     
+    // ===========================
+    // Recurring Rules UI Logic
+    // ===========================
+    
+    let rules = [];
+    
+    async function loadRules() {{
+      try {{
+        const response = await fetch(`/availability/month?org_id=${{ORG_ID}}&year=${{YEAR}}&month=${{MONTH}}`);
+        const data = await response.json();
+        rules = data.rules || [];
+        renderRules();
+      }} catch (error) {{
+        console.error('Error loading rules:', error);
+        document.getElementById('rulesContainer').innerHTML = `
+          <div class="alert alert-danger">
+            Failed to load recurring rules: ${{error.message}}
+          </div>
+        `;
+      }}
+    }}
+    
+    function renderRules() {{
+      const container = document.getElementById('rulesContainer');
+      
+      if (rules.length === 0) {{
+        container.innerHTML = `
+          <div class="alert alert-info">
+            No recurring rules defined. Click "Add Recurring Rule" to create one.
+          </div>
+        `;
+        return;
+      }}
+      
+      // Group by employee
+      const byEmployee = {{}};
+      rules.forEach(r => {{
+        const empName = r.employee_name || 'Unknown';
+        if (!byEmployee[empName]) {{
+          byEmployee[empName] = [];
+        }}
+        byEmployee[empName].push(r);
+      }});
+      
+      container.innerHTML = `
+        <div class="list-group">
+          ${{Object.entries(byEmployee).map(([empName, empRules]) => `
+            <div class="list-group-item">
+              <h6>${{empName}}</h6>
+              ${{empRules.map(rule => {{
+                const patternLabel = rule.pattern.charAt(0).toUpperCase() + rule.pattern.slice(1);
+                const daysStr = rule.days_of_week ? 
+                  rule.days_of_week.map(d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(', ') : 
+                  (rule.day_of_month ? `Day ${{rule.day_of_month}}` : '');
+                const timeStr = rule.all_day ? 'All day' : 
+                  `${{rule.start_time}} - ${{rule.end_time}}`;
+                const rangeStr = rule.until_date ? 
+                  `${{rule.start_date}} to ${{rule.until_date}}` : 
+                  `From ${{rule.start_date}}`;
+                
+                return `
+                  <div class="d-flex justify-content-between align-items-start mb-2 p-2 border-start border-success border-3">
+                    <div>
+                      <span class="badge bg-success me-2">${{patternLabel}}</span>
+                      <strong>${{daysStr}}</strong> • ${{timeStr}}
+                      <br><small class="text-muted">${{rangeStr}}</small>
+                      ${{rule.notes ? `<br><small class="text-muted">${{rule.notes}}</small>` : ''}}
+                    </div>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRule(${{rule.rule_id}})">
+                      Delete
+                    </button>
+                  </div>
+                `;
+              }}).join('')}}
+            </div>
+          `).join('')}}
+        </div>
+      `;
+    }}
+    
+    async function deleteRule(ruleId) {{
+      if (!confirm('Delete this recurring rule? All future occurrences will be removed.')) return;
+      
+      try {{
+        await fetch(`/availability/rules/${{ruleId}}?org_id=${{ORG_ID}}`, {{
+          method: 'DELETE'
+        }});
+        await loadRules();
+        await loadUnavailability();  // Refresh to update merged view
+      }} catch (error) {{
+        console.error('Error deleting rule:', error);
+        alert('Failed to delete rule: ' + error.message);
+      }}
+    }}
+    
+    // Handle pattern selection
+    document.getElementById('rulePattern').addEventListener('change', (e) => {{
+      const pattern = e.target.value;
+      const daysSection = document.getElementById('daysOfWeekSection');
+      const monthSection = document.getElementById('dayOfMonthSection');
+      
+      if (pattern === 'weekly' || pattern === 'biweekly') {{
+        daysSection.style.display = 'block';
+        monthSection.style.display = 'none';
+      }} else if (pattern === 'monthly') {{
+        daysSection.style.display = 'none';
+        monthSection.style.display = 'block';
+      }} else {{
+        daysSection.style.display = 'none';
+        monthSection.style.display = 'none';
+      }}
+    }});
+    
+    // Handle all-day toggle
+    document.getElementById('ruleAllDay').addEventListener('change', (e) => {{
+      document.getElementById('timeSection').style.display = e.target.checked ? 'none' : 'block';
+    }});
+    
+    // Save recurring rule
+    document.getElementById('saveRecurringRuleBtn').addEventListener('click', async () => {{
+      const form = document.getElementById('recurringRuleForm');
+      if (!form.checkValidity()) {{
+        form.reportValidity();
+        return;
+      }}
+      
+      const employeeId = parseInt(document.getElementById('ruleEmployeeSelect').value);
+      const pattern = document.getElementById('rulePattern').value;
+      const startDate = document.getElementById('ruleStartDate').value;
+      const untilDate = document.getElementById('ruleUntilDate').value || null;
+      const allDay = document.getElementById('ruleAllDay').checked;
+      const notes = document.getElementById('ruleNotes').value || null;
+      
+      let daysOfWeek = null;
+      let dayOfMonth = null;
+      
+      if (pattern === 'weekly' || pattern === 'biweekly') {{
+        daysOfWeek = [];
+        ['daySun', 'dayMon', 'dayTue', 'dayWed', 'dayThu', 'dayFri', 'daySat'].forEach((id, idx) => {{
+          if (document.getElementById(id).checked) {{
+            daysOfWeek.push(idx);
+          }}
+        }});
+        
+        if (daysOfWeek.length === 0) {{
+          alert('Please select at least one day of week');
+          return;
+        }}
+      }} else if (pattern === 'monthly') {{
+        dayOfMonth = parseInt(document.getElementById('ruleDayOfMonth').value);
+        if (!dayOfMonth || dayOfMonth < 1 || dayOfMonth > 31) {{
+          alert('Please enter a valid day of month (1-31)');
+          return;
+        }}
+      }}
+      
+      const startTime = allDay ? null : document.getElementById('ruleStartTime').value;
+      const endTime = allDay ? null : document.getElementById('ruleEndTime').value;
+      
+      if (!allDay && (!startTime || !endTime)) {{
+        alert('Please specify start and end times');
+        return;
+      }}
+      
+      try {{
+        await fetch('/availability/rules', {{
+          method: 'POST',
+          headers: {{'Content-Type': 'application/json'}},
+          body: JSON.stringify({{
+            org_id: ORG_ID,
+            employee_id: employeeId,
+            pattern: pattern,
+            start_date: startDate,
+            until_date: untilDate,
+            days_of_week: daysOfWeek,
+            day_of_month: dayOfMonth,
+            all_day: allDay,
+            start_time: startTime,
+            end_time: endTime,
+            notes: notes
+          }})
+        }});
+        
+        // Close modal and reload
+        const modal = bootstrap.Modal.getInstance(document.getElementById('addRecurringRuleModal'));
+        modal.hide();
+        form.reset();
+        await loadRules();
+        await loadUnavailability();  // Refresh to show new occurrences
+      }} catch (error) {{
+        console.error('Error saving rule:', error);
+        alert('Failed to save rule: ' + error.message);
+      }}
+    }});
+    
+    // Populate employee dropdowns
+    async function populateEmployeeSelects() {{
+      const select1 = document.getElementById('employeeSelect');
+      const select2 = document.getElementById('ruleEmployeeSelect');
+      
+      const options = employees.map(emp => `<option value="${{emp.employee_id}}">${{emp.name}}</option>`).join('');
+      
+      select1.innerHTML = '<option value="">-- Select Employee --</option>' + options;
+      select2.innerHTML = '<option value="">-- Select Employee --</option>' + options;
+    }}
+    
+    // Override loadEmployees to also populate rule form
+    const originalLoadEmployees = loadEmployees;
+    loadEmployees = async function() {{
+      await originalLoadEmployees();
+      populateEmployeeSelects();
+    }};
+    
     // Initial load
     loadEmployees();
     loadUnavailability();
+    loadRules();
     </script>
     """
     
