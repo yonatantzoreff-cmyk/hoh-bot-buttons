@@ -424,9 +424,26 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                         )
                     result["tech_status"] = "updated"
                 else:
-                    # No changes - already up to date
-                    result["tech_status"] = "skipped"
-                    result["tech_skip_reason"] = SKIP_REASON_ALREADY_UP_TO_DATE
+                    # No changes to send_at, but check if recipient info needs updating
+                    existing_name = tech_job.get("last_resolved_to_name")
+                    existing_phone = tech_job.get("last_resolved_to_phone")
+                    recipient_changed = (existing_name != resolved_name or existing_phone != resolved_phone)
+                    
+                    if recipient_changed and (resolved_name or resolved_phone):
+                        # Recipient info has changed - update it
+                        scheduled_repo.update_status(
+                            tech_job["job_id"],
+                            status="scheduled",
+                            last_error=None,
+                            last_resolved_to_name=resolved_name,
+                            last_resolved_to_phone=resolved_phone
+                        )
+                        result["tech_status"] = "updated"
+                        logger.info(f"Updated recipient info for TECH_REMINDER job {tech_job['job_id']}: {resolved_name} ({resolved_phone})")
+                    else:
+                        # No changes - already up to date
+                        result["tech_status"] = "skipped"
+                        result["tech_skip_reason"] = SKIP_REASON_ALREADY_UP_TO_DATE
                 
                 result["tech_job_id"] = tech_job["job_id"]
                 if result.get("tech_status") == "updated":
