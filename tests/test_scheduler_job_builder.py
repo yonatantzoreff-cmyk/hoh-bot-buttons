@@ -69,20 +69,22 @@ def test_validate_phone_none():
 def test_build_jobs_for_event_creates_init_and_tech(
     mock_contact_repo, mock_settings_repo, mock_scheduled_repo, mock_event_repo, mock_shifts_repo
 ):
-    """Test that build_or_update_jobs_for_event creates INIT and TECH_REMINDER jobs."""
+    """Test that build_or_update_jobs_for_event creates TECH_REMINDER when load_in_time is set."""
     # Setup mocks
     event_date = date(2024, 7, 18)
+    load_in_time = datetime(2024, 7, 18, 18, 0)
     mock_event = {
         "event_id": 1,
         "event_date": event_date,
         "producer_contact_id": 100,
         "technical_contact_id": 200,
+        "load_in_time": load_in_time,  # Has load_in_time → TECH_REMINDER created, INIT skipped
     }
     
     mock_producer = {"contact_id": 100, "phone": "+972501234567"}
     mock_technical = {"contact_id": 200, "phone": "+972509876543"}
     
-    # Mock at least one shift so TECH_REMINDER is created
+    # Mock at least one shift so TECH_REMINDER is not blocked
     mock_shifts = [{"shift_id": 1, "employee_id": 1}]
     
     mock_settings = {
@@ -121,22 +123,17 @@ def test_build_jobs_for_event_creates_init_and_tech(
     # Run the function
     result = build_or_update_jobs_for_event(org_id=1, event_id=1)
     
-    # Verify
-    assert "init_job_id" in result
+    # Verify INIT is skipped (has load_in_time) and TECH_REMINDER is created
+    assert result["init_status"] == "skipped"
+    assert result["init_skip_reason"] == "has_load_in_time"
     assert "tech_job_id" in result
-    assert result["init_status"] == "created"
     assert result["tech_status"] == "created"
     
-    # Verify create_scheduled_message was called twice (once for INIT, once for TECH_REMINDER)
-    assert mock_scheduled_repo_instance.create_scheduled_message.call_count == 2
-    
-    # Check INIT job creation
-    init_call = mock_scheduled_repo_instance.create_scheduled_message.call_args_list[0]
-    assert init_call[1]["message_type"] == "INIT"
-    assert init_call[1]["event_id"] == 1
+    # Verify create_scheduled_message was called once for TECH_REMINDER
+    assert mock_scheduled_repo_instance.create_scheduled_message.call_count == 1
     
     # Check TECH_REMINDER job creation
-    tech_call = mock_scheduled_repo_instance.create_scheduled_message.call_args_list[1]
+    tech_call = mock_scheduled_repo_instance.create_scheduled_message.call_args
     assert tech_call[1]["message_type"] == "TECH_REMINDER"
     assert tech_call[1]["event_id"] == 1
 
@@ -152,16 +149,18 @@ def test_build_jobs_for_event_blocks_when_phone_missing(
     """Test that jobs are blocked when required phone is missing."""
     # Setup mocks
     event_date = date(2024, 7, 18)
+    load_in_time = datetime(2024, 7, 18, 18, 0)
     mock_event = {
         "event_id": 1,
         "event_date": event_date,
         "producer_contact_id": 100,
         "technical_contact_id": None,  # No technical contact
+        "load_in_time": load_in_time,  # Has load_in_time → TECH_REMINDER should be created but blocked
     }
     
     mock_producer = {"contact_id": 100, "phone": None}  # No phone
     
-    # Mock at least one shift so TECH_REMINDER is attempted
+    # Mock at least one shift so TECH_REMINDER is attempted (but will be blocked due to no phone)
     mock_shifts = [{"shift_id": 1, "employee_id": 1}]
     
     mock_settings = {
@@ -198,12 +197,13 @@ def test_build_jobs_for_event_blocks_when_phone_missing(
     # Run the function
     result = build_or_update_jobs_for_event(org_id=1, event_id=1)
     
-    # Verify both jobs are blocked
-    assert result["init_status"] == "blocked"
+    # Verify INIT is skipped (has load_in_time) and TECH_REMINDER is blocked (no phone)
+    assert result["init_status"] == "skipped"
+    assert result["init_skip_reason"] == "has_load_in_time"
     assert result["tech_status"] == "blocked"
     
-    # Verify status was updated to blocked
-    assert mock_scheduled_repo_instance.update_status.call_count == 2
+    # Verify status was updated to blocked for TECH_REMINDER
+    assert mock_scheduled_repo_instance.update_status.call_count == 1
 
 
 @patch("app.services.scheduler_job_builder.EmployeeShiftRepository")
@@ -217,11 +217,13 @@ def test_build_jobs_for_event_updates_existing_not_sent(
     """Test that existing jobs not yet sent are updated with new send_at."""
     # Setup mocks
     event_date = date(2024, 7, 18)
+    load_in_time = datetime(2024, 7, 18, 18, 0)
     mock_event = {
         "event_id": 1,
         "event_date": event_date,
         "producer_contact_id": 100,
         "technical_contact_id": 200,
+        "load_in_time": load_in_time,  # Has load_in_time → Only TECH_REMINDER is relevant
     }
     
     mock_producer = {"contact_id": 100, "phone": "+972501234567"}
@@ -237,8 +239,7 @@ def test_build_jobs_for_event_updates_existing_not_sent(
         "tech_send_time": "12:00",
     }
     
-    # Existing jobs (scheduled, not sent)
-    mock_init_job = {"job_id": "job_init_1", "status": "scheduled"}
+    # Existing TECH_REMINDER job (scheduled, not sent)
     mock_tech_job = {"job_id": "job_tech_1", "status": "scheduled"}
     
     # Configure mocks
@@ -257,12 +258,10 @@ def test_build_jobs_for_event_updates_existing_not_sent(
     mock_settings_repo.return_value = mock_settings_repo_instance
     
     mock_scheduled_repo_instance = Mock()
-    mock_scheduled_repo_instance.find_job_for_event.side_effect = lambda org_id, event_id, msg_type: (
-        mock_init_job if msg_type == "INIT" else mock_tech_job
-    )
+    mock_scheduled_repo_instance.find_job_for_event.return_value = mock_tech_job
     mock_scheduled_repo.return_value = mock_scheduled_repo_instance
     
-    # Mock at least one shift so TECH_REMINDER is created
+    # Mock at least one shift so TECH_REMINDER is updated
     mock_shifts = [{"shift_id": 1, "employee_id": 1}]
     mock_shifts_repo_instance = Mock()
     mock_shifts_repo_instance.list_shifts_for_event.return_value = mock_shifts
@@ -271,12 +270,13 @@ def test_build_jobs_for_event_updates_existing_not_sent(
     # Run the function
     result = build_or_update_jobs_for_event(org_id=1, event_id=1)
     
-    # Verify
-    assert result["init_status"] == "updated"
+    # Verify INIT is skipped (has load_in_time) and TECH_REMINDER is updated
+    assert result["init_status"] == "skipped"
+    assert result["init_skip_reason"] == "has_load_in_time"
     assert result["tech_status"] == "updated"
     
-    # Verify update_send_at was called for both jobs
-    assert mock_scheduled_repo_instance.update_send_at.call_count == 2
+    # Verify update_send_at was called for TECH_REMINDER job
+    assert mock_scheduled_repo_instance.update_send_at.call_count == 1
     
     # Verify no new jobs were created
     assert mock_scheduled_repo_instance.create_scheduled_message.call_count == 0
@@ -293,11 +293,13 @@ def test_build_jobs_for_event_skips_already_sent(
     """Test that jobs already sent are not updated."""
     # Setup mocks
     event_date = date(2024, 7, 18)
+    load_in_time = datetime(2024, 7, 18, 18, 0)
     mock_event = {
         "event_id": 1,
         "event_date": event_date,
         "producer_contact_id": 100,
         "technical_contact_id": 200,
+        "load_in_time": load_in_time,  # Has load_in_time → Only TECH_REMINDER is relevant
     }
     
     mock_producer = {"contact_id": 100, "phone": "+972501234567"}
@@ -313,8 +315,7 @@ def test_build_jobs_for_event_skips_already_sent(
         "tech_send_time": "12:00",
     }
     
-    # Existing jobs (already sent)
-    mock_init_job = {"job_id": "job_init_1", "status": "sent"}
+    # Existing TECH_REMINDER job (already sent)
     mock_tech_job = {"job_id": "job_tech_1", "status": "sent"}
     
     # Configure mocks
@@ -333,9 +334,7 @@ def test_build_jobs_for_event_skips_already_sent(
     mock_settings_repo.return_value = mock_settings_repo_instance
     
     mock_scheduled_repo_instance = Mock()
-    mock_scheduled_repo_instance.find_job_for_event.side_effect = lambda org_id, event_id, msg_type: (
-        mock_init_job if msg_type == "INIT" else mock_tech_job
-    )
+    mock_scheduled_repo_instance.find_job_for_event.return_value = mock_tech_job
     mock_scheduled_repo.return_value = mock_scheduled_repo_instance
     
     # Mock at least one shift so TECH_REMINDER is checked
@@ -347,9 +346,9 @@ def test_build_jobs_for_event_skips_already_sent(
     # Run the function
     result = build_or_update_jobs_for_event(org_id=1, event_id=1)
     
-    # Verify jobs are skipped because they were already sent
+    # Verify INIT is skipped (has load_in_time) and TECH_REMINDER is skipped (already sent)
     assert result["init_status"] == "skipped"
-    assert result["init_skip_reason"] == "already_sent_or_failed"
+    assert result["init_skip_reason"] == "has_load_in_time"
     assert result["tech_status"] == "skipped"
     assert result["tech_skip_reason"] == "already_sent_or_failed"
     
@@ -366,14 +365,16 @@ def test_build_jobs_for_event_skips_already_sent(
 def test_build_jobs_for_event_skips_tech_when_no_shifts(
     mock_contact_repo, mock_settings_repo, mock_scheduled_repo, mock_event_repo, mock_shifts_repo
 ):
-    """Test that TECH_REMINDER job is skipped when event has no shifts."""
+    """Test that TECH_REMINDER job is blocked when event has load_in_time but no shifts yet."""
     # Setup mocks
     event_date = date(2024, 7, 18)
+    load_in_time = datetime(2024, 7, 18, 18, 0)  # Has load_in_time
     mock_event = {
         "event_id": 1,
         "event_date": event_date,
         "producer_contact_id": 100,
         "technical_contact_id": 200,
+        "load_in_time": load_in_time,  # Has load_in_time, so TECH_REMINDER should be created
     }
     
     mock_producer = {"contact_id": 100, "phone": "+972501234567"}
@@ -408,7 +409,7 @@ def test_build_jobs_for_event_skips_tech_when_no_shifts(
     mock_scheduled_repo_instance.find_job_for_event.return_value = None  # No existing jobs
     mock_scheduled_repo.return_value = mock_scheduled_repo_instance
     
-    # Mock NO shifts - event has no shifts
+    # Mock NO shifts - event has no shifts yet
     mock_shifts_repo_instance = Mock()
     mock_shifts_repo_instance.list_shifts_for_event.return_value = []
     mock_shifts_repo.return_value = mock_shifts_repo_instance
@@ -416,19 +417,19 @@ def test_build_jobs_for_event_skips_tech_when_no_shifts(
     # Run the function
     result = build_or_update_jobs_for_event(org_id=1, event_id=1)
     
-    # Verify INIT job is created but TECH_REMINDER is skipped
-    assert "init_job_id" in result
-    assert result["init_status"] == "created"
-    assert result["tech_status"] == "skipped"
-    assert result["tech_skip_reason"] == "no_shifts"
+    # Verify INIT job is skipped (has load_in_time) but TECH_REMINDER is created and blocked
+    assert result["init_status"] == "skipped"
+    assert result["init_skip_reason"] == "has_load_in_time"
+    assert result["tech_status"] == "blocked"  # Should be blocked due to no shifts
+    assert "tech_job_id" in result  # Job should be created
     
-    # Verify create_scheduled_message was called only once (for INIT, not for TECH_REMINDER)
+    # Verify create_scheduled_message was called once for TECH_REMINDER
     assert mock_scheduled_repo_instance.create_scheduled_message.call_count == 1
     
-    # Check INIT job creation
-    init_call = mock_scheduled_repo_instance.create_scheduled_message.call_args_list[0]
-    assert init_call[1]["message_type"] == "INIT"
-    assert init_call[1]["event_id"] == 1
+    # Check TECH_REMINDER job creation
+    tech_call = mock_scheduled_repo_instance.create_scheduled_message.call_args
+    assert tech_call[1]["message_type"] == "TECH_REMINDER"
+    assert tech_call[1]["event_id"] == 1
 
 
 @patch("app.services.scheduler_job_builder.EmployeeShiftRepository")

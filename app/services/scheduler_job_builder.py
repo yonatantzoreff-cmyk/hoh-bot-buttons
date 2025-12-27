@@ -290,14 +290,13 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
         result["init_skip_reason"] = SKIP_REASON_DISABLED_BY_SETTINGS
     
     # --- TECH_REMINDER Job ---
-    # Check if event has shifts - TECH_REMINDER only for events with shifts
-    shifts_repo = EmployeeShiftRepository()
-    event_shifts = shifts_repo.list_shifts_for_event(org_id=org_id, event_id=event_id)
-    has_shifts = len(event_shifts) > 0
+    # TECH_REMINDER is created when event has load_in_time (regardless of shifts)
+    # This allows the job to be created early and unblocked when shifts are added later
+    should_create_tech_reminder = load_in_time is not None
     
-    if not has_shifts:
-        # Event has no shifts - skip TECH_REMINDER
-        logger.info(f"Skipping TECH_REMINDER job for event {event_id}: no shifts assigned")
+    if not should_create_tech_reminder:
+        # Event has no load_in_time - TECH_REMINDER not needed yet
+        logger.info(f"Skipping TECH_REMINDER job for event {event_id}: no load_in_time")
         
         # Delete or mark as skipped any existing TECH_REMINDER job
         tech_job = scheduled_repo.find_job_for_event(org_id, event_id, "TECH_REMINDER")
@@ -306,13 +305,17 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
             scheduled_repo.update_status(
                 tech_job["job_id"],
                 status="skipped",
-                last_error="Event has no shifts, TECH_REMINDER not needed"
+                last_error="Event has no load_in_time, TECH_REMINDER not needed"
             )
-            logger.info(f"Marked existing TECH_REMINDER job {tech_job['job_id']} as skipped (no shifts)")
+            logger.info(f"Marked existing TECH_REMINDER job {tech_job['job_id']} as skipped (no load_in_time)")
         
         result["tech_status"] = "skipped"
-        result["tech_skip_reason"] = SKIP_REASON_NO_SHIFTS
+        result["tech_skip_reason"] = "no_load_in_time"
     elif settings.get("enabled_global") and settings.get("enabled_tech"):
+        # Check if event has shifts - needed to determine if job should be blocked
+        shifts_repo = EmployeeShiftRepository()
+        event_shifts = shifts_repo.list_shifts_for_event(org_id=org_id, event_id=event_id)
+        has_shifts = len(event_shifts) > 0
         tech_job = scheduled_repo.find_job_for_event(org_id, event_id, "TECH_REMINDER")
         
         # Compute send_at for TECH_REMINDER
@@ -328,8 +331,28 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
             apply_weekend_rule=False  # TECH_REMINDER does NOT use weekend rule
         )
         
-        # Validate technical phone
-        phone_valid, _ = _validate_phone(technical_phone)
+        # Determine job status based on validation
+        # Priority: 1) No shifts, 2) No phone, 3) All good
+        if not has_shifts:
+            # No shifts assigned yet - block with specific error
+            status = "blocked"
+            last_error = "No employees assigned to event"
+            phone_valid = False  # For consistency in logic below
+        else:
+            # Validate technical phone (or producer as fallback)
+            # Note: The actual sending logic will handle fallback to producer
+            # Here we just check if EITHER has a valid phone
+            phone_valid, _ = _validate_phone(technical_phone)
+            if not phone_valid and producer_phone:
+                # Check producer as fallback
+                phone_valid, _ = _validate_phone(producer_phone)
+            
+            if not phone_valid:
+                status = "blocked"
+                last_error = ERROR_MSG_MISSING_RECIPIENT_PHONE
+            else:
+                status = "scheduled"
+                last_error = None
         
         if tech_job:
             # Update existing job if not sent or failed
@@ -343,22 +366,28 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                     # Update send_at
                     scheduled_repo.update_send_at(tech_job["job_id"], tech_send_at)
                 
-                # Update status based on phone validation
-                if not phone_valid:
-                    scheduled_repo.update_status(
-                        tech_job["job_id"],
-                        status="blocked",
-                        last_error=ERROR_MSG_MISSING_RECIPIENT_PHONE
-                    )
-                    result["tech_status"] = "blocked"
+                # Update status based on validation results
+                if status == "blocked":
+                    # Should be blocked (no shifts or no phone)
+                    if existing_status != "blocked" or tech_job.get("last_error") != last_error:
+                        scheduled_repo.update_status(
+                            tech_job["job_id"],
+                            status="blocked",
+                            last_error=last_error
+                        )
+                        result["tech_status"] = "blocked"
+                        logger.info(f"Blocked TECH_REMINDER job {tech_job['job_id']}: {last_error}")
+                    else:
+                        result["tech_status"] = "blocked"
                 elif existing_status == "blocked":
-                    # Previously blocked and now phone is valid, unblock
+                    # Previously blocked and now conditions are met, unblock
                     scheduled_repo.update_status(
                         tech_job["job_id"],
                         status="scheduled",
                         last_error=None
                     )
                     result["tech_status"] = "updated"
+                    logger.info(f"Unblocked TECH_REMINDER job {tech_job['job_id']}")
                 elif send_at_changed:
                     # Send time changed
                     result["tech_status"] = "updated"
@@ -375,16 +404,8 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                 result["tech_status"] = "skipped"
                 result["tech_skip_reason"] = SKIP_REASON_ALREADY_SENT_OR_FAILED
         else:
-            # Create new job - ALWAYS create even if phone is missing (status=blocked)
+            # Create new job - ALWAYS create (may be blocked if no shifts/phone)
             job_key = _generate_job_key(org_id, "event", event_id, "TECH_REMINDER")
-            
-            # Set status based on phone validation
-            if not phone_valid:
-                status = "blocked"
-                last_error = ERROR_MSG_MISSING_RECIPIENT_PHONE
-            else:
-                status = "scheduled"
-                last_error = None
             
             job_id = scheduled_repo.create_scheduled_message(
                 job_key=job_key,
