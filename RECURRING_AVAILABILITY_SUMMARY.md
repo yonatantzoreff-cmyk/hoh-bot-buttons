@@ -55,18 +55,36 @@ This document summarizes the implementation of the recurring availability featur
 
 ### 4. UI Enhancements
 
-**Availability Page** (`/ui/availability`)
-- Separate sections for recurring rules vs one-time entries
-- "Add Recurring Rule" modal with:
-  - Employee selector
-  - Pattern selector (weekly/biweekly/monthly)
-  - Days of week checkboxes (for weekly/biweekly)
-  - Day of month input (for monthly)
-  - All-day toggle with time pickers
-  - Date range configuration
-  - Reason/notes field
-- Visual indicators (green border for rules)
-- Delete functionality for rules
+**Availability Page** (`/ui/availability`) - **TABLE-BASED INTERFACE**
+
+The UI was completely redesigned based on user feedback to eliminate multiple button clicks:
+
+**New Workflow:**
+1. Select employee from dropdown at the top
+2. All days of the month (1-31) displayed in a table
+3. Fill in unavailability inline - no modals!
+   - Check "All Day" for full-day unavailability
+   - OR enter Start Time + End Time for partial hours
+   - Add optional notes/reason
+4. One "Save All Changes" button for the entire month
+
+**Table Features:**
+- Yellow highlighting for unavailable days
+- Green 🔁 badge for recurring rule entries (read-only)
+- Disabled inputs for rule-based unavailability
+- Clear button (✕) to remove manual entries
+- Change tracking with visual feedback
+- Validation before save
+
+**Visual Example:**
+![Table-based UI](https://github.com/user-attachments/assets/51e7cc8a-001f-4d2f-afac-997845a3879d)
+
+**Benefits:**
+- ✅ No multiple modal clicks required
+- ✅ See entire month at a glance
+- ✅ Quick edits with inline inputs
+- ✅ Clear visual indicators for different entry types
+- ✅ Single save operation
 
 ### 5. Testing
 
