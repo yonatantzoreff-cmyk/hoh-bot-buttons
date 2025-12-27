@@ -20,6 +20,8 @@ from app.repositories import (
     EmployeeRepository,
     EmployeeShiftRepository,
     EmployeeUnavailabilityRepository,
+    EmployeeUnavailabilityRulesRepository,
+    EmployeeUnavailabilityExceptionsRepository,
 )
 from app.services.shift_generator import generate_shifts_for_events
 
@@ -274,4 +276,136 @@ def save_shifts(request: SaveRequest):
     
     except Exception as e:
         logger.error(f"Error saving shifts: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/events/{event_id}/unavailable-employees")
+def get_unavailable_employees(event_id: int, org_id: int, debug: bool = False):
+    """
+    Get list of employees who are unavailable for a specific event.
+    
+    Args:
+        event_id: Event to check
+        org_id: Organization ID
+        debug: If true, returns detailed source info (rule IDs, window calculations)
+    
+    Returns:
+        List of unavailable employees with conflict details
+    """
+    try:
+        from app.services.recurring_availability import check_event_conflicts, expand_rule_for_month, merge_unavailability
+        from calendar import monthrange
+        
+        # Get event details
+        event_repo = EventRepository()
+        event = event_repo.get_event_by_id(org_id, event_id)
+        
+        if not event:
+            raise HTTPException(status_code=404, detail="Event not found")
+        
+        # Get event date to determine which month to query
+        event_date = event["event_date"]
+        if isinstance(event_date, str):
+            event_date = date.fromisoformat(event_date)
+        elif isinstance(event_date, datetime):
+            event_date = event_date.date()
+        
+        year = event_date.year
+        month = event_date.month
+        
+        # Get all employees
+        employee_repo = EmployeeRepository()
+        employees = employee_repo.list_employees(org_id, active_only=True)
+        
+        # Get unavailability data for this month
+        unavail_repo = EmployeeUnavailabilityRepository()
+        manual_entries = unavail_repo.get_unavailability_for_month(org_id, year, month)
+        
+        # Mark manual entries
+        for entry in manual_entries:
+            if not entry.get("source_type"):
+                entry["source_type"] = "manual"
+        
+        # Get rules and expand
+        rules_repo = EmployeeUnavailabilityRulesRepository()
+        rules = rules_repo.get_active_rules_for_month(org_id, year, month)
+        
+        # Get exceptions
+        rule_ids = [r["rule_id"] for r in rules]
+        exceptions_repo = EmployeeUnavailabilityExceptionsRepository()
+        exceptions_by_rule = exceptions_repo.get_exceptions_for_rules(rule_ids) if rule_ids else {}
+        
+        # Expand rules
+        rule_entries = []
+        for rule in rules:
+            rule_id = rule["rule_id"]
+            exceptions = exceptions_by_rule.get(rule_id, [])
+            
+            occurrences = expand_rule_for_month(rule, year, month, exceptions)
+            
+            for occ in occurrences:
+                occ["employee_id"] = rule["employee_id"]
+                occ["employee_name"] = rule["employee_name"]
+            
+            rule_entries.extend(occurrences)
+        
+        # Group unavailability by employee
+        unavail_by_employee = {}
+        for entry in manual_entries + rule_entries:
+            emp_id = entry["employee_id"]
+            if emp_id not in unavail_by_employee:
+                unavail_by_employee[emp_id] = []
+            unavail_by_employee[emp_id].append(entry)
+        
+        # Merge for each employee and check conflicts
+        conflicts = []
+        for emp in employees:
+            emp_id = emp["employee_id"]
+            emp_unavail = unavail_by_employee.get(emp_id, [])
+            
+            if not emp_unavail:
+                continue
+            
+            # Separate manual and rule entries
+            manual = [e for e in emp_unavail if e.get("source_type") == "manual"]
+            rules_emp = [e for e in emp_unavail if e.get("source_type") == "rule"]
+            
+            # Merge with precedence
+            merged = merge_unavailability(manual, rules_emp)
+            
+            # Check for conflict
+            conflict = check_event_conflicts(event, emp_id, merged)
+            
+            if conflict:
+                conflict_data = {
+                    "employee_id": emp_id,
+                    "employee_name": emp["name"],
+                    "unavail_start": conflict["unavail_start"].isoformat(),
+                    "unavail_end": conflict["unavail_end"].isoformat(),
+                    "note": conflict["note"],
+                }
+                
+                if debug:
+                    conflict_data["debug"] = {
+                        "source_type": conflict["source_type"],
+                        "source_rule_id": conflict.get("source_rule_id"),
+                        "event_start": conflict["event_start"].isoformat(),
+                        "event_end": conflict["event_end"].isoformat(),
+                        "load_in_time": str(event.get("load_in_time")),
+                        "show_time": str(event.get("show_time")),
+                    }
+                
+                conflicts.append(conflict_data)
+        
+        return {
+            "event_id": event_id,
+            "event_name": event["name"],
+            "event_date": str(event_date),
+            "unavailable_employees": conflicts,
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error checking unavailable employees: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
