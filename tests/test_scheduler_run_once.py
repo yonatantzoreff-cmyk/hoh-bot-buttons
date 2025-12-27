@@ -247,7 +247,8 @@ async def test_dedupe_skips_already_sent_messages():
             org_id=1,
             message_type="INIT",
             event_id=100,
-            shift_id=None
+            shift_id=None,
+            recipient_contact_id=10  # Add recipient contact id
         )
         
         # Should return True (is duplicate)
@@ -273,7 +274,8 @@ async def test_dedupe_allows_new_messages():
             org_id=1,
             message_type="INIT",
             event_id=100,
-            shift_id=None
+            shift_id=None,
+            recipient_contact_id=10  # Add recipient contact id
         )
         
         # Should return False (not a duplicate)

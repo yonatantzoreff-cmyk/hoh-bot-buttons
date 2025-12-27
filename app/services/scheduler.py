@@ -1,6 +1,7 @@
 """Scheduler service for running scheduled message delivery."""
 
 import logging
+import os
 import time
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -286,7 +287,8 @@ class SchedulerService:
         recipient_contact_id = recipient_result.get("contact_id")
         
         # Step 2: Check for dedupe - has this message already been sent manually?
-        if self._is_duplicate(org_id, message_type, event_id, shift_id):
+        # Pass recipient_contact_id to check if THIS specific recipient already received the message
+        if self._is_duplicate(org_id, message_type, event_id, shift_id, recipient_contact_id):
             logger.info(f"Job {job_id} is a duplicate (already sent manually), skipping")
             self.scheduled_repo.update_status(
                 job_id, 
@@ -391,36 +393,54 @@ class SchedulerService:
             return {"success": False, "error": "Missing phone number (technical or producer)"}
         
         elif message_type == "TECH_REMINDER":
-            # TECH_REMINDER: event.technical_phone
+            # TECH_REMINDER: Try technical contact first, then fallback to producer
+            # This mirrors the INIT logic to handle cases where producer is also the technician
             event = self.events_repo.get_event_by_id(org_id, event_id)
             if not event:
                 return {"success": False, "error": "Event not found"}
             
+            # Try technical contact first
             technical_contact_id = event.get("technical_contact_id")
-            if not technical_contact_id:
-                return {"success": False, "error": "Technical contact not assigned"}
+            if technical_contact_id:
+                technical = self.contacts_repo.get_contact_by_id(org_id, technical_contact_id)
+                if technical:
+                    tech_phone = technical.get("phone")
+                    if tech_phone and tech_phone.strip():
+                        try:
+                            normalized_phone = normalize_phone_to_e164_il(tech_phone)
+                            if normalized_phone:
+                                logger.debug(f"TECH_REMINDER for event {event_id}: Using technical contact {technical_contact_id}")
+                                return {
+                                    "success": True,
+                                    "phone": normalized_phone,
+                                    "name": technical.get("name", ""),
+                                    "contact_id": technical_contact_id
+                                }
+                        except Exception as e:
+                            logger.debug(f"Technical contact phone normalization failed: {e}")
             
-            technical = self.contacts_repo.get_contact_by_id(org_id, technical_contact_id)
-            if not technical:
-                return {"success": False, "error": "Technical contact not found"}
+            # Fallback to producer contact
+            logger.debug(f"TECH_REMINDER for event {event_id}: Technical contact unavailable, falling back to producer")
+            producer_contact_id = event.get("producer_contact_id")
+            if producer_contact_id:
+                producer = self.contacts_repo.get_contact_by_id(org_id, producer_contact_id)
+                if producer:
+                    prod_phone = producer.get("phone")
+                    if prod_phone and prod_phone.strip():
+                        try:
+                            normalized_phone = normalize_phone_to_e164_il(prod_phone)
+                            if normalized_phone:
+                                logger.info(f"TECH_REMINDER for event {event_id}: Using producer as fallback {producer_contact_id}")
+                                return {
+                                    "success": True,
+                                    "phone": normalized_phone,
+                                    "name": producer.get("name", ""),
+                                    "contact_id": producer_contact_id
+                                }
+                        except Exception as e:
+                            logger.debug(f"Producer phone normalization failed: {e}")
             
-            tech_phone = technical.get("phone")
-            if not tech_phone or not tech_phone.strip():
-                return {"success": False, "error": "Technical contact phone missing"}
-            
-            try:
-                normalized_phone = normalize_phone_to_e164_il(tech_phone)
-                if not normalized_phone:
-                    return {"success": False, "error": "Technical contact phone invalid"}
-                
-                return {
-                    "success": True,
-                    "phone": normalized_phone,
-                    "name": technical.get("name", ""),
-                    "contact_id": technical_contact_id
-                }
-            except Exception as e:
-                return {"success": False, "error": f"Phone normalization failed: {e}"}
+            return {"success": False, "error": "Missing phone number (technical or producer)"}
         
         elif message_type == "SHIFT_REMINDER":
             # SHIFT_REMINDER: shift.employee_phone
@@ -456,12 +476,28 @@ class SchedulerService:
         
         return {"success": False, "error": f"Unknown message type: {message_type}"}
     
-    def _is_duplicate(self, org_id: int, message_type: str, event_id: Optional[int], shift_id: Optional[int]) -> bool:
+    def _is_duplicate(
+        self, 
+        org_id: int, 
+        message_type: str, 
+        event_id: Optional[int], 
+        shift_id: Optional[int],
+        recipient_contact_id: Optional[int]
+    ) -> bool:
         """
-        Check if a message of this type has already been sent for this event/shift.
+        Check if a message of this type has already been sent to this specific recipient
+        for this event/shift.
         
-        This checks the messages table for manually sent messages with matching
-        org_id, message_type (via raw_payload), and event_id/shift_id.
+        This checks the messages table for manually sent messages with matching:
+        - org_id
+        - message_type (via content_sid or body pattern)
+        - event_id/shift_id
+        - recipient contact_id (CRITICAL for avoiding false positives)
+        
+        The recipient_contact_id check ensures that:
+        - TECH_REMINDER to producer doesn't block TECH_REMINDER to technician
+        - INIT to producer doesn't block INIT to technician
+        - Different recipients for the same event/message type are handled correctly
         """
         # Query messages table for existing messages
         query_params = {
@@ -469,14 +505,16 @@ class SchedulerService:
         }
         
         if event_id:
-            # Check for messages for this event with this message type
+            # Check for messages for this event with this message type and recipient
             # Look for specific message type indicators in the raw_payload JSON
             if message_type == "INIT":
+                # INIT message duplicate check: event_id + contact_id + content_sid
                 query = text("""
                     SELECT COUNT(*) 
                     FROM messages
                     WHERE org_id = :org_id
                       AND event_id = :event_id
+                      AND contact_id = :contact_id
                       AND direction = 'outgoing'
                       AND (
                         raw_payload::text LIKE '%\"content_sid\":\"' || :content_sid_init || '\"%'
@@ -484,11 +522,29 @@ class SchedulerService:
                     LIMIT 1
                 """)
                 # Get INIT content SID from environment
-                import os
                 query_params["content_sid_init"] = os.environ.get("CONTENT_SID_INIT", "")
+                query_params["contact_id"] = recipient_contact_id
+                
             elif message_type == "TECH_REMINDER":
-                # TECH_REMINDER not yet implemented, so no messages would exist
-                return False
+                # TECH_REMINDER duplicate check: event_id + contact_id + content_sid
+                # Critical: Check contact_id because TECH_REMINDER can go to technical OR producer
+                query = text("""
+                    SELECT COUNT(*) 
+                    FROM messages
+                    WHERE org_id = :org_id
+                      AND event_id = :event_id
+                      AND contact_id = :contact_id
+                      AND direction = 'outgoing'
+                      AND (
+                        raw_payload::text LIKE '%\"content_sid\":\"' || :content_sid_tech || '\"%'
+                        OR body LIKE '%תזכורת%'
+                      )
+                    LIMIT 1
+                """)
+                # Get TECH_REMINDER content SID from environment
+                query_params["content_sid_tech"] = os.environ.get("CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT", "")
+                query_params["contact_id"] = recipient_contact_id
+                
             else:
                 # Generic check for other message types
                 query = text("""
@@ -500,8 +556,10 @@ class SchedulerService:
                     LIMIT 1
                 """)
             query_params["event_id"] = event_id
+            
         elif shift_id:
             # Check for messages for this shift (shift reminders)
+            # For shift reminders, we check shift_id in raw_payload
             query = text("""
                 SELECT COUNT(*) 
                 FROM messages
@@ -521,7 +579,15 @@ class SchedulerService:
             with get_session() as session:
                 result = session.execute(query, query_params)
                 count = result.scalar()
-                return count > 0
+                is_dup = count > 0
+                
+                if is_dup:
+                    logger.debug(
+                        f"Duplicate detected: {message_type} for event_id={event_id}, "
+                        f"shift_id={shift_id}, contact_id={recipient_contact_id}"
+                    )
+                
+                return is_dup
         except Exception as e:
             logger.warning(f"Dedupe check failed: {e}")
             return False
@@ -577,6 +643,10 @@ class SchedulerService:
         Returns:
             Dict with: success (bool), error (str or None)
         """
+        # Import TECH_REMINDER dependencies at function level to avoid circular imports
+        from app.credentials import CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT
+        from app import twilio_client
+        
         org_id = job.get("org_id")
         message_type = job.get("message_type")
         event_id = job.get("event_id")
@@ -600,9 +670,74 @@ class SchedulerService:
                 return {"success": True}
             
             elif message_type == "TECH_REMINDER":
-                # TECH_REMINDER is not yet implemented
-                # Return error to prevent jobs from being marked as sent
-                return {"success": False, "error": "TECH_REMINDER sending not yet implemented"}
+                # TECH_REMINDER implementation - reuse existing logic from ui.py
+                if not CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT:
+                    return {
+                        "success": False, 
+                        "error": "Missing CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT environment variable"
+                    }
+                
+                # Build the payload using existing backend logic
+                try:
+                    payload = self.hoh.build_tech_reminder_employee_payload(
+                        org_id=org_id, 
+                        event_id=event_id
+                    )
+                except ValueError as ve:
+                    # Handle missing data errors (no employees, no technical contact, etc.)
+                    logger.warning(f"Cannot build tech reminder payload for event {event_id}: {ve}")
+                    return {"success": False, "error": str(ve)}
+                
+                to_phone = payload["to_phone"]
+                variables = payload["variables"]
+                opening_employee_metadata = payload["opening_employee_metadata"]
+                
+                # Get event for logging
+                event = self.events_repo.get_event_by_id(org_id, event_id)
+                
+                # Ensure conversation exists
+                conversation_id = self.hoh._ensure_conversation(
+                    org_id=org_id,
+                    event_id=event_id,
+                    contact_id=recipient_contact_id
+                )
+                
+                logger.info(
+                    f"Sending TECH_REMINDER for event {event_id} to {to_phone}, "
+                    f"opening employee: {opening_employee_metadata.get('employee_name')}"
+                )
+                
+                # Send via Twilio
+                twilio_resp = twilio_client.send_content_message(
+                    to=to_phone,
+                    content_sid=CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT,
+                    content_variables=variables,
+                )
+                
+                whatsapp_sid = getattr(twilio_resp, "sid", None)
+                
+                # Log the message to the database (same structure as manual send)
+                raw_payload = {
+                    "content_sid": CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT,
+                    "variables": variables,
+                    "twilio_message_sid": whatsapp_sid,
+                    "event_id": event_id,
+                    "opening_employee": opening_employee_metadata,
+                }
+                
+                self.messages_repo.log_message(
+                    org_id=org_id,
+                    conversation_id=conversation_id,
+                    event_id=event_id,
+                    contact_id=recipient_contact_id,
+                    direction="outgoing",
+                    body=f"Tech reminder sent for event {event.get('name', '')} with opening employee {opening_employee_metadata.get('employee_name')}",
+                    whatsapp_msg_sid=whatsapp_sid,
+                    raw_payload=raw_payload,
+                )
+                
+                logger.info(f"TECH_REMINDER sent successfully for event {event_id}, SID: {whatsapp_sid}")
+                return {"success": True}
             
             else:
                 return {"success": False, "error": f"Unknown message type: {message_type}"}
