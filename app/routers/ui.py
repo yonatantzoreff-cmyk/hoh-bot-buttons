@@ -2555,9 +2555,9 @@ async def availability_page(
     year: Optional[int] = None,
     month: Optional[int] = None,
 ):
-    """Employee Availability Management UI."""
+    """Employee Availability Management UI - Table-based view with all days."""
     from datetime import date
-    import calendar
+    import calendar as cal_module
     
     # Default to next month
     today = date.today()
@@ -2568,208 +2568,91 @@ async def availability_page(
         year = next_year
         month = next_month
     
-    month_name = calendar.month_name[month]
+    month_name = cal_module.month_name[month]
+    _, days_in_month = cal_module.monthrange(year, month)
     
     # Calculate prev/next month
     prev_month = month - 1 if month > 1 else 12
     prev_year = year if month > 1 else year - 1
-    next_month = month + 1 if month < 12 else 1
+    next_month_num = month + 1 if month < 12 else 1
     next_year = year if month < 12 else year + 1
     
+    # Generate day names
+    day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+    
     body = f"""
+    <style>
+      .day-row {{
+        border-bottom: 1px solid #dee2e6;
+      }}
+      .day-row:hover {{
+        background-color: #f8f9fa;
+      }}
+      .unavailable-row {{
+        background-color: #fff3cd;
+      }}
+      .time-input {{
+        width: 90px;
+      }}
+      .notes-input {{
+        width: 200px;
+      }}
+    </style>
+    
     <div class="row mb-3">
       <div class="col">
         <h2>Employee Availability - {month_name} {year}</h2>
-        <p class="text-muted">Mark periods when employees are unavailable for shifts</p>
+        <p class="text-muted">Select employee and mark unavailable days with times or all-day</p>
       </div>
     </div>
     
-    <div class="row mb-3">
-      <div class="col">
-        <div class="btn-group" role="group">
-          <a href="/ui/availability?year={prev_year}&month={prev_month}" class="btn btn-outline-secondary">← Previous Month</a>
-          <a href="/ui/availability" class="btn btn-outline-secondary">Next Month (Default)</a>
-          <a href="/ui/availability?year={next_year}&month={next_month}" class="btn btn-outline-secondary">Following Month →</a>
+    <div class="row mb-4">
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Employee:</label>
+        <select class="form-select" id="employeeSelect">
+          <option value="">-- Select Employee --</option>
+        </select>
+      </div>
+      <div class="col-md-4">
+        <label class="form-label fw-bold">Month:</label>
+        <div class="btn-group w-100" role="group">
+          <a href="/ui/availability?year={prev_year}&month={prev_month}" class="btn btn-outline-secondary">← Prev</a>
+          <button class="btn btn-outline-secondary disabled" style="flex: 1">{month_name} {year}</button>
+          <a href="/ui/availability?year={next_year}&month={next_month_num}" class="btn btn-outline-secondary">Next →</a>
         </div>
       </div>
-      <div class="col text-end">
-        <button class="btn btn-success me-2" data-bs-toggle="modal" data-bs-target="#addRecurringRuleModal">
-          + Add Recurring Rule
+      <div class="col-md-4 d-flex align-items-end">
+        <button class="btn btn-success w-100" id="saveAllBtn" disabled>
+          💾 Save All Changes
         </button>
-        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addUnavailabilityModal">
-          + Add One-Time Unavailability
-        </button>
       </div>
     </div>
     
-    <!-- Recurring Rules Section -->
-    <div class="card mb-4">
-      <div class="card-header">
-        <h5 class="mb-0">🔁 Recurring Unavailability Rules</h5>
+    <div id="loadingMessage" class="text-center py-5">
+      <div class="spinner-border" role="status">
+        <span class="visually-hidden">Loading...</span>
       </div>
-      <div class="card-body">
-        <div id="rulesContainer">
-          <div class="text-center py-3">
-            <div class="spinner-border spinner-border-sm" role="status">
-              <span class="visually-hidden">Loading...</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      <p class="mt-2">Please select an employee...</p>
     </div>
     
-    <!-- One-Time Unavailability List -->
-    <div class="card">
-      <div class="card-header">
-        <h5 class="mb-0">📅 One-Time & Manual Overrides</h5>
-      </div>
-      <div class="card-body">
-        <div id="unavailabilityContainer">
-          <div class="text-center py-3">
-            <div class="spinner-border spinner-border-sm" role="status">
-              <span class="visually-hidden">Loading...</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Add Recurring Rule Modal -->
-    <div class="modal fade" id="addRecurringRuleModal" tabindex="-1">
-      <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Add Recurring Unavailability Rule</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <form id="recurringRuleForm">
-              <div class="mb-3">
-                <label class="form-label">Employee</label>
-                <select class="form-select" id="ruleEmployeeSelect" required>
-                  <option value="">-- Select Employee --</option>
-                </select>
-              </div>
-              
-              <div class="mb-3">
-                <label class="form-label">Pattern</label>
-                <select class="form-select" id="rulePattern" required>
-                  <option value="">-- Select Pattern --</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="biweekly">Bi-Weekly</option>
-                  <option value="monthly">Monthly</option>
-                </select>
-              </div>
-              
-              <!-- Weekly/Biweekly Days -->
-              <div class="mb-3" id="daysOfWeekSection" style="display:none;">
-                <label class="form-label">Days of Week</label>
-                <div class="form-check-inline">
-                  <input class="form-check-input" type="checkbox" id="daySun" value="0">
-                  <label class="form-check-label me-3" for="daySun">Sun</label>
-                  <input class="form-check-input" type="checkbox" id="dayMon" value="1">
-                  <label class="form-check-label me-3" for="dayMon">Mon</label>
-                  <input class="form-check-input" type="checkbox" id="dayTue" value="2">
-                  <label class="form-check-label me-3" for="dayTue">Tue</label>
-                  <input class="form-check-input" type="checkbox" id="dayWed" value="3">
-                  <label class="form-check-label me-3" for="dayWed">Wed</label>
-                  <input class="form-check-input" type="checkbox" id="dayThu" value="4">
-                  <label class="form-check-label me-3" for="dayThu">Thu</label>
-                  <input class="form-check-input" type="checkbox" id="dayFri" value="5">
-                  <label class="form-check-label me-3" for="dayFri">Fri</label>
-                  <input class="form-check-input" type="checkbox" id="daySat" value="6">
-                  <label class="form-check-label" for="daySat">Sat</label>
-                </div>
-              </div>
-              
-              <!-- Monthly Day -->
-              <div class="mb-3" id="dayOfMonthSection" style="display:none;">
-                <label class="form-label">Day of Month (1-31)</label>
-                <input type="number" class="form-control" id="ruleDayOfMonth" min="1" max="31">
-              </div>
-              
-              <div class="row">
-                <div class="col-md-6 mb-3">
-                  <label class="form-label">Start Date</label>
-                  <input type="date" class="form-control" id="ruleStartDate" required>
-                </div>
-                <div class="col-md-6 mb-3">
-                  <label class="form-label">Until Date (Optional)</label>
-                  <input type="date" class="form-control" id="ruleUntilDate">
-                </div>
-              </div>
-              
-              <div class="mb-3">
-                <div class="form-check">
-                  <input class="form-check-input" type="checkbox" id="ruleAllDay" checked>
-                  <label class="form-check-label" for="ruleAllDay">
-                    All Day
-                  </label>
-                </div>
-              </div>
-              
-              <div id="timeSection" style="display:none;">
-                <div class="row">
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label">Start Time</label>
-                    <input type="time" class="form-control" id="ruleStartTime">
-                  </div>
-                  <div class="col-md-6 mb-3">
-                    <label class="form-label">End Time</label>
-                    <input type="time" class="form-control" id="ruleEndTime">
-                  </div>
-                </div>
-              </div>
-              
-              <div class="mb-3">
-                <label class="form-label">Reason (Optional)</label>
-                <textarea class="form-control" id="ruleNotes" rows="2"></textarea>
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-success" id="saveRecurringRuleBtn">Save Rule</button>
-          </div>
-        </div>
-      </div>
-    </div>
-    
-    <!-- Add Unavailability Modal -->
-    <div class="modal fade" id="addUnavailabilityModal" tabindex="-1">
-      <div class="modal-dialog">
-        <div class="modal-content">
-          <div class="modal-header">
-            <h5 class="modal-title">Add One-Time Unavailability</h5>
-            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-          </div>
-          <div class="modal-body">
-            <form id="unavailabilityForm">
-              <div class="mb-3">
-                <label class="form-label">Employee</label>
-                <select class="form-select" id="employeeSelect" required>
-                  <option value="">-- Select Employee --</option>
-                </select>
-              </div>
-              <div class="mb-3">
-                <label class="form-label">Start Date & Time</label>
-                <input type="datetime-local" class="form-control" id="startAt" required>
-              </div>
-              <div class="mb-3">
-                <label class="form-label">End Date & Time</label>
-                <input type="datetime-local" class="form-control" id="endAt" required>
-              </div>
-              <div class="mb-3">
-                <label class="form-label">Reason (Optional)</label>
-                <textarea class="form-control" id="note" rows="2"></textarea>
-              </div>
-            </form>
-          </div>
-          <div class="modal-footer">
-            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
-            <button type="button" class="btn btn-primary" id="saveUnavailabilityBtn">Save</button>
-          </div>
-        </div>
+    <div id="availabilityTable" style="display: none;">
+      <div class="table-responsive">
+        <table class="table table-sm table-hover">
+          <thead class="table-light sticky-top">
+            <tr>
+              <th style="width: 80px;">Day</th>
+              <th style="width: 100px;">Date</th>
+              <th style="width: 100px;" class="text-center">All Day</th>
+              <th style="width: 110px;">Start Time</th>
+              <th style="width: 110px;">End Time</th>
+              <th>Notes</th>
+              <th style="width: 80px;"></th>
+            </tr>
+          </thead>
+          <tbody id="daysTableBody">
+            <!-- Days will be populated here -->
+          </tbody>
+        </table>
       </div>
     </div>
     
@@ -2777,360 +2660,277 @@ async def availability_page(
     const ORG_ID = 1;
     const YEAR = {year};
     const MONTH = {month};
+    const DAYS_IN_MONTH = {days_in_month};
+    const DAY_NAMES = {day_names};
     
     let employees = [];
-    let unavailability = [];
+    let currentEmployeeId = null;
+    let unavailabilityData = {{}};  // Map of date -> unavailability data
+    let hasChanges = false;
     
     async function loadEmployees() {{
       try {{
-        // Use the shift-organizer endpoint to get employees
         const response = await fetch(`/shift-organizer/month?org_id=${{ORG_ID}}&year=${{YEAR}}&month=${{MONTH}}`);
         const data = await response.json();
         employees = data.employees;
         
-        // Populate employee dropdown
         const select = document.getElementById('employeeSelect');
         select.innerHTML = '<option value="">-- Select Employee --</option>' +
           employees.map(emp => `<option value="${{emp.employee_id}}">${{emp.name}}</option>`).join('');
       }} catch (error) {{
         console.error('Error loading employees:', error);
+        alert('Failed to load employees: ' + error.message);
       }}
     }}
     
-    async function loadUnavailability() {{
+    async function loadAvailability(employeeId) {{
       try {{
-        const response = await fetch(`/availability/month?org_id=${{ORG_ID}}&year=${{YEAR}}&month=${{MONTH}}`);
+        const response = await fetch(`/availability/month?org_id=${{ORG_ID}}&year=${{YEAR}}&month=${{MONTH}}&employee_id=${{employeeId}}`);
         const data = await response.json();
-        unavailability = data.unavailability || [];
-        renderUnavailability();
-      }} catch (error) {{
-        console.error('Error loading unavailability:', error);
-        document.getElementById('unavailabilityContainer').innerHTML = `
-          <div class="alert alert-danger">
-            Failed to load unavailability data: ${{error.message}}
-          </div>
-        `;
-      }}
-    }}
-    
-    function renderUnavailability() {{
-      const container = document.getElementById('unavailabilityContainer');
-      
-      if (unavailability.length === 0) {{
-        container.innerHTML = `
-          <div class="alert alert-info">
-            No unavailability blocks for this month. Employees are available for all shifts.
-          </div>
-        `;
-        return;
-      }}
-      
-      // Group by employee
-      const byEmployee = {{}};
-      unavailability.forEach(u => {{
-        const empName = u.employee_name || 'Unknown';
-        if (!byEmployee[empName]) {{
-          byEmployee[empName] = [];
-        }}
-        byEmployee[empName].push(u);
-      }});
-      
-      container.innerHTML = `
-        <div class="list-group">
-          ${{Object.entries(byEmployee).map(([empName, blocks]) => `
-            <div class="list-group-item">
-              <h6>${{empName}}</h6>
-              ${{blocks.map(block => {{
-                const startDate = new Date(block.start_at);
-                const endDate = new Date(block.end_at);
-                const startStr = startDate.toLocaleString('en-GB', {{dateStyle: 'short', timeStyle: 'short'}});
-                const endStr = endDate.toLocaleString('en-GB', {{dateStyle: 'short', timeStyle: 'short'}});
-                
-                return `
-                  <div class="d-flex justify-content-between align-items-start mb-2">
-                    <div>
-                      <strong>${{startStr}}</strong> → <strong>${{endStr}}</strong>
-                      ${{block.note ? `<br><small class="text-muted">${{block.note}}</small>` : ''}}
-                    </div>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteUnavailability(${{block.unavailability_id}})">
-                      Delete
-                    </button>
-                  </div>
-                `;
-              }}).join('')}}
-            </div>
-          `).join('')}}
-        </div>
-      `;
-    }}
-    
-    async function deleteUnavailability(id) {{
-      if (!confirm('Delete this unavailability block?')) return;
-      
-      try {{
-        await fetch(`/availability/${{id}}?org_id=${{ORG_ID}}`, {{
-          method: 'DELETE'
-        }});
-        await loadUnavailability();
-      }} catch (error) {{
-        console.error('Error deleting:', error);
-        alert('Failed to delete: ' + error.message);
-      }}
-    }}
-    
-    document.getElementById('saveUnavailabilityBtn').addEventListener('click', async () => {{
-      const form = document.getElementById('unavailabilityForm');
-      if (!form.checkValidity()) {{
-        form.reportValidity();
-        return;
-      }}
-      
-      const employeeId = parseInt(document.getElementById('employeeSelect').value);
-      const startAt = document.getElementById('startAt').value;
-      const endAt = document.getElementById('endAt').value;
-      const note = document.getElementById('note').value;
-      
-      try {{
-        await fetch('/availability', {{
-          method: 'POST',
-          headers: {{'Content-Type': 'application/json'}},
-          body: JSON.stringify({{
-            org_id: ORG_ID,
-            employee_id: employeeId,
-            start_at: startAt,
-            end_at: endAt,
-            note: note || null
-          }})
+        const unavail = data.unavailability || [];
+        
+        // Map unavailability by date
+        unavailabilityData = {{}};
+        unavail.forEach(item => {{
+          const startDate = new Date(item.start_at);
+          const day = startDate.getDate();
+          
+          // Convert to local time strings
+          const startTime = startDate.toTimeString().substring(0, 5);
+          const endDate = new Date(item.end_at);
+          const endTime = endDate.toTimeString().substring(0, 5);
+          
+          // Check if it's all day (00:00 to 23:59)
+          const isAllDay = startTime === '00:00' && (endTime === '23:59' || endTime === '00:00');
+          
+          unavailabilityData[day] = {{
+            unavailability_id: item.unavailability_id,
+            all_day: isAllDay,
+            start_time: isAllDay ? '' : startTime,
+            end_time: isAllDay ? '' : endTime,
+            note: item.note || '',
+            source_type: item.source_type || 'manual'
+          }};
         }});
         
-        // Close modal and reload
-        const modal = bootstrap.Modal.getInstance(document.getElementById('addUnavailabilityModal'));
-        modal.hide();
-        form.reset();
-        await loadUnavailability();
+        renderTable();
+      }} catch (error) {{
+        console.error('Error loading availability:', error);
+        alert('Failed to load availability: ' + error.message);
+      }}
+    }}
+    
+    function renderTable() {{
+      const tbody = document.getElementById('daysTableBody');
+      tbody.innerHTML = '';
+      
+      for (let day = 1; day <= DAYS_IN_MONTH; day++) {{
+        const date = new Date(YEAR, MONTH - 1, day);
+        const dayName = DAY_NAMES[date.getDay()];
+        const dateStr = `${{YEAR}}-${{String(MONTH).padStart(2, '0')}}-${{String(day).padStart(2, '0')}}`;
+        
+        const unavail = unavailabilityData[day] || {{}};
+        const isUnavailable = !!unavail.unavailability_id || unavail.all_day || unavail.start_time;
+        const isFromRule = unavail.source_type === 'rule';
+        
+        const row = document.createElement('tr');
+        row.className = 'day-row' + (isUnavailable ? ' unavailable-row' : '');
+        row.dataset.day = day;
+        
+        row.innerHTML = `
+          <td class="fw-bold">${{dayName}}</td>
+          <td>${{day}}/${{MONTH}}</td>
+          <td class="text-center">
+            <input type="checkbox" class="form-check-input" 
+                   id="allDay_${{day}}" 
+                   ${{unavail.all_day ? 'checked' : ''}}
+                   onchange="toggleAllDay(${{day}})"
+                   ${{isFromRule ? 'disabled title="From recurring rule"' : ''}}>
+          </td>
+          <td>
+            <input type="time" class="form-control form-control-sm time-input" 
+                   id="start_${{day}}" 
+                   value="${{unavail.start_time || ''}}"
+                   ${{unavail.all_day ? 'disabled' : ''}}
+                   onchange="markChanged()"
+                   ${{isFromRule ? 'disabled title="From recurring rule"' : ''}}>
+          </td>
+          <td>
+            <input type="time" class="form-control form-control-sm time-input" 
+                   id="end_${{day}}" 
+                   value="${{unavail.end_time || ''}}"
+                   ${{unavail.all_day ? 'disabled' : ''}}
+                   onchange="markChanged()"
+                   ${{isFromRule ? 'disabled title="From recurring rule"' : ''}}>
+          </td>
+          <td>
+            <input type="text" class="form-control form-control-sm notes-input" 
+                   id="note_${{day}}" 
+                   value="${{unavail.note || ''}}"
+                   placeholder="Reason..."
+                   onchange="markChanged()"
+                   ${{isFromRule ? 'disabled title="From recurring rule"' : ''}}>
+          </td>
+          <td class="text-center">
+            ${{isUnavailable && !isFromRule ? `
+              <button class="btn btn-sm btn-outline-danger" onclick="clearDay(${{day}})">✕</button>
+            ` : ''}}
+            ${{isFromRule ? `
+              <span class="badge bg-success" title="From recurring rule">🔁</span>
+            ` : ''}}
+          </td>
+        `;
+        
+        tbody.appendChild(row);
+      }}
+    }}
+    
+    function toggleAllDay(day) {{
+      const allDayCheck = document.getElementById(`allDay_${{day}}`);
+      const startInput = document.getElementById(`start_${{day}}`);
+      const endInput = document.getElementById(`end_${{day}}`);
+      
+      if (allDayCheck.checked) {{
+        startInput.disabled = true;
+        endInput.disabled = true;
+        startInput.value = '';
+        endInput.value = '';
+      }} else {{
+        startInput.disabled = false;
+        endInput.disabled = false;
+      }}
+      
+      markChanged();
+    }}
+    
+    function clearDay(day) {{
+      document.getElementById(`allDay_${{day}}`).checked = false;
+      document.getElementById(`start_${{day}}`).value = '';
+      document.getElementById(`start_${{day}}`).disabled = false;
+      document.getElementById(`end_${{day}}`).value = '';
+      document.getElementById(`end_${{day}}`).disabled = false;
+      document.getElementById(`note_${{day}}`).value = '';
+      
+      markChanged();
+    }}
+    
+    function markChanged() {{
+      hasChanges = true;
+      document.getElementById('saveAllBtn').disabled = false;
+      document.getElementById('saveAllBtn').classList.remove('btn-success');
+      document.getElementById('saveAllBtn').classList.add('btn-warning');
+      document.getElementById('saveAllBtn').textContent = '⚠️ Save Changes';
+    }}
+    
+    async function saveAll() {{
+      if (!currentEmployeeId) {{
+        alert('Please select an employee');
+        return;
+      }}
+      
+      const saveBtn = document.getElementById('saveAllBtn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = '💾 Saving...';
+      
+      try {{
+        // Collect all unavailability entries
+        const entries = [];
+        
+        for (let day = 1; day <= DAYS_IN_MONTH; day++) {{
+          const allDay = document.getElementById(`allDay_${{day}}`).checked;
+          const startTime = document.getElementById(`start_${{day}}`).value;
+          const endTime = document.getElementById(`end_${{day}}`).value;
+          const note = document.getElementById(`note_${{day}}`).value;
+          
+          // Skip if no unavailability marked
+          if (!allDay && !startTime && !endTime) continue;
+          
+          // Validate partial day entries
+          if (!allDay && (!startTime || !endTime)) {{
+            alert(`Day ${{day}}: Please fill both start and end times, or check All Day`);
+            saveBtn.disabled = false;
+            saveBtn.textContent = '⚠️ Save Changes';
+            return;
+          }}
+          
+          const dateStr = `${{YEAR}}-${{String(MONTH).padStart(2, '0')}}-${{String(day).padStart(2, '0')}}`;
+          
+          let start_at, end_at;
+          if (allDay) {{
+            start_at = `${{dateStr}}T00:00:00`;
+            end_at = `${{dateStr}}T23:59:59`;
+          }} else {{
+            start_at = `${{dateStr}}T${{startTime}}:00`;
+            end_at = `${{dateStr}}T${{endTime}}:00`;
+          }}
+          
+          entries.push({{
+            start_at,
+            end_at,
+            note: note || null
+          }});
+        }}
+        
+        // Delete existing manual entries for this employee in this month
+        const existing = Object.values(unavailabilityData).filter(u => u.unavailability_id && u.source_type !== 'rule');
+        for (const entry of existing) {{
+          await fetch(`/availability/${{entry.unavailability_id}}?org_id=${{ORG_ID}}`, {{
+            method: 'DELETE'
+          }});
+        }}
+        
+        // Create new entries
+        for (const entry of entries) {{
+          await fetch('/availability', {{
+            method: 'POST',
+            headers: {{'Content-Type': 'application/json'}},
+            body: JSON.stringify({{
+              org_id: ORG_ID,
+              employee_id: currentEmployeeId,
+              ...entry
+            }})
+          }});
+        }}
+        
+        // Reload
+        await loadAvailability(currentEmployeeId);
+        hasChanges = false;
+        saveBtn.classList.remove('btn-warning');
+        saveBtn.classList.add('btn-success');
+        saveBtn.textContent = '✓ Saved!';
+        
+        setTimeout(() => {{
+          saveBtn.textContent = '💾 Save All Changes';
+          saveBtn.disabled = true;
+        }}, 2000);
+        
       }} catch (error) {{
         console.error('Error saving:', error);
         alert('Failed to save: ' + error.message);
-      }}
-    }});
-    
-    // ===========================
-    // Recurring Rules UI Logic
-    // ===========================
-    
-    let rules = [];
-    
-    async function loadRules() {{
-      try {{
-        const response = await fetch(`/availability/month?org_id=${{ORG_ID}}&year=${{YEAR}}&month=${{MONTH}}`);
-        const data = await response.json();
-        rules = data.rules || [];
-        renderRules();
-      }} catch (error) {{
-        console.error('Error loading rules:', error);
-        document.getElementById('rulesContainer').innerHTML = `
-          <div class="alert alert-danger">
-            Failed to load recurring rules: ${{error.message}}
-          </div>
-        `;
+        saveBtn.disabled = false;
+        saveBtn.textContent = '⚠️ Save Changes';
       }}
     }}
     
-    function renderRules() {{
-      const container = document.getElementById('rulesContainer');
-      
-      if (rules.length === 0) {{
-        container.innerHTML = `
-          <div class="alert alert-info">
-            No recurring rules defined. Click "Add Recurring Rule" to create one.
-          </div>
-        `;
-        return;
-      }}
-      
-      // Group by employee
-      const byEmployee = {{}};
-      rules.forEach(r => {{
-        const empName = r.employee_name || 'Unknown';
-        if (!byEmployee[empName]) {{
-          byEmployee[empName] = [];
-        }}
-        byEmployee[empName].push(r);
-      }});
-      
-      container.innerHTML = `
-        <div class="list-group">
-          ${{Object.entries(byEmployee).map(([empName, empRules]) => `
-            <div class="list-group-item">
-              <h6>${{empName}}</h6>
-              ${{empRules.map(rule => {{
-                const patternLabel = rule.pattern.charAt(0).toUpperCase() + rule.pattern.slice(1);
-                const daysStr = rule.days_of_week ? 
-                  rule.days_of_week.map(d => ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d]).join(', ') : 
-                  (rule.day_of_month ? `Day ${{rule.day_of_month}}` : '');
-                const timeStr = rule.all_day ? 'All day' : 
-                  `${{rule.start_time}} - ${{rule.end_time}}`;
-                const rangeStr = rule.until_date ? 
-                  `${{rule.start_date}} to ${{rule.until_date}}` : 
-                  `From ${{rule.start_date}}`;
-                
-                return `
-                  <div class="d-flex justify-content-between align-items-start mb-2 p-2 border-start border-success border-3">
-                    <div>
-                      <span class="badge bg-success me-2">${{patternLabel}}</span>
-                      <strong>${{daysStr}}</strong> • ${{timeStr}}
-                      <br><small class="text-muted">${{rangeStr}}</small>
-                      ${{rule.notes ? `<br><small class="text-muted">${{rule.notes}}</small>` : ''}}
-                    </div>
-                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRule(${{rule.rule_id}})">
-                      Delete
-                    </button>
-                  </div>
-                `;
-              }}).join('')}}
-            </div>
-          `).join('')}}
-        </div>
-      `;
-    }}
-    
-    async function deleteRule(ruleId) {{
-      if (!confirm('Delete this recurring rule? All future occurrences will be removed.')) return;
-      
-      try {{
-        await fetch(`/availability/rules/${{ruleId}}?org_id=${{ORG_ID}}`, {{
-          method: 'DELETE'
-        }});
-        await loadRules();
-        await loadUnavailability();  // Refresh to update merged view
-      }} catch (error) {{
-        console.error('Error deleting rule:', error);
-        alert('Failed to delete rule: ' + error.message);
-      }}
-    }}
-    
-    // Handle pattern selection
-    document.getElementById('rulePattern').addEventListener('change', (e) => {{
-      const pattern = e.target.value;
-      const daysSection = document.getElementById('daysOfWeekSection');
-      const monthSection = document.getElementById('dayOfMonthSection');
-      
-      if (pattern === 'weekly' || pattern === 'biweekly') {{
-        daysSection.style.display = 'block';
-        monthSection.style.display = 'none';
-      }} else if (pattern === 'monthly') {{
-        daysSection.style.display = 'none';
-        monthSection.style.display = 'block';
+    // Event listeners
+    document.getElementById('employeeSelect').addEventListener('change', (e) => {{
+      const employeeId = parseInt(e.target.value);
+      if (employeeId) {{
+        currentEmployeeId = employeeId;
+        document.getElementById('loadingMessage').style.display = 'none';
+        document.getElementById('availabilityTable').style.display = 'block';
+        loadAvailability(employeeId);
       }} else {{
-        daysSection.style.display = 'none';
-        monthSection.style.display = 'none';
+        currentEmployeeId = null;
+        document.getElementById('loadingMessage').style.display = 'block';
+        document.getElementById('availabilityTable').style.display = 'none';
       }}
     }});
     
-    // Handle all-day toggle
-    document.getElementById('ruleAllDay').addEventListener('change', (e) => {{
-      document.getElementById('timeSection').style.display = e.target.checked ? 'none' : 'block';
-    }});
-    
-    // Save recurring rule
-    document.getElementById('saveRecurringRuleBtn').addEventListener('click', async () => {{
-      const form = document.getElementById('recurringRuleForm');
-      if (!form.checkValidity()) {{
-        form.reportValidity();
-        return;
-      }}
-      
-      const employeeId = parseInt(document.getElementById('ruleEmployeeSelect').value);
-      const pattern = document.getElementById('rulePattern').value;
-      const startDate = document.getElementById('ruleStartDate').value;
-      const untilDate = document.getElementById('ruleUntilDate').value || null;
-      const allDay = document.getElementById('ruleAllDay').checked;
-      const notes = document.getElementById('ruleNotes').value || null;
-      
-      let daysOfWeek = null;
-      let dayOfMonth = null;
-      
-      if (pattern === 'weekly' || pattern === 'biweekly') {{
-        daysOfWeek = [];
-        ['daySun', 'dayMon', 'dayTue', 'dayWed', 'dayThu', 'dayFri', 'daySat'].forEach((id, idx) => {{
-          if (document.getElementById(id).checked) {{
-            daysOfWeek.push(idx);
-          }}
-        }});
-        
-        if (daysOfWeek.length === 0) {{
-          alert('Please select at least one day of week');
-          return;
-        }}
-      }} else if (pattern === 'monthly') {{
-        dayOfMonth = parseInt(document.getElementById('ruleDayOfMonth').value);
-        if (!dayOfMonth || dayOfMonth < 1 || dayOfMonth > 31) {{
-          alert('Please enter a valid day of month (1-31)');
-          return;
-        }}
-      }}
-      
-      const startTime = allDay ? null : document.getElementById('ruleStartTime').value;
-      const endTime = allDay ? null : document.getElementById('ruleEndTime').value;
-      
-      if (!allDay && (!startTime || !endTime)) {{
-        alert('Please specify start and end times');
-        return;
-      }}
-      
-      try {{
-        await fetch('/availability/rules', {{
-          method: 'POST',
-          headers: {{'Content-Type': 'application/json'}},
-          body: JSON.stringify({{
-            org_id: ORG_ID,
-            employee_id: employeeId,
-            pattern: pattern,
-            start_date: startDate,
-            until_date: untilDate,
-            days_of_week: daysOfWeek,
-            day_of_month: dayOfMonth,
-            all_day: allDay,
-            start_time: startTime,
-            end_time: endTime,
-            notes: notes
-          }})
-        }});
-        
-        // Close modal and reload
-        const modal = bootstrap.Modal.getInstance(document.getElementById('addRecurringRuleModal'));
-        modal.hide();
-        form.reset();
-        await loadRules();
-        await loadUnavailability();  // Refresh to show new occurrences
-      }} catch (error) {{
-        console.error('Error saving rule:', error);
-        alert('Failed to save rule: ' + error.message);
-      }}
-    }});
-    
-    // Populate employee dropdowns
-    async function populateEmployeeSelects() {{
-      const select1 = document.getElementById('employeeSelect');
-      const select2 = document.getElementById('ruleEmployeeSelect');
-      
-      const options = employees.map(emp => `<option value="${{emp.employee_id}}">${{emp.name}}</option>`).join('');
-      
-      select1.innerHTML = '<option value="">-- Select Employee --</option>' + options;
-      select2.innerHTML = '<option value="">-- Select Employee --</option>' + options;
-    }}
-    
-    // Override loadEmployees to also populate rule form
-    const originalLoadEmployees = loadEmployees;
-    loadEmployees = async function() {{
-      await originalLoadEmployees();
-      populateEmployeeSelects();
-    }};
+    document.getElementById('saveAllBtn').addEventListener('click', saveAll);
     
     // Initial load
     loadEmployees();
-    loadUnavailability();
-    loadRules();
     </script>
     """
     
