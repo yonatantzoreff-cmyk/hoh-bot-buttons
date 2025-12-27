@@ -114,3 +114,72 @@ def test_htmx_script_in_ui_render_page():
     # Check for HTMX script tag presence (simpler check)
     assert 'htmx.org' in content, "HTMX script not found in ui.py"
     assert 'unpkg.com/htmx.org' in content, "HTMX CDN script not found in ui.py"
+
+
+def test_is_user_actively_editing_function_exists():
+    """Verify isUserActivelyEditing function is defined."""
+    with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Check for isUserActivelyEditing function
+    assert 'function isUserActivelyEditing' in content, "isUserActivelyEditing function not found"
+
+
+def test_active_editing_check_in_auto_refresh():
+    """Verify auto-refresh checks if user is actively editing before refreshing."""
+    with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Find the startAutoRefresh function
+    start_auto_refresh_match = re.search(
+        r'function startAutoRefresh\(\)\s*\{(.*?)(?=\n\s*function\s|\n\s*//\s*Stop)',
+        content,
+        re.DOTALL
+    )
+    assert start_auto_refresh_match, "startAutoRefresh function not found"
+    
+    function_body = start_auto_refresh_match.group(1)
+    # Check if it checks isUserActivelyEditing before refreshing
+    assert 'isUserActivelyEditing()' in function_body, "Auto-refresh should check isUserActivelyEditing before refreshing"
+    assert '!isUserActivelyEditing()' in function_body, "Auto-refresh should NOT refresh when user is actively editing"
+
+
+def test_active_editing_checks_active_element():
+    """Verify isUserActivelyEditing checks document.activeElement."""
+    with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Find the isUserActivelyEditing function - match until the next function
+    is_editing_match = re.search(
+        r'function isUserActivelyEditing\(\)\s*\{(.*?)(?=\n\s+// Start auto-refresh)',
+        content,
+        re.DOTALL
+    )
+    assert is_editing_match, "isUserActivelyEditing function not found"
+    
+    function_body = is_editing_match.group(1)
+    # Check that it uses document.activeElement
+    assert 'document.activeElement' in function_body, "isUserActivelyEditing should check document.activeElement"
+    # Check that it looks for INPUT, TEXTAREA
+    assert 'tagName' in function_body, "isUserActivelyEditing should check element tagName"
+    assert 'INPUT' in function_body, "isUserActivelyEditing should check for INPUT elements"
+    assert 'TEXTAREA' in function_body, "isUserActivelyEditing should check for TEXTAREA elements"
+
+
+def test_active_editing_checks_events_container():
+    """Verify isUserActivelyEditing checks if element is within events container."""
+    with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Find the isUserActivelyEditing function
+    is_editing_match = re.search(
+        r'function isUserActivelyEditing\(\)\s*\{(.*?)(?=\n\s+// Start auto-refresh)',
+        content,
+        re.DOTALL
+    )
+    assert is_editing_match, "isUserActivelyEditing function not found"
+    
+    function_body = is_editing_match.group(1)
+    # Check that it verifies element is in eventsContainer
+    assert 'eventsContainer' in function_body, "isUserActivelyEditing should check if element is in eventsContainer"
+    assert 'closest' in function_body, "isUserActivelyEditing should use closest() to check parent container"
