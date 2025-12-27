@@ -2507,6 +2507,8 @@
                     console.log('Skipping auto-refresh: user is actively editing');
                 } else if (dirtyShifts.size > 0) {
                     console.log('Skipping auto-refresh: unsaved shift changes');
+                } else if (dirtyRows.size > 0) {
+                    console.log('Skipping auto-refresh: unsaved event changes');
                 }
             }, AUTO_REFRESH_INTERVAL);
         }
