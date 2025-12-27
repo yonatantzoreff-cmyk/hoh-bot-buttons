@@ -345,15 +345,20 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
         else:
             # Validate technical phone (or producer as fallback)
             # Determine which contact will be the actual recipient
-            phone_valid, normalized_tech_phone = _validate_phone(technical_phone)
-            if phone_valid and technical_contact_id:
-                # Technical contact has valid phone - use it
-                technical = contacts_repo.get_contact_by_id(org_id=org_id, contact_id=technical_contact_id)
-                if technical:
-                    resolved_name = technical.get("name", "")
-                    resolved_phone = normalized_tech_phone
-            elif producer_phone and producer_contact_id:
-                # Check producer as fallback
+            phone_valid = False
+            
+            # First priority: Try technical contact
+            if technical_contact_id:
+                phone_valid, normalized_tech_phone = _validate_phone(technical_phone)
+                if phone_valid:
+                    # Technical contact has valid phone - use it
+                    technical = contacts_repo.get_contact_by_id(org_id=org_id, contact_id=technical_contact_id)
+                    if technical:
+                        resolved_name = technical.get("name", "")
+                        resolved_phone = normalized_tech_phone
+            
+            # Second priority: Fallback to producer if technical didn't work
+            if not phone_valid and producer_contact_id:
                 phone_valid, normalized_producer_phone = _validate_phone(producer_phone)
                 if phone_valid:
                     # Producer has valid phone - use as fallback
