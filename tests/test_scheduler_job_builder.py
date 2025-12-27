@@ -582,3 +582,163 @@ def test_build_jobs_for_shifts_disabled(
     
     # Verify no shifts were queried
     mock_shifts_repo.return_value.list_shifts_for_event.assert_not_called()
+
+
+@patch("app.services.scheduler_job_builder.EmployeeShiftRepository")
+@patch("app.services.scheduler_job_builder.EventRepository")
+@patch("app.services.scheduler_job_builder.ScheduledMessageRepository")
+@patch("app.services.scheduler_job_builder.SchedulerSettingsRepository")
+@patch("app.services.scheduler_job_builder.ContactRepository")
+def test_build_jobs_unblocks_tech_when_technical_contact_added(
+    mock_contact_repo, mock_settings_repo, mock_scheduled_repo, mock_event_repo, mock_shifts_repo
+):
+    """Test that TECH_REMINDER job unblocks when technical contact with phone is added."""
+    # Setup mocks
+    event_date = date(2024, 7, 18)
+    load_in_time = datetime(2024, 7, 18, 18, 0)
+    mock_event = {
+        "event_id": 1,
+        "event_date": event_date,
+        "producer_contact_id": 100,
+        "technical_contact_id": 200,  # Technical contact NOW assigned
+        "load_in_time": load_in_time,
+    }
+    
+    mock_producer = {"contact_id": 100, "phone": None}  # Producer has no phone
+    mock_technical = {"contact_id": 200, "phone": "+972509876543"}  # Technical has phone!
+    
+    mock_settings = {
+        "enabled_global": True,
+        "enabled_init": True,
+        "enabled_tech": True,
+        "init_days_before": 28,
+        "init_send_time": "10:00",
+        "tech_days_before": 2,
+        "tech_send_time": "12:00",
+    }
+    
+    # Existing TECH_REMINDER job (blocked due to missing phone)
+    mock_tech_job = {
+        "job_id": "job_tech_1", 
+        "status": "blocked",
+        "last_error": "Missing recipient phone"
+    }
+    
+    # Configure mocks
+    mock_event_repo_instance = Mock()
+    mock_event_repo_instance.get_event_by_id.return_value = mock_event
+    mock_event_repo.return_value = mock_event_repo_instance
+    
+    mock_contact_repo_instance = Mock()
+    mock_contact_repo_instance.get_contact_by_id.side_effect = lambda org_id, contact_id: (
+        mock_producer if contact_id == 100 else mock_technical
+    )
+    mock_contact_repo.return_value = mock_contact_repo_instance
+    
+    mock_settings_repo_instance = Mock()
+    mock_settings_repo_instance.get_or_create_settings.return_value = mock_settings
+    mock_settings_repo.return_value = mock_settings_repo_instance
+    
+    mock_scheduled_repo_instance = Mock()
+    mock_scheduled_repo_instance.find_job_for_event.return_value = mock_tech_job
+    mock_scheduled_repo.return_value = mock_scheduled_repo_instance
+    
+    # Mock at least one shift
+    mock_shifts = [{"shift_id": 1, "employee_id": 1}]
+    mock_shifts_repo_instance = Mock()
+    mock_shifts_repo_instance.list_shifts_for_event.return_value = mock_shifts
+    mock_shifts_repo.return_value = mock_shifts_repo_instance
+    
+    # Run the function
+    result = build_or_update_jobs_for_event(org_id=1, event_id=1)
+    
+    # Verify TECH_REMINDER job is unblocked (technical contact added with phone)
+    assert result["tech_status"] == "updated"
+    
+    # Verify update_status was called to unblock the job (2 calls: 1 for INIT skip, 1 for TECH unblock)
+    assert mock_scheduled_repo_instance.update_status.call_count == 2
+    # Check the second call (for TECH_REMINDER unblocking)
+    tech_call = mock_scheduled_repo_instance.update_status.call_args_list[1]
+    assert tech_call[0][0] == "job_tech_1"
+    assert tech_call[1]["status"] == "scheduled"
+    assert tech_call[1]["last_error"] is None
+
+
+@patch("app.services.scheduler_job_builder.EmployeeShiftRepository")
+@patch("app.services.scheduler_job_builder.EventRepository")
+@patch("app.services.scheduler_job_builder.ScheduledMessageRepository")
+@patch("app.services.scheduler_job_builder.SchedulerSettingsRepository")
+@patch("app.services.scheduler_job_builder.ContactRepository")
+def test_build_jobs_unblocks_tech_when_shifts_added(
+    mock_contact_repo, mock_settings_repo, mock_scheduled_repo, mock_event_repo, mock_shifts_repo
+):
+    """Test that TECH_REMINDER job unblocks when shifts are added to event."""
+    # Setup mocks
+    event_date = date(2024, 7, 18)
+    load_in_time = datetime(2024, 7, 18, 18, 0)
+    mock_event = {
+        "event_id": 1,
+        "event_date": event_date,
+        "producer_contact_id": 100,
+        "technical_contact_id": 200,
+        "load_in_time": load_in_time,
+    }
+    
+    mock_producer = {"contact_id": 100, "phone": "+972501234567"}
+    mock_technical = {"contact_id": 200, "phone": "+972509876543"}
+    
+    mock_settings = {
+        "enabled_global": True,
+        "enabled_init": True,
+        "enabled_tech": True,
+        "init_days_before": 28,
+        "init_send_time": "10:00",
+        "tech_days_before": 2,
+        "tech_send_time": "12:00",
+    }
+    
+    # Existing TECH_REMINDER job (blocked due to no employees)
+    mock_tech_job = {
+        "job_id": "job_tech_1", 
+        "status": "blocked",
+        "last_error": "No employees assigned to event"
+    }
+    
+    # Configure mocks
+    mock_event_repo_instance = Mock()
+    mock_event_repo_instance.get_event_by_id.return_value = mock_event
+    mock_event_repo.return_value = mock_event_repo_instance
+    
+    mock_contact_repo_instance = Mock()
+    mock_contact_repo_instance.get_contact_by_id.side_effect = lambda org_id, contact_id: (
+        mock_producer if contact_id == 100 else mock_technical
+    )
+    mock_contact_repo.return_value = mock_contact_repo_instance
+    
+    mock_settings_repo_instance = Mock()
+    mock_settings_repo_instance.get_or_create_settings.return_value = mock_settings
+    mock_settings_repo.return_value = mock_settings_repo_instance
+    
+    mock_scheduled_repo_instance = Mock()
+    mock_scheduled_repo_instance.find_job_for_event.return_value = mock_tech_job
+    mock_scheduled_repo.return_value = mock_scheduled_repo_instance
+    
+    # Mock shifts NOW exist (were added)
+    mock_shifts = [{"shift_id": 1, "employee_id": 1}]
+    mock_shifts_repo_instance = Mock()
+    mock_shifts_repo_instance.list_shifts_for_event.return_value = mock_shifts
+    mock_shifts_repo.return_value = mock_shifts_repo_instance
+    
+    # Run the function
+    result = build_or_update_jobs_for_event(org_id=1, event_id=1)
+    
+    # Verify TECH_REMINDER job is unblocked (shifts added)
+    assert result["tech_status"] == "updated"
+    
+    # Verify update_status was called to unblock the job (2 calls: 1 for INIT skip, 1 for TECH unblock)
+    assert mock_scheduled_repo_instance.update_status.call_count == 2
+    # Check the second call (for TECH_REMINDER unblocking)
+    tech_call = mock_scheduled_repo_instance.update_status.call_args_list[1]
+    assert tech_call[0][0] == "job_tech_1"
+    assert tech_call[1]["status"] == "scheduled"
+    assert tech_call[1]["last_error"] is None
