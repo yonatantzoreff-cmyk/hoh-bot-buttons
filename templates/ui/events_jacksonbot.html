@@ -2471,6 +2471,24 @@
             document.getElementById('lastUpdated').textContent = `Last updated: ${dateString} ${timeString}`;
         }
         
+        // Check if user is actively editing
+        function isUserActivelyEditing() {
+            const activeElement = document.activeElement;
+            if (!activeElement) {
+                return false;
+            }
+            
+            // Check if focused element is an editable field
+            const isEditableInput = activeElement.tagName === 'INPUT' || 
+                                   activeElement.tagName === 'TEXTAREA' ||
+                                   activeElement.contentEditable === 'true';
+            
+            // Check if it's within the events container (not a search/filter field in header)
+            const isInEventsArea = activeElement.closest('#eventsContainer') !== null;
+            
+            return isEditableInput && isInEventsArea;
+        }
+        
         // Start auto-refresh
         function startAutoRefresh() {
             // Clear any existing timer
@@ -2480,10 +2498,17 @@
             
             // Set up new timer to refresh every 5 seconds
             autoRefreshTimer = setInterval(() => {
-                // Only refresh if there are no unsaved changes
-                if (dirtyRows.size === 0 && currentMonth) {
+                // Only refresh if there are no unsaved changes AND user is not actively editing
+                // Check both dirtyRows (events) and dirtyShifts (shift details)
+                if (dirtyRows.size === 0 && dirtyShifts.size === 0 && currentMonth && !isUserActivelyEditing()) {
                     console.log('Auto-refreshing events...');
                     loadEvents(currentMonth);
+                } else if (isUserActivelyEditing()) {
+                    console.log('Skipping auto-refresh: user is actively editing');
+                } else if (dirtyShifts.size > 0) {
+                    console.log('Skipping auto-refresh: unsaved shift changes');
+                } else if (dirtyRows.size > 0) {
+                    console.log('Skipping auto-refresh: unsaved event changes');
                 }
             }, AUTO_REFRESH_INTERVAL);
         }
