@@ -1,6 +1,7 @@
 """Scheduler service for running scheduled message delivery."""
 
 import logging
+import os
 import time
 from typing import Optional, List
 from datetime import datetime, timedelta
@@ -521,7 +522,6 @@ class SchedulerService:
                     LIMIT 1
                 """)
                 # Get INIT content SID from environment
-                import os
                 query_params["content_sid_init"] = os.environ.get("CONTENT_SID_INIT", "")
                 query_params["contact_id"] = recipient_contact_id
                 
@@ -542,7 +542,6 @@ class SchedulerService:
                     LIMIT 1
                 """)
                 # Get TECH_REMINDER content SID from environment
-                import os
                 query_params["content_sid_tech"] = os.environ.get("CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT", "")
                 query_params["contact_id"] = recipient_contact_id
                 
@@ -644,6 +643,10 @@ class SchedulerService:
         Returns:
             Dict with: success (bool), error (str or None)
         """
+        # Import TECH_REMINDER dependencies at function level to avoid circular imports
+        from app.credentials import CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT
+        from app import twilio_client
+        
         org_id = job.get("org_id")
         message_type = job.get("message_type")
         event_id = job.get("event_id")
@@ -668,10 +671,6 @@ class SchedulerService:
             
             elif message_type == "TECH_REMINDER":
                 # TECH_REMINDER implementation - reuse existing logic from ui.py
-                # Import the content SID
-                from app.credentials import CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT
-                from app import twilio_client
-                
                 if not CONTENT_SID_TECH_REMINDER_EMPLOYEE_TEXT:
                     return {
                         "success": False, 

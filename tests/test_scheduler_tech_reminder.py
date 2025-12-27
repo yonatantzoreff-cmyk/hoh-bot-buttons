@@ -32,6 +32,27 @@ from app.services.scheduler import SchedulerService
 from app.time_utils import now_utc
 
 
+# Test helper function to reduce duplication
+def mock_get_contact_by_id(technical_contact, producer_contact):
+    """
+    Helper function to create a side effect for mocking get_contact_by_id.
+    
+    Args:
+        technical_contact: Mock technical contact dict or None
+        producer_contact: Mock producer contact dict or None
+    
+    Returns:
+        A function that can be used as side_effect for get_contact_by_id mock
+    """
+    def side_effect(org_id, contact_id):
+        if technical_contact and contact_id == technical_contact.get("contact_id"):
+            return technical_contact
+        elif producer_contact and contact_id == producer_contact.get("contact_id"):
+            return producer_contact
+        return None
+    return side_effect
+
+
 @pytest.mark.asyncio
 async def test_tech_reminder_recipient_uses_technical_contact():
     """Test that TECH_REMINDER uses technical contact when available."""
@@ -105,15 +126,12 @@ async def test_tech_reminder_recipient_falls_back_to_producer():
         "phone": "0507654321",
     }
     
-    def get_contact_side_effect(org_id, contact_id):
-        if contact_id == 10:
-            return mock_technical
-        elif contact_id == 20:
-            return mock_producer
-        return None
-    
     with patch.object(scheduler.events_repo, "get_event_by_id", return_value=mock_event), \
-         patch.object(scheduler.contacts_repo, "get_contact_by_id", side_effect=get_contact_side_effect):
+         patch.object(
+             scheduler.contacts_repo, 
+             "get_contact_by_id", 
+             side_effect=mock_get_contact_by_id(mock_technical, mock_producer)
+         ):
         
         result = scheduler._resolve_recipient(job)
         
@@ -196,15 +214,12 @@ async def test_tech_reminder_recipient_no_valid_phone():
         "phone": None,
     }
     
-    def get_contact_side_effect(org_id, contact_id):
-        if contact_id == 10:
-            return mock_technical
-        elif contact_id == 20:
-            return mock_producer
-        return None
-    
     with patch.object(scheduler.events_repo, "get_event_by_id", return_value=mock_event), \
-         patch.object(scheduler.contacts_repo, "get_contact_by_id", side_effect=get_contact_side_effect):
+         patch.object(
+             scheduler.contacts_repo, 
+             "get_contact_by_id", 
+             side_effect=mock_get_contact_by_id(mock_technical, mock_producer)
+         ):
         
         result = scheduler._resolve_recipient(job)
         
