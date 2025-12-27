@@ -333,6 +333,10 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
         
         # Determine job status based on validation
         # Priority: 1) No shifts, 2) No phone, 3) All good
+        # Also determine the recipient for display purposes
+        resolved_name = None
+        resolved_phone = None
+        
         if not has_shifts:
             # No shifts assigned yet - block with specific error
             status = "blocked"
@@ -340,12 +344,23 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
             phone_valid = False  # For consistency in logic below
         else:
             # Validate technical phone (or producer as fallback)
-            # Note: The actual sending logic will handle fallback to producer
-            # Here we just check if EITHER has a valid phone
-            phone_valid, _ = _validate_phone(technical_phone)
-            if not phone_valid and producer_phone:
+            # Determine which contact will be the actual recipient
+            phone_valid, normalized_tech_phone = _validate_phone(technical_phone)
+            if phone_valid and technical_contact_id:
+                # Technical contact has valid phone - use it
+                technical = contacts_repo.get_contact_by_id(org_id=org_id, contact_id=technical_contact_id)
+                if technical:
+                    resolved_name = technical.get("name", "")
+                    resolved_phone = normalized_tech_phone
+            elif producer_phone and producer_contact_id:
                 # Check producer as fallback
-                phone_valid, _ = _validate_phone(producer_phone)
+                phone_valid, normalized_producer_phone = _validate_phone(producer_phone)
+                if phone_valid:
+                    # Producer has valid phone - use as fallback
+                    producer = contacts_repo.get_contact_by_id(org_id=org_id, contact_id=producer_contact_id)
+                    if producer:
+                        resolved_name = producer.get("name", "")
+                        resolved_phone = normalized_producer_phone
             
             if not phone_valid:
                 status = "blocked"
@@ -373,7 +388,9 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                         scheduled_repo.update_status(
                             tech_job["job_id"],
                             status="blocked",
-                            last_error=last_error
+                            last_error=last_error,
+                            last_resolved_to_name=resolved_name,
+                            last_resolved_to_phone=resolved_phone
                         )
                         result["tech_status"] = "blocked"
                         logger.info(f"Blocked TECH_REMINDER job {tech_job['job_id']}: {last_error}")
@@ -384,12 +401,22 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                     scheduled_repo.update_status(
                         tech_job["job_id"],
                         status="scheduled",
-                        last_error=None
+                        last_error=None,
+                        last_resolved_to_name=resolved_name,
+                        last_resolved_to_phone=resolved_phone
                     )
                     result["tech_status"] = "updated"
                     logger.info(f"Unblocked TECH_REMINDER job {tech_job['job_id']}")
                 elif send_at_changed:
-                    # Send time changed
+                    # Send time changed - also update recipient info
+                    if resolved_name or resolved_phone:
+                        scheduled_repo.update_status(
+                            tech_job["job_id"],
+                            status="scheduled",
+                            last_error=None,
+                            last_resolved_to_name=resolved_name,
+                            last_resolved_to_phone=resolved_phone
+                        )
                     result["tech_status"] = "updated"
                 else:
                     # No changes - already up to date
@@ -416,13 +443,27 @@ def build_or_update_jobs_for_event(org_id: int, event_id: int) -> dict:
                 is_enabled=True
             )
             
-            # Update status if blocked
+            # Update status if blocked OR set recipient info if scheduled
             if status == "blocked":
-                scheduled_repo.update_status(job_id, status=status, last_error=last_error)
+                scheduled_repo.update_status(
+                    job_id, 
+                    status=status, 
+                    last_error=last_error,
+                    last_resolved_to_name=resolved_name,
+                    last_resolved_to_phone=resolved_phone
+                )
+            elif resolved_name or resolved_phone:
+                # Job is scheduled - store recipient info
+                scheduled_repo.update_status(
+                    job_id,
+                    status="scheduled",
+                    last_resolved_to_name=resolved_name,
+                    last_resolved_to_phone=resolved_phone
+                )
             
             result["tech_job_id"] = job_id
             result["tech_status"] = "blocked" if status == "blocked" else "created"
-            logger.info(f"Created TECH_REMINDER job {job_id} (key={job_key}) for event {event_id}, status={status}")
+            logger.info(f"Created TECH_REMINDER job {job_id} (key={job_key}) for event {event_id}, status={status}, recipient={resolved_name} ({resolved_phone})")
     else:
         result["tech_status"] = "skipped"
         result["tech_skip_reason"] = SKIP_REASON_DISABLED_BY_SETTINGS
