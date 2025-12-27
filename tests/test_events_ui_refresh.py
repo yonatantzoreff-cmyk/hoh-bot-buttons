@@ -123,6 +123,25 @@ def test_dirty_rows_check_in_auto_refresh():
     assert 'dirtyRows.size === 0' in function_body, "Auto-refresh should check dirtyRows before refreshing"
 
 
+def test_dirty_shifts_check_in_auto_refresh():
+    """Verify auto-refresh checks for dirty shifts before refreshing."""
+    with open('templates/ui/events_jacksonbot.html', 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Find the startAutoRefresh function
+    start_auto_refresh_match = re.search(
+        r'function startAutoRefresh\(\)\s*\{(.*?)(?=\n\s*function\s|\n\s*//\s*Stop)',
+        content,
+        re.DOTALL
+    )
+    assert start_auto_refresh_match, "startAutoRefresh function not found"
+    
+    function_body = start_auto_refresh_match.group(1)
+    # Check if it checks dirtyShifts before refreshing
+    assert 'dirtyShifts.size === 0' in function_body, "Auto-refresh should check dirtyShifts before refreshing"
+    assert 'dirtyShifts.size > 0' in function_body, "Auto-refresh should log when skipping due to dirty shifts"
+
+
 def test_htmx_script_in_ui_render_page():
     """Verify HTMX script is included in _render_page function."""
     with open('app/routers/ui.py', 'r', encoding='utf-8') as f:

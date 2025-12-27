@@ -2499,11 +2499,14 @@
             // Set up new timer to refresh every 5 seconds
             autoRefreshTimer = setInterval(() => {
                 // Only refresh if there are no unsaved changes AND user is not actively editing
-                if (dirtyRows.size === 0 && currentMonth && !isUserActivelyEditing()) {
+                // Check both dirtyRows (events) and dirtyShifts (shift details)
+                if (dirtyRows.size === 0 && dirtyShifts.size === 0 && currentMonth && !isUserActivelyEditing()) {
                     console.log('Auto-refreshing events...');
                     loadEvents(currentMonth);
                 } else if (isUserActivelyEditing()) {
                     console.log('Skipping auto-refresh: user is actively editing');
+                } else if (dirtyShifts.size > 0) {
+                    console.log('Skipping auto-refresh: unsaved shift changes');
                 }
             }, AUTO_REFRESH_INTERVAL);
         }
